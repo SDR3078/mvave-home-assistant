@@ -1,0 +1,10 @@
+send_raw:
+  target:
+    device:
+      integration: mvave
+  fields:
+    data:
+      required: true
+      example: "99 24 05"
+      selector:
+        text:

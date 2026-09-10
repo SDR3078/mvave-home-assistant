@@ -223,6 +223,13 @@ def encoder_record_packet(
     return write_packet(address, bytes((mode, 0x02, 0x00, cc, minimum, maximum)))
 
 
+def button_led_address(index: int, slot: int = 0) -> int:
+    """Address in region 5 of one button's LED byte."""
+    _check("index", index, BUTTON_COUNT - 1)
+    _check("slot", slot, PRESET_SLOTS - 1)
+    return slot * PRESET_SIZE + index * BUTTON_RECORD_SIZE + BUTTON_LED_OFFSET
+
+
 def button_led_packet(index: int, led_note: int, slot: int = 0) -> bytes:
     """Write the note a button's LED answers to.
 
@@ -315,6 +322,9 @@ class Preset:
     buttons: tuple[ButtonRecord, ...]
     encoders: tuple[EncoderRecord, ...]
     banks: tuple[tuple[PadRecord, ...], ...]  # banks[bank-1][record_index]
+    #: The bytes this was decoded from. Kept so a rewrite can change a few fields and
+    #: leave everything else exactly as the owner configured it.
+    image: bytes
 
     def pad(self, pad_number: int, bank: int) -> PadRecord:
         """A pad by the number printed on the device, PAD1 bottom-left to PAD16 top-right."""
@@ -356,7 +366,7 @@ def decode_preset(image: bytes) -> Preset:
                 )
             )
         banks.append(tuple(records))
-    return Preset(tuple(buttons), tuple(encoders), tuple(banks))
+    return Preset(tuple(buttons), tuple(encoders), tuple(banks), bytes(image[:PRESET_SIZE]))
 
 
 # ------------------------------------------------------------------ USB wrapping
@@ -422,6 +432,66 @@ def describe_vendor_packet(packet: bytes) -> str:
 def _check(name: str, value: int, maximum: int) -> None:
     if not 0 <= value <= maximum:
         raise ValueError(f"{name} must be 0 to {maximum}, got {value}")
+
+
+# ------------------------------------------------------------------- rewriting
+
+PAD_BANK_SIZE: Final = PAD_COUNT * PAD_RECORD_SIZE  # 416 bytes
+ENCODER_TABLE_SIZE: Final = ENCODER_COUNT * ENCODER_RECORD_SIZE  # 96 bytes
+
+
+def pad_bank_address(slot: int, bank: int) -> int:
+    """Address in region 5 of the first pad record of one bank."""
+    return pad_record_address(0, slot, bank)
+
+
+def encoder_table_address(slot: int = 0) -> int:
+    """Address in region 5 of the sixteen encoder records."""
+    _check("slot", slot, PRESET_SLOTS - 1)
+    return slot * PRESET_SIZE + ENCODER_TABLE_OFFSET
+
+
+def armed_pad_bank(image: bytes, bank: int) -> bytes:
+    """One pad bank rewritten so the host owns its LEDs.
+
+    Every pad becomes Note-typed and gets its ``led`` byte set to the note it transmits,
+    which is what makes it answer to a host note-on. Its channel, note, velocity range and
+    stored colour are left alone, so the user's own configuration survives.
+
+    Returns the 416 bytes of that bank, ready to write in one go.
+    """
+    if len(image) < PRESET_SIZE:
+        raise ValueError(f"preset image is {len(image)} bytes, need {PRESET_SIZE}")
+    if not 1 <= bank <= PAD_BANKS:
+        raise ValueError(f"bank must be 1 to {PAD_BANKS}, got {bank}")
+    start = PAD_TABLE_OFFSET + (bank - 1) * PAD_BANK_SIZE
+    records = bytearray(image[start : start + PAD_BANK_SIZE])
+    for index in range(PAD_COUNT):
+        record = index * PAD_RECORD_SIZE
+        records[record + PAD_TYPE_OFFSET] = PAD_TYPES.index("Note")
+        records[record + PAD_LED_OFFSET] = records[record + PAD_NOTE_OFFSET]
+    return bytes(records)
+
+
+def relative_encoder_table(image: bytes, minimum: int = 63, maximum: int = 65) -> bytes:
+    """The sixteen encoder records rewritten as relative, keeping each one's CC.
+
+    Relative is the only usable mode for an endless control: absolute mode is a counter
+    that saturates, so once at either end the encoder sends nothing at all. ``minimum``
+    and ``maximum`` are the values sent per counter-clockwise and clockwise step, so the
+    defaults give the centre-64 convention.
+    """
+    if len(image) < PRESET_SIZE:
+        raise ValueError(f"preset image is {len(image)} bytes, need {PRESET_SIZE}")
+    _check("minimum", minimum, 127)
+    _check("maximum", maximum, 127)
+    records = bytearray(image[ENCODER_TABLE_OFFSET : ENCODER_TABLE_OFFSET + ENCODER_TABLE_SIZE])
+    for index in range(ENCODER_COUNT):
+        record = index * ENCODER_RECORD_SIZE
+        records[record] = ENCODER_MODE_RELATIVE
+        records[record + 4] = minimum
+        records[record + 5] = maximum
+    return bytes(records)
 
 
 # --------------------------------------------------------------- factory layout

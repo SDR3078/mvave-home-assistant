@@ -22,6 +22,12 @@ implementation plan and this file is the running to-do list.
   ESPHome proxy, connects, and its presses arrive decoded. 30 entities: a connectivity
   sensor and one event entity per pad, button and encoder. Knob turns are coalesced, so
   126 MIDI messages become 2 events.
+- **Connect-time arming.** Every connect reads the state block, decodes the preset on
+  display, and rewrites that bank so all 16 pads are Note-typed with their LED byte set
+  to their own note, plus the encoders switched to relative and the buttons' LEDs armed.
+  Volatile, so a power cycle restores the owner's configuration exactly.
+- **`mvave.send_raw`**, and with it a pad lit green from the Home Assistant interface,
+  with nothing configured in MidiSuite.
 
 ## Build
 
@@ -29,15 +35,14 @@ implementation plan and this file is the running to-do list.
    `tests/fixtures/smc_pad_presets.bin`, which holds the owner's own presets, stays in a
    public repo; three tests depend on it, and `smc_pad_factory_slot0.bin` is the neutral
    one. Then the CI workflows from PLAN.md section 4.
-2. **Services**: `mvave.send_raw` and `mvave.set_pad_color`, registered in `async_setup`
-   from a `services.py`, targeted by device, raising translated errors. Plus a
-   `services.yaml`, which hassfest requires the moment a service is registered.
-3. **Connect-time setup for the SMC-PAD**, in this order, all through `devices/smc_pad.py`:
-   read the state block (slot, base bank, toggle); read that slot's image; decode the map;
-   write the displayed bank back with every pad Note-typed on its channel and its Led byte
-   set to its own note, in one 416-byte write; write the encoder table relative in one
-   96-byte write; write the buttons' Led bytes; then paint the grid with note-ons. Redo it
-   on every connect, since the edits are volatile. Refuse or warn on Program-typed pads.
+2. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
+   unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
+   MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
+3. **Build the entities from the map that was read** rather than from the advertised
+   name. The arming step already decodes the real note and controller numbers, which
+   change with the preset and the octave keys, so the current name-based layout is wrong
+   the moment the user switches preset. Needs entities added after the first connect
+   rather than at platform setup.
 4. **Engine** (brief, milestone 4), with the LED frame rendered through the velocity
    palette of HARDWARE-BLE.md section 9, 127 and 96–126 never sent, and the vendor RGB
    write kept as the option for unarmed static pads.

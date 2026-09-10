@@ -51,6 +51,36 @@
   "exceptions": {
     "device_not_found": {
       "message": "Could not reach {address}: {reason}"
+    },
+    "invalid_midi_hex": {
+      "message": "{data} is not valid hexadecimal MIDI."
+    },
+    "empty_midi": {
+      "message": "No MIDI bytes were given."
+    },
+    "midi_needs_status_byte": {
+      "message": "MIDI must begin with a status byte, which is 0x80 or higher. Got {first}."
+    },
+    "not_connected": {
+      "message": "Not connected to {address}."
+    },
+    "send_failed": {
+      "message": "Could not send to {address}: {error}"
+    },
+    "no_target_device": {
+      "message": "Pick which M-Vave device to send to, under Targets."
+    }
+  },
+  "services": {
+    "send_raw": {
+      "name": "Send raw MIDI",
+      "description": "Sends MIDI bytes to the controller. The BLE-MIDI framing is added for you; give the message itself, starting with its status byte.",
+      "fields": {
+        "data": {
+          "name": "Data",
+          "description": "The MIDI message as hexadecimal, for example 99 24 05 to light note 36 on channel 10 with palette colour 5."
+        }
+      }
     }
   }
 }

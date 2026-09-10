@@ -16,15 +16,27 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, LOGGER
 from .coordinator import MvaveCoordinator
+from .services import async_setup_services
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
 
 type MvaveConfigEntry = ConfigEntry[MvaveCoordinator]
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register services once, whether or not any device is configured.
+
+    Doing this here rather than per config entry means a service call against a device
+    that is not set up explains itself, instead of the service simply not existing.
+    """
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> bool:

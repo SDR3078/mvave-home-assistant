@@ -24,8 +24,10 @@ from homeassistant.components.bluetooth.active_update_coordinator import (
 )
 from homeassistant.core import callback
 
+from .arming import async_arm
 from .const import LOGGER, MIDI_CHAR_UUID
 from .transport import MidiEvent, ParserState, frame_midi, parse_ble_midi
+from .vendor import VendorSession
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -33,6 +35,8 @@ if TYPE_CHECKING:
     from bleak.backends.characteristic import BleakGATTCharacteristic
     from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+
+    from .arming import ArmResult
 
 # A `type` statement rather than a plain assignment: its right-hand side is evaluated
 # lazily, so `Callable` may stay in the TYPE_CHECKING block. A plain alias would be
@@ -75,6 +79,8 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         self._parser = ParserState()
         self._shutdown = False
         self._midi_listeners: list[MidiListener] = []
+        #: What the last connect found and did, or None if it never got that far.
+        self.arming: ArmResult | None = None
 
     # ------------------------------------------------------------------ state
 
@@ -139,9 +145,32 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
                 await client.disconnect()
                 raise
             self._client = client
+            LOGGER.info(
+                "%s: connected to %s (MTU %s)", self.address, self.device_name, client.mtu_size
+            )
+            await self._async_arm(client)
 
-        LOGGER.info("%s: connected to %s (MTU %s)", self.address, self.device_name, client.mtu_size)
         self.async_update_listeners()
+
+    async def _async_arm(self, client: BleakClient) -> None:
+        """Read the device's own map and arm it for host control.
+
+        Deliberately not fatal. A device whose configuration cannot be read is still a
+        perfectly good source of MIDI, and dropping the link over it would cost more than
+        the LEDs are worth.
+        """
+        session = VendorSession(client, self.address)
+        if not session.available:
+            LOGGER.debug(
+                "%s: no vendor channel on this device, so its LEDs cannot be armed",
+                self.address,
+            )
+            return
+        try:
+            async with session:
+                self.arming = await async_arm(session)
+        except Exception as err:
+            LOGGER.warning("%s: could not read or arm the device: %r", self.address, err)
 
     def _on_disconnect(self, client: BleakClient) -> None:
         """Handle the link dropping. Called from outside the event loop."""
