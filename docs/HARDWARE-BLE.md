@@ -393,12 +393,44 @@ Two consequences for a renderer: 127 is a second off, and 96 to 126 must never b
 colours. The USB palette was measured on MCP-typed pads and showed green at 127; that
 may be a different mode's table, so the two are recorded separately.
 
-**Consequence for the renderer:** a pad is either a state indicator on the MIDI path,
-five bytes per change with running status for bursts and seven usable colours, or a
-static 24-bit label on the vendor path that flashes white when pressed. The Led byte
-chooses, per pad, and can be changed at any time. The brief's LED frame with a velocity
-lookup fits the first mode exactly; the second is an option for pads that want a fixed
-colour and no state.
+**How fast each path can drive the grid, measured 2026-09-10** with
+`scripts/bench_leds.py` **[v]**. Two things make a naive measurement worthless: a write
+without a response through a proxy returns when the ESP32 has it, not when the pad has
+it, and the failure mode is silent dropping rather than an error. So each rate is driven
+for two seconds and then the device's own memory is read back, both to verify the last
+frame and to time a round trip that can only answer once the queue has drained.
+
+| Target | 24-bit over the vendor channel, 16 writes per frame | Palette over MIDI, 1 write per frame |
+|---|---|---|
+| 5 frames/s | correct, drain at the idle floor | drain at the idle floor |
+| 10 frames/s | **3 pads wrong** | drain at the idle floor |
+| 20 frames/s | correct, but **5.2 s of backlog** | drain at the idle floor |
+| 30 frames/s | correct, 1.3 s of backlog | drain at the idle floor |
+| 60 frames/s | **9 pads wrong**, 10.2 s of backlog | drain at the idle floor |
+
+Idle round trip 102 ms, which is the floor every drain figure is measured against.
+
+**The palette path is effectively free.** RP-052 lets the whole grid share one packet, so
+a full frame is a single 65-byte write, and at 120 frames in two seconds the link never
+fell behind. Confirmed by eye: smooth alternation with no visible stutter at the top rate.
+
+**The vendor path sustains about five full-grid updates a second.** Above that it either
+drops writes or falls seconds behind, and the apparent successes at 20 and 30 are worse
+than the failures, because the grid was still catching up seconds after the input stopped.
+
+**Consequence for the renderer, and it is a choice rather than a tuning knob:**
+
+| | Palette over MIDI | 24-bit over the vendor channel |
+|---|---|---|
+| Colours | 7 usable, all full brightness | any, with real brightness |
+| Full-grid rate | 60/s or better | ~5/s |
+| On its own press | host owns the LED, no flash | flashes white locally |
+| Requires | the Led byte armed | the Led byte at 0xFF |
+
+A pad answers to one or the other, and animation is only possible on the first. A design
+that wants both brightness as a state channel and a ripple animation cannot have them:
+the palette path is the one that animates, so state has to be carried by colour rather
+than by level.
 
 **Region 4 begins with a live state block, and it holds the three registers the
 integration needs.** Read as `78 00 32 04 00 00 KK 00 01 01 SS BB 00 …`:
