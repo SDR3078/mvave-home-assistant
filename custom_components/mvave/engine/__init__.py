@@ -90,10 +90,11 @@ from .render import (
     changed_pads,
     colour_of,
     compose,
+    counterpart,
     render,
 )
 from .resolve import default_actions, resolve, source_entities
-from .rhythms import ALERT, BREATHE, TICK_SECONDS, Rhythm
+from .rhythms import ALERT, BREATHE, TICK_SECONDS, Motion, Rhythm
 
 __all__ = [
     "ACTION",
@@ -131,6 +132,7 @@ __all__ = [
     "Focus",
     "Frame",
     "Home",
+    "Motion",
     "Navigate",
     "Nothing",
     "PadAction",
@@ -153,6 +155,7 @@ __all__ = [
     "colour_of",
     "column_of",
     "compose",
+    "counterpart",
     "default_actions",
     "entity_of",
     "expand",

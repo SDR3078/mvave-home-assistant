@@ -171,12 +171,18 @@ That separation is what makes five colours enough. Identity colours live on the 
 | Page: entity on | **orange** | one pair everywhere, learned once, independent of which page you are on. Matches Home Assistant's own amber for active |
 | Page: entity off | **white** | the only value distinct from all of blue, green, orange and red-pink |
 | Page: nothing assigned | **dark** | pressing it does nothing, and it must not look like an entity that is off. This is why "off" cannot also be dark |
-| Focused pad, the knob target | the pad's own colour, **breathing**: 1.4 s period, lit about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
-| Waiting, commanded but not confirmed | **fast even blink**, about 2 Hz | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
+| Focused pad, the knob target | **breathing between on and off**: 1.4 s period, its own colour for about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
+| Waiting, commanded but not confirmed | **swinging between on and off**, about 2 Hz | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
 | `back` available | **left button lit** | see §1 |
 | `home` available | **stop button lit** | |
 
 **Blink is scarce and must not be spent twice.** It is the only channel left after colour and position, it is the documented accessibility fallback, and a grid with several things blinking at once is the documented failure mode. One meaning only: not confirmed yet.
+
+**Nothing ever blinks to darkness.** Both rhythms alternate the two state colours, orange and white. A pad blinking to black reads as a light going out, which is a lie about a lamp that is on and staying on, and it was the first thing anybody complained about when it was tried on the hardware. Novation reached the same rule independently: their flash alternates two colours and only their slow pulse goes dark. The two rhythms therefore differ in rate alone, by a factor of three and a half, which was enough.
+
+**Only a pad in one of the two states may move.** Motion means "between on and off", so a pad that is in neither has nothing to be between. An unreachable pad is therefore completely still, and it is also completely inert: pressing or holding it does nothing. Commanding something that cannot answer would leave the pad moving forever, waiting for a confirmation that never comes. Scenes and scripts are exempt from the inertness, because their resting state in Home Assistant is `unknown`, which is not the same as unreachable, and they are exactly the pads people press.
+
+**A pad only goes solid once the entity's real state arrives.** The surface is deliberately not optimistic: it never claims a lamp changed because somebody asked. The cost is that a slow cloud-connected device will swing for as long as it takes to answer, and there is as yet **no timeout** on that, which is the coordinator's job rather than the engine's since the engine has no clock.
 
 **Known collision, accepted.** A page whose identity colour is orange has a curtain (§5.3) the same colour as its own switched-on entities, so the curtain's edge is invisible on those pads for the length of the transition. It is transient, it affects one page out of five, and the alternative is dropping to four identity colours. Reversible: remove orange from the identity set and the collision goes.
 

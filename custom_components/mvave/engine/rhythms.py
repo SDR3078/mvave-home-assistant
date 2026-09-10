@@ -19,16 +19,37 @@ from typing import Final
 
 @dataclass(frozen=True, slots=True)
 class Rhythm:
-    """A pad alternating between its colour and off, on a fixed period."""
+    """A pad alternating between two colours, on a fixed period."""
 
     #: Seconds for one full cycle.
     period: float
-    #: The fraction of the cycle the pad is lit.
+    #: The fraction of the cycle the pad shows its own colour.
     duty: float
 
     def lit(self, elapsed: float) -> bool:
-        """Whether the pad is showing its colour at this moment."""
+        """Whether the pad is showing its own colour at this moment."""
         return (elapsed % self.period) < self.period * self.duty
+
+
+@dataclass(frozen=True, slots=True)
+class Motion:
+    """One pad's movement: a rhythm, and what it shows for the other half of the cycle.
+
+    The second colour is the point. A pad that blinks to darkness reads as a light going
+    out, which is a lie when the light is on and about to stay on, and it is the thing
+    people complain about first. Novation never blinks a pad to off either: their flash
+    alternates two colours, and only their slow pulse goes dark. So a pad being switched
+    alternates between on and off *colours*, which is a truthful picture of a pad that is
+    between two states, and a focused pad does the same more slowly.
+    """
+
+    rhythm: Rhythm
+    #: Shown for the unlit part of the cycle. Off is allowed but is rarely what is wanted.
+    other: int
+
+    def lit(self, elapsed: float) -> bool:
+        """Whether the pad is showing its own colour at this moment."""
+        return self.rhythm.lit(elapsed)
 
 
 #: The knob's current target. Slow and lopsided, lit for most of the cycle, so it reads as

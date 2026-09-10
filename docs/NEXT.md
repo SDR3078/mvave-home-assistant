@@ -72,20 +72,27 @@ implementation plan and this file is the running to-do list.
    the moment the user switches preset. Needs entities added after the first connect
    rather than at platform setup.
 4. **Engine** (brief, milestone 4), building the language now specified in
-   `ble-midi-surface-design.md` sections 5 to 7. Started: `engine/` exists with the
-   palette, the frames and transitions, the two rhythms, the page model, the two protocols
-   the platform reaches in through, slot resolution and rendering. What is left:
-   - **Navigation.** The stack, the graph jumps, idle timeout, the shift gesture on the
-     left button, and choosing which transition plays for which kind of move.
-   - **Gestures.** Tap against hold thresholds, hold-then-turn, release ordering.
-   - **Knobs.** The global assignment, per-page overrides, focus, peek, the transient bar,
-     the debounce that stops one turn firing forty service calls.
-   - **The `handle(event) -> actions, frames` entry point**, which is the only thing the
-     coordinator should need to call.
+   `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
+   transitions, the two rhythms, the page model, the two protocols the platform reaches in
+   through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
+   holds, the transport buttons, the idle timeout and `handle(event) -> Outcome`.
+   **Proven on the hardware** with `scripts/surface_demo.py`, which drives the real pad
+   from the real engine against a pretend house. What is left:
+   - **Knobs.** The global assignment, per-page overrides, peek, the transient bar, and
+     the debounce that stops one turn firing forty service calls. Nothing about the
+     encoders is built yet.
+   - **The shift gesture**: holding the left button turning row one into a page switcher.
+   - **A timeout on the unconfirmed blink.** An entity that accepts a command and never
+     reports back leaves its pad swinging forever. The engine has no clock by design, so
+     bounding it belongs to the coordinator.
+   - **Aborting an animation on input.** A press during a transition is currently queued
+     behind it rather than cutting it short.
    - **The coordinator side**: playing a frame sequence on a tick, diffing against what
      the grid already shows, and rendering through the velocity palette of
      HARDWARE-BLE.md section 9, with 127 and 96–126 never sent. The vendor RGB write stays
      only as the `set_pad_color` escape hatch for a pad deliberately made static.
+   - **A `RegistryView` and `ActionSink` over Home Assistant**, which is the whole of what
+     the engine needs from the platform.
    - **Two provisional colours to judge on the grid**: what an unreachable entity looks
      like, currently blue, and what a scene or script pad looks like, currently green.
      Every other colour in the language was chosen by looking at it; these two were not.

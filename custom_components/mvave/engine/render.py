@@ -17,7 +17,7 @@ from .frames import Frame, overlay
 from .model import Nothing, Page, Slot
 from .palette import ACTION, OFF, ON, STATE_OFF, UNASSIGNED, UNAVAILABLE
 from .ports import RegistryView
-from .rhythms import ALERT, BREATHE, Rhythm
+from .rhythms import ALERT, BREATHE, Motion
 
 #: The transport buttons, in the order they sit under the grid. Back and home are fixed to
 #: the first two; the rest belong to whatever page is showing.
@@ -53,9 +53,9 @@ class Rendering:
     """A still of the grid, plus what is moving on it."""
 
     frame: Frame
-    #: Pad index to rhythm. A rhythm only ever darkens a pad; its lit phase is whatever
-    #: colour the frame already gives it, so motion never invents a colour.
-    rhythms: Mapping[int, Rhythm] = field(default_factory=dict)
+    #: Pad index to movement. The lit half is whatever colour the frame already gives the
+    #: pad, so motion never invents the pad's identity; only its second colour is chosen.
+    rhythms: Mapping[int, Motion] = field(default_factory=dict)
     buttons: Mapping[str, bool] = field(default_factory=dict)
 
 
@@ -91,6 +91,20 @@ def colour_of(slot: Slot | None, registry: RegistryView) -> int:
     return ON if state.is_active else STATE_OFF
 
 
+def counterpart(colour: int) -> int:
+    """The colour a moving pad alternates with.
+
+    For an entity, the other of the two state colours, so a pad that is being switched
+    swings between on and off rather than blinking to darkness. Anything else falls back to
+    off, because there is no second state for it to be between.
+    """
+    if colour == ON:
+        return STATE_OFF
+    if colour == STATE_OFF:
+        return ON
+    return OFF
+
+
 def render(
     page: Page,
     slots: Sequence[Slot | None],
@@ -101,17 +115,21 @@ def render(
     view = view or ViewState()
     frame: Frame = tuple(colour_of(slot, registry) for slot in slots)
 
-    rhythms: dict[int, Rhythm] = {}
+    rhythms: dict[int, Motion] = {}
     for index, slot in enumerate(slots):
         entity_id = slot.entity_id if slot is not None else None
-        if entity_id is None:
+        # Only a pad that is in one of the two states can be shown moving between them.
+        # Anything else has no second colour to swing to, and swinging to darkness is what
+        # makes a pad look like it is failing rather than working.
+        if entity_id is None or frame[index] not in (ON, STATE_OFF):
             continue
+        other = counterpart(frame[index])
         # A pending command outranks focus. Both are true at once often enough, and the
         # one that needs answering is "did that actually happen".
         if entity_id in view.pending:
-            rhythms[index] = ALERT
+            rhythms[index] = Motion(ALERT, other)
         elif entity_id == view.focus:
-            rhythms[index] = BREATHE
+            rhythms[index] = Motion(BREATHE, other)
 
     return Rendering(frame=frame, rhythms=rhythms, buttons=_buttons(page, view))
 
@@ -130,9 +148,9 @@ def _buttons(page: Page, view: ViewState) -> dict[str, bool]:
 def compose(rendering: Rendering, elapsed: float) -> Frame:
     """The still plus a clock reading, which is what actually goes to the device."""
     frame = rendering.frame
-    for pad, rhythm in rendering.rhythms.items():
-        if not rhythm.lit(elapsed):
-            frame = overlay(frame, pad, OFF)
+    for pad, motion in rendering.rhythms.items():
+        if not motion.lit(elapsed):
+            frame = overlay(frame, pad, motion.other)
     return frame
 
 

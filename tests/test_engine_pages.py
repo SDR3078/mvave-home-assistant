@@ -40,7 +40,7 @@ from engine.render import (
     render,
 )
 from engine.resolve import default_actions, resolve
-from engine.rhythms import ALERT, BREATHE
+from engine.rhythms import ALERT, BREATHE, Motion
 
 
 class FakeRegistry:
@@ -286,7 +286,7 @@ def test_the_focused_pad_breathes_and_nothing_else_moves() -> None:
     living = page(source=Source(SourceKind.AREA, "living"))
     slots = resolve(living, registry, EMPTY)
     rendering = render(living, slots, registry, ViewState(focus="light.b"))
-    assert rendering.rhythms == {1: BREATHE}
+    assert rendering.rhythms == {1: Motion(BREATHE, STATE_OFF)}
 
 
 def test_a_commanded_pad_blinks_until_it_is_confirmed_and_outranks_focus() -> None:
@@ -294,15 +294,15 @@ def test_a_commanded_pad_blinks_until_it_is_confirmed_and_outranks_focus() -> No
     living = page(source=Source(SourceKind.AREA, "living"))
     slots = resolve(living, registry, EMPTY)
     view = ViewState(focus="light.a", pending=frozenset({"light.a"}))
-    assert render(living, slots, registry, view).rhythms == {0: ALERT}
+    assert render(living, slots, registry, view).rhythms == {0: Motion(ALERT, ON)}
 
 
-def test_a_rhythm_only_ever_darkens_a_pad() -> None:
-    # Motion never invents a colour: the lit half of a rhythm is whatever the frame
-    # already says, so a breathing lamp is still recognisably that lamp.
-    rendering = Rendering(frame=(ON,) * PAD_COUNT, rhythms={0: BREATHE})
+def test_a_moving_pad_swings_between_on_and_off_rather_than_going_dark() -> None:
+    # A pad that blinks to darkness reads as a light going out, which is a lie when the
+    # light is on and staying on. It is also the first thing anybody complains about.
+    rendering = Rendering(frame=(ON,) * PAD_COUNT, rhythms={0: Motion(BREATHE, STATE_OFF)})
     assert compose(rendering, 0.0)[0] == ON
-    assert compose(rendering, BREATHE.period * 0.9)[0] == UNASSIGNED
+    assert compose(rendering, BREATHE.period * 0.9)[0] == STATE_OFF
     assert compose(rendering, 0.0)[1:] == compose(rendering, BREATHE.period * 0.9)[1:]
 
 
@@ -345,3 +345,32 @@ def test_only_the_pads_that_changed_are_reported() -> None:
     after = (ON,) * 3 + (STATE_OFF,) + (ON,) * 12
     assert changed_pads(before, after) == {3: STATE_OFF}
     assert changed_pads(before, before) == {}
+
+
+def test_nothing_that_moves_ever_blinks_an_entity_to_darkness() -> None:
+    # The complaint that produced this rule: a lamp being switched appeared to go out
+    # mid-press, which is a lie when it is on and staying on. Novation never blinks a pad
+    # to off either; their flash alternates two colours.
+    registry = FakeRegistry(
+        areas={"living": ("light.on", "light.off")},
+        states={"light.on": "on", "light.off": "off"},
+    )
+    living = page(source=Source(SourceKind.AREA, "living"))
+    slots = resolve(living, registry, EMPTY)
+    view = ViewState(focus="light.on", pending=frozenset({"light.off"}))
+    rhythms = render(living, slots, registry, view).rhythms
+    assert rhythms[0].other == STATE_OFF
+    assert rhythms[1].other == ON
+    assert all(motion.other != UNASSIGNED for motion in rhythms.values())
+
+
+def test_a_pad_that_is_in_neither_state_never_moves_at_all() -> None:
+    # Blue means "there is nothing true to say about this". A blue pad blinking to black
+    # says something, and what it says is wrong.
+    registry = FakeRegistry(areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"})
+    living = page(source=Source(SourceKind.AREA, "living"))
+    slots = resolve(living, registry, EMPTY)
+    view = ViewState(focus="light.gone", pending=frozenset({"light.gone"}))
+    rendering = render(living, slots, registry, view)
+    assert rendering.frame[0] == UNAVAILABLE
+    assert rendering.rhythms == {}
