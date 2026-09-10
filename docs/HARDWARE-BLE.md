@@ -286,6 +286,100 @@ The manufacturer documents nothing at the wire level. Everything below is third-
 - Nothing found documents the Led field, the palette, or the MCP SysEx. Sections 1 to 7
   remain the only measurements of this device's radio behaviour known to us.
 
+### 8.1 How other grid controllers encode state (searched 2026-09-10)
+
+Gathered to settle the LED language rather than the protocol, because the question of what
+to do with seven colours and no brightness has been answered by other people already.
+
+**One independent measurement of this device's palette exists.**
+[SDR3078/mvave-smc-pad-ableton](https://github.com/SDR3078/mvave-smc-pad-ableton) reports
+the hue cycling roughly every 13 to 14 steps, everything above about 64 as one flat blue,
+and that there is no saturated red, 14 being as close as the palette gets. That agrees with
+§9 and §9.1 on every point, arrived at separately.
+[bogdanr/esphome-ble-midi](https://github.com/bogdanr/esphome-ble-midi) targets the same
+pad over BLE MIDI with a full input map but records LED control as not working, blaming the
+vendor service `AE40`, which §6 contradicts.
+
+**Every shipped grid separates three channels, and they are not interchangeable.** Hue
+carries identity, shade carries steady state, and motion carries pending against running,
+which is the one thing a static colour cannot say. Novation, Ableton, Akai and monome
+converge on the same grammar independently: static means idle or loaded, flash means
+queued or commanded but not yet committed, pulse means running now. Novation states it in
+the [Launchpad Mini user guide](https://userguides.novationmusic.com/hc/en-gb/articles/23731303692306-Using-Launchpad-Mini-s-Session-mode)
+("flash green, indicating that the clip is queued … when a clip is playing, the pad will
+pulse green"). Ableton implements it in shipped code, where every `…Triggered` state is a
+`Blink()` and every engaged toggle is a `Pulse()`
+([Push2/skin_default.py](https://github.com/gluon/AbletonLive11_MIDIRemoteScripts/blob/master/Push2/skin_default.py)).
+monome, which has no colour at all, still made its Terms app flash a clip until it starts.
+Home Assistant's own frontend uses exactly one animation, a 1 Hz pulse, and only for
+`locking` and `unlocking`.
+
+**Their brightness is palette layout, not a dimming register**, which is why our §9.1
+result matters so much. Launchpad, APC and Push palettes are hue families of three or four
+shades, and Ableton's `shade(n)` is literally `palette_index + n`
+([pushbase/colors.py](https://github.com/gluon/AbletonLive11_MIDIRemoteScripts/blob/master/pushbase/colors.py)).
+This device's palette is not built that way, so the shade channel those products rely on
+does not exist here by any route.
+
+**Their animation and brightness modes are selected by MIDI channel.** Push 2 uses channels
+6 to 10 for pulsing and 11 to 15 for blinking
+([push-interface](https://github.com/Ableton/push-interface/blob/main/doc/AbletonPush2MIDIDisplayInterface.asc));
+the APC40 mk2 spends 15 of its 16 channels on temporal modes; the APC mini mk2 puts seven
+static brightness steps plus nine blink and pulse rates on the channel. This device ignores
+the channel on all sixteen (§9.1), so none of that is available and the timing has to live
+in the coordinator instead.
+
+**Five frames a second is not actually the end of animation.** The original Launchpad's own
+manual documents 400 messages a second, so "it will take 200 milliseconds to update a
+Launchpad completely", the same figure our vendor path measures. Novation's answer was to
+move animation into firmware rather than abandon it. A square blink at *f* Hz costs 2*f*
+frames a second, so even five frames a second affords the whole 0.4 to 2.5 Hz band. What
+five frames a second does kill is smooth ramps and the ripple in the design document, and
+no shipped product has ripples.
+
+**Blink rates converge tightly across every industry**, which is worth copying rather than
+guessing: IEC 60073 slow 0.4 to 0.8 Hz and normal 1.4 to 2.8 Hz, IEC 60601-1-8 high
+priority 1.4 to 2.8 Hz, FAA AC 25-11B 0.8 to 4.0 Hz, and
+[WCAG 2.3.1](https://www.w3.org/TR/WCAG21/#three-flashes-or-below-threshold) capping at
+three flashes a second. Novation's hardware flash is one beat, 2 Hz at 120 bpm; Ableton's
+`Blink(…, 24)` is a quarter note and `Pulse(…, 48)` a half note, so 2 Hz and 1 Hz.
+MIL-STD-1472H adds two rules worth keeping: no more than two flash rates, at least 2 Hz
+apart, and items flashing at the same rate must be synchronised. Smith and Mosier are
+blunter still, that it is safer to treat blinking as a two-level code, blinking against not
+blinking.
+
+**The documented failure mode is density, not rate.** Users report individual blinks as
+readable and a grid full of them as unreadable, which is why MIL-STD-1472H says only a
+small area should flash at any time. Two further traps are recorded by users of other
+grids and both apply directly here: dithered dimming reads as blinking and collides with
+the semantic, which §9.1 confirms on this hardware, and host redraw fighting a firmware
+animation layer produces flicker.
+
+**Colour vision deficiency is the strongest argument for keeping a lightness channel, and
+this device has none.** The canonical case is a
+[2010 Ableton forum thread](https://forum.ableton.com/viewtopic.php?t=141471) in which a
+colour-blind Launchpad user reports that the mixer page was readable because the LED
+intensity differed, while "in clip view the leds are so bright that I cannot register the
+Green from the Amber pads". The community fix, and the one the thread celebrated, was
+blink. Mutable Instruments later shipped a colour-blind firmware built on brightness plus
+blink pattern, and its author concluded that blink character, smooth against sharp, was
+more discriminable than rate. [WCAG 1.4.1](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html)
+certifies lightness difference as a redundant channel and does not list blink; IEC 60073
+and the FAA human factors standards do list flashing. Roughly one man in twelve is
+affected, and [Okabe and Ito](https://jfly.uni-koeln.de/color/) put the ceiling at eight
+reliably distinguishable hues even with a free choice of colour.
+
+**Home Assistant precedents are thin but consistent.** No integration exists for any MIDI
+device, and the three hobby Launchpad projects have under one star each. The most
+considered is [marcostevanon/launchpad-ha](https://github.com/marcostevanon/launchpad-ha),
+which encodes on, off and unavailable as three shades of one hue, reserves pulse for two
+states only, and deliberately never flashes. The popular category is Stream Deck, where
+[cgiesche/streamdeck-homeassistant](https://github.com/cgiesche/streamdeck-homeassistant)
+carries binary state with an **icon swap** rather than colour, gives transitional states
+their own static glyph rather than motion, and uses amber for active and grey for inactive,
+matching Home Assistant's own frontend palette. Home Assistant's own Voice hardware encodes
+faults by the **number** of lit LEDs and magnitude by an arc, using brightness for nothing.
+
 ## 9. The vendor channel, measured
 
 Reads change nothing, so the memory was explored by reading. All measured 2026-09-09 over
@@ -371,7 +465,10 @@ channel rather than the editor:
   22, 0xFF by default. The play button's record written to 27, its own CC number, then
   note-on 27 at velocity 5, lit it green; velocity 0 put it out and 127 lit it again. The
   owner reports green as its only colour, so the buttons are single-colour LEDs and
-  velocity is on or off there. Only the play button was tried.
+  velocity is on or off there. **All five confirmed 2026-09-10**: every button's Led byte
+  written to its own controller number, left 25, right 26, play 27, stop 28, record 29,
+  then a note-on for each, and all five lit. So navigation can live entirely off the grid
+  and all sixteen pads stay available for content.
 
 The palette's green at velocity 5 is a little darker than a written `00 FF 00`, consistent
 with the editor's palette topping out at 0xF0. Vendor writes were acknowledged about
@@ -431,6 +528,68 @@ A pad answers to one or the other, and animation is only possible on the first. 
 that wants both brightness as a state channel and a ripple animation cannot have them:
 the palette path is the one that animates, so state has to be carried by colour rather
 than by level.
+
+### 9.1 The palette judged by eye, measured 2026-09-10
+
+The velocity walk above lit one pad at a time, six seconds apart, which is the worst way
+to judge colour: memory for a hue across that gap is poor and every value looked distinct
+at the time. What decides a control surface is whether colours separate **side by side, at
+a glance, across the room**. So the whole palette was shown sixteen values at once on the
+lit grid, with `scripts/led_console.py` holding the link open so the owner could look at
+one frame, say what they saw, and only then be shown the next. Every result below is the
+owner's own report on the physical grid.
+
+- **Every entry in the palette is pastel.** Values 1 to 64 were shown in four consecutive
+  frames of sixteen. Not one saturated colour at any index. This is not a limitation of
+  the walk: it is the palette.
+- **There are no shade families.** Launchpad, APC and Push palettes are hue families of
+  three or four brightness steps each, which is where their apparent dimming comes from
+  (§8). This one is not built that way. Values the walk had named alike were shown
+  together, two greens (5, 19), four yellows (1, 17, 4, 60), three whites (13, 40, 32) and
+  four blues (7, 9, 21, 48), and within every row they read as **genuinely different
+  colours rather than one colour at different levels**.
+- **The MIDI channel is ignored on all sixteen channels.** Earlier runs tried channels 1,
+  5 and 10; every comparable controller puts brightness and blink on the channel, so all
+  sixteen were tried at once, one per pad, same note and same velocity. The grid came up
+  uniform. There is no firmware brightness step and no firmware blink or pulse mode.
+- **The five candidate identity colours do separate.** Blue 21, purple 24, green 5,
+  red-pink 14 and orange 15, scattered across the grid with gaps between them, read as
+  five different colours.
+- **Purple 24 against white 40 is the weak pair.** With each of the five shown beside
+  white, only purple was reported as close to it. That matters because white is the
+  obvious candidate for "this entity is off".
+
+**The vendor path is saturated but dim, and that is the whole trade.** The factory's own
+stored colours are `(150, 200, 240)` in bank 1 and `(240, 0, 240)` in bank 3, so 0xF0 is
+the ceiling the firmware itself uses, and a saturated magenta is an ordinary RGB write with
+no hidden mechanism. Written at full power beside their nearest palette equivalents:
+
+| Written | Against | Reported |
+|---|---|---|
+| `(240, 0, 0)` | palette red-pink 14 | deeper red, but dimmer |
+| `(240, 240, 240)` | palette white 40 | palette white is brighter |
+| `(255, 255, 255)` | `(240, 240, 240)` | only very slightly brighter |
+
+So the palette path drives the LEDs harder even at equal hue and equal channel count, and
+the ceiling is real rather than an artefact of writing 240 instead of 255. A deep red is
+dim partly because one channel is lit where a pastel lights three, but white against white
+removes that explanation and the palette still wins.
+
+**A whole page was then rendered both ways**, sixteen pads laid out as a room, and the
+colour version was reported as dim throughout, including its lit pads. Asked which they
+would rather have on a wall every day, the owner chose the palette version.
+
+**Dithering does not buy back a brightness channel.** Sixty frames a second is fast enough
+to switch a pad within a frame or two, so three duty cycles were tried against a steady
+reference row, at two thirds, one half and one third. All three read as **flicker, not as
+dimming**. That matches the complaints §8 found against the same trick on other hardware.
+
+**Conclusion, and the LED language rests on it.** There is no brightness channel on this
+device by any route: not in the palette, not on the channel, not by dithering, and the one
+path that does dim is dim everywhere and too slow to animate. State must be carried by
+colour, by position and by slow motion. Blink is the only lightness-based channel left,
+which is worth knowing because §8 records it as the redundancy that colour-blind users of
+comparable grids asked for by name.
 
 **Region 4 begins with a live state block, and it holds the three registers the
 integration needs.** Read as `78 00 32 04 00 00 KK 00 01 01 SS BB 00 …`:
@@ -496,7 +655,11 @@ Settled and moved into the sections above: the slot and bank registers, address
 stability, volatility, Led as a note selector, buttons' Led bytes, relative encoders by
 RAM write, the encoder step values, the MCP SysEx byte, the pad channel byte, the Custom
 payload, the palette on a Note pad, what makes PAD BANK latch, and that an armed pad never
-shows its RGB field.
+shows its RGB field. Settled 2026-09-10 in section 9.1: that the whole palette is pastel
+with no saturated entry, that it has no shade families, that the MIDI channel is ignored on
+all sixteen channels rather than the three tried before, that the vendor path is dimmer
+than the palette path at equal hue, and that dithering reads as flicker rather than as
+dimming. Together those mean the device has no brightness channel by any route.
 
 1. Shift with pads 1 to 8 selects the preset; with pads 9 to 16 it sets swing, velocity
    and the base bank, the owner's account plus section 9. What the swing and velocity

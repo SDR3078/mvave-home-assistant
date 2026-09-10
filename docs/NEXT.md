@@ -28,6 +28,34 @@ implementation plan and this file is the running to-do list.
   Volatile, so a power cycle restores the owner's configuration exactly.
 - **`mvave.send_raw`**, and with it a pad lit green from the Home Assistant interface,
   with nothing configured in MidiSuite.
+- **The LED path is decided: the palette over MIDI, for the whole grid.** Measured on the
+  hardware and judged by eye on 2026-09-10, recorded in HARDWARE-BLE.md sections 8.1 and
+  9.1. The colour path can do saturation and the palette cannot, but it is dimmer at every
+  hue, too slow to animate, and it flashes white on its own press, which breaks the rule
+  the whole design rests on. Shown the same room page rendered both ways, the owner chose
+  the palette. `scripts/preview_leds.py` plays that comparison as a fixed programme.
+- **There is no brightness channel on this device by any route**, so "colour is identity,
+  brightness is state" cannot be built as written. Not in the palette, which has no shade
+  families; not on the MIDI channel, which is ignored on all sixteen; not by dithering,
+  which reads as flicker; and the one path that does dim is dim everywhere.
+- **The LED language is designed and `ble-midi-surface-design.md` is rewritten to match.**
+  Sections 5, 6 and 7 of that document were built frame by frame on the physical grid, the
+  owner judging each one. What came out of it: five identity colours on an index page, a
+  fixed orange-and-white pair for on and off inside a page, the two never mixing so colour
+  can be reused; breathing for the knob's target and one fast blink reserved for "not
+  confirmed"; a sixteen-step value bar with no sub-step, both substitutes for it having
+  been built and rejected on the hardware; and a page transition that grows in rings out
+  of the pad you pressed, then opens left to right, mirrored exactly on the way back out.
+- **Navigation moved off the grid onto the transport buttons**, the owner's idea. All five
+  buttons take LED feedback, confirmed on the hardware, where only play had been tried.
+  That returns the sixteenth pad to content and removes a colour collision, since any
+  colour a back pad could take was either an identity colour or white.
+- **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
+  a file, which is what made designing by eye possible: reconnecting between questions cost
+  twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
+  an animation on one step to walk through it, can schedule a command to land on a chosen
+  frame, and can log how long each frame was actually on screen. That last one settled an
+  argument: an animation that felt uneven measured 189, 411, 190, 206, 206, 395 ms.
 
 ## Build
 
@@ -43,9 +71,24 @@ implementation plan and this file is the running to-do list.
    change with the preset and the octave keys, so the current name-based layout is wrong
    the moment the user switches preset. Needs entities added after the first connect
    rather than at platform setup.
-4. **Engine** (brief, milestone 4), with the LED frame rendered through the velocity
-   palette of HARDWARE-BLE.md section 9, 127 and 96–126 never sent, and the vendor RGB
-   write kept as the option for unarmed static pads.
+4. **Engine** (brief, milestone 4), building the language now specified in
+   `ble-midi-surface-design.md` sections 5 to 7. Started: `engine/` exists with the
+   palette, the frames and transitions, the two rhythms, the page model, the two protocols
+   the platform reaches in through, slot resolution and rendering. What is left:
+   - **Navigation.** The stack, the graph jumps, idle timeout, the shift gesture on the
+     left button, and choosing which transition plays for which kind of move.
+   - **Gestures.** Tap against hold thresholds, hold-then-turn, release ordering.
+   - **Knobs.** The global assignment, per-page overrides, focus, peek, the transient bar,
+     the debounce that stops one turn firing forty service calls.
+   - **The `handle(event) -> actions, frames` entry point**, which is the only thing the
+     coordinator should need to call.
+   - **The coordinator side**: playing a frame sequence on a tick, diffing against what
+     the grid already shows, and rendering through the velocity palette of
+     HARDWARE-BLE.md section 9, with 127 and 96–126 never sent. The vendor RGB write stays
+     only as the `set_pad_color` escape hatch for a pad deliberately made static.
+   - **Two provisional colours to judge on the grid**: what an unreachable entity looks
+     like, currently blue, and what a scene or script pad looks like, currently green.
+     Every other colour in the language was chosen by looking at it; these two were not.
 5. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 

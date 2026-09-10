@@ -24,4 +24,4 @@ strict = true
 # The pure protocol code, checked as the top-level packages it will become on PyPI. Going
 # through custom_components.mvave instead would drag in Home Assistant.
 mypy_path = "custom_components/mvave"
-packages = ["transport", "devices"]
+packages = ["transport", "devices", "engine"]

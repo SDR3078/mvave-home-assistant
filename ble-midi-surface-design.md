@@ -2,7 +2,14 @@
 
 Companion to `ble-midi-integration-brief.md`. That document covers transport, repo, and testing. This one specifies the **profile engine**: what pads and knobs mean, how navigation works, what events are emitted, and how feedback is rendered.
 
-Hardware assumption: 16 pads (4×4, RGB, velocity-sensitive) + 8 relative rotary encoders. **The encoders have no LED rings.** The pad grid is the only visual output. Nothing here may assume ring feedback.
+Hardware assumption: 16 pads (4×4, RGB, velocity-sensitive) + 8 relative rotary encoders + 5 transport buttons. **The encoders have no LED rings.** Nothing here may assume ring feedback.
+
+**What the LEDs can and cannot do, measured rather than assumed.** Section 5 was rewritten against the hardware on 2026-09-10; `docs/HARDWARE-BLE.md` sections 8.1 and 9.1 carry the evidence. In short:
+
+- **There is no brightness channel, by any route.** Not in the palette, which is pastel throughout and has no shade families. Not on the MIDI channel, which is ignored on all sixteen. Not by dithering, which reads as flicker. The one path that does dim is dimmer everywhere and manages five full-grid updates a second against sixty, so it cannot animate. **"Colour = identity, brightness = state" cannot be built.**
+- **Five colours are reliably distinguishable at a glance, across a room**: blue, green, orange, red-pink, purple. A sixth candidate always collapsed into one of those. White is a sixth usable value but reads like purple.
+- **Animation is free.** A full grid redraws sixty times a second on the palette path.
+- **The five transport buttons have LEDs** and all five light. They are single colour, green, on or off. Navigation lives there, which is why the grid reserves no pads at all.
 
 ---
 
@@ -36,7 +43,17 @@ idle_timeout                # seconds, 0 = never
 
 ### Slot reservation
 
-The engine reserves **exactly one pad**: `back` (default slot 16, configurable per page). Hold on it = `home`. All other 15 slots belong to the user or the auto-fill. No other slot is ever claimed by the engine.
+The engine reserves **no pads at all**. All 16 belong to the user or the auto-fill.
+
+Navigation lives on the transport buttons, which have their own LEDs (left 25, right 26, play 27, stop 28, record 29, all lit by a note-on for that number once their Led byte is armed):
+
+| Button | Role | Lit when |
+|---|---|---|
+| left | `back` | there is somewhere to go back to |
+| stop | `home` | you are not already on the root page |
+| right, play, record | free, per page | the page assigns them |
+
+This was originally a reserved pad in the bottom-right corner. Moving it off the grid buys back a sixteenth of the surface and removes a colour collision: any colour the back pad could take was either a room's identity colour or white, and white is what "off" means.
 
 ### Defaults by domain
 
@@ -77,7 +94,7 @@ A page with no user config and `source: area` is fully usable out of the box. **
 
 - Any pad may `navigate` to any page — the structure is a graph, not a tree.
 - `back` pops the stack. `home` clears to the root page.
-- **Shift gesture**: hold the reserved `back` pad → row 1 temporarily becomes a switcher for top-level pages (the "tab bar"). Release without pressing = no-op.
+- **Shift gesture**: hold the `left` button → row 1 temporarily becomes a switcher for top-level pages (the "tab bar"). Release without pressing = no-op.
 - **Idle timeout**: per page, default 30 s, `0` on pages that should persist (media). On expiry, return to home with the slow fade (§5).
 - Navigation is drivable externally — see services in §4.
 
@@ -134,32 +151,69 @@ Symmetric in/out is a requirement, not a nice-to-have: presence sensors pre-sele
 
 ## 5. LED language and animations
 
-### 5.1 Static rules
+Rewritten 2026-09-10 against the hardware, judged by eye on the physical grid rather than reasoned about. The rule this replaces was "colour is identity, brightness is state", which the device cannot do at all.
 
-- **Color = identity** (which room / which page / which entity), **brightness = state** (on/off, active/inactive).
-- Each page has one identity color, reused everywhere that page appears (its `navigate` pad on home, its ripple, its `back` collapse).
-- Focused pad = slow pulse.
-- Unassigned slots = off.
+### 5.1 The two modes, and why colour can be reused
 
-### 5.2 Transitions
+The grid is only ever showing one of two kinds of page, and **they never mix**:
 
-Budget **~200 ms**. BLE MIDI sustains roughly 10–15 full-grid frames/second; anything longer reads as lag.
+- an **index**, where every lit pad navigates somewhere and nothing has an on or off state;
+- a **page**, where every lit pad is an entity that is on or off.
 
-| transition | animation |
+That separation is what makes five colours enough. Identity colours live on the index; the on and off colours live on a page; neither set ever has to be told apart from the other, because they never appear together.
+
+### 5.2 Static rules
+
+| Element | Treatment | Why |
+|---|---|---|
+| Index: each room or page | one of **blue, green, orange, red-pink, purple** | the five that survived being shown together, scattered, across a room |
+| Index: beyond five pages | colours repeat, **fixed position identifies** | a sixth colour always collapsed into one of the five; position is a free channel and survives colour blindness |
+| Page: entity on | **orange** | one pair everywhere, learned once, independent of which page you are on. Matches Home Assistant's own amber for active |
+| Page: entity off | **white** | the only value distinct from all of blue, green, orange and red-pink |
+| Page: nothing assigned | **dark** | pressing it does nothing, and it must not look like an entity that is off. This is why "off" cannot also be dark |
+| Focused pad, the knob target | the pad's own colour, **breathing**: 1.4 s period, lit about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
+| Waiting, commanded but not confirmed | **fast even blink**, about 2 Hz | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
+| `back` available | **left button lit** | see §1 |
+| `home` available | **stop button lit** | |
+
+**Blink is scarce and must not be spent twice.** It is the only channel left after colour and position, it is the documented accessibility fallback, and a grid with several things blinking at once is the documented failure mode. One meaning only: not confirmed yet.
+
+**Known collision, accepted.** A page whose identity colour is orange has a curtain (§5.3) the same colour as its own switched-on entities, so the curtain's edge is invisible on those pads for the length of the transition. It is transient, it affects one page out of five, and the alternative is dropping to four identity colours. Reversible: remove orange from the identity set and the collision goes.
+
+### 5.3 Transitions
+
+Sixty full-grid frames a second are available, so the budget is generous. Each step below is **350 ms**, which was arrived at by trying 50, 110, 150, 200, 250 and 350 on the hardware; everything faster read as either a stutter or as nothing having happened.
+
+**Entering a page** answers two questions in order: which pad did I press, and what is in here.
+
+1. **Close, in rings from the pressed pad.** Growing squares by Chebyshev distance, one ring per step, in the destination page's colour. The page you are leaving stays lit ahead of the curtain until it is covered, so nothing blanks. Four steps from a corner, three from the middle.
+2. **Open, left to right.** One column per step, four steps, uncovering the destination page, which is already in its real colours as it appears.
+3. The transport buttons change **on the final frame**, as the last column clears.
+
+**Leaving a page** is the exact mirror, so that going back undoes going in:
+
+1. **Close right to left**, one column per step, over the page being left.
+2. **Shrink in rings** toward the pad that page occupies on the index, so the last thing lit is the pad originally pressed.
+3. The transport buttons go dark **immediately**, on the first frame of the curtain, because the affordance has already been used.
+
+| Transition | Animation |
 |---|---|
-| enter page via pad | **ripple**: rings expand from the origin pad (Chebyshev distance 0→3), one ring per frame ~50 ms, in the destination page's color at 30–40% intensity, then resolve to real state |
-| `back` via pad | **inverse ripple**: rings collapse toward the back pad, in the parent page's color |
-| `home` via hold | collapse toward the reserved corner, white |
-| navigate via service / automation / presence | **pulse**: one full-grid frame up, one down, ~120 ms — no ripple, because there is no origin pad and inventing one implies false causality |
-| idle timeout to home | **fade**: slow, ~600 ms — nothing happened, it should not grab attention |
-| focus change | no grid animation; only the focused pad changes to its pulse |
+| enter a page by pressing its pad | rings out from that pad, then a left-to-right open |
+| `back` | columns right to left, then rings shrinking into that page's index pad |
+| `home` | as `back`, but shrinking into the index's own root position |
+| navigate by service, automation or presence | the same close and open, with **no origin**: both halves are column wipes, because inventing an origin pad implies a finger that was not there |
+| idle timeout to home | column wipe only, no rings, and no button flash. Nothing happened, so it should not look like it did |
+| focus change | no grid animation, only the focused pad starting to breathe |
 
-### 5.3 Rules
+**Why rings one way and columns the other.** Rings say where the finger was. Columns say here is a page, and left to right is how a grid is read. Advancing a whole ring at a time does put a different number of pads on screen each step, one then three then five then seven from a corner; covering a fixed number of pads instead keeps the area even but leaves the growing square visibly unfinished halfway through each step, which is worse.
+
+### 5.4 Rules
 
 - Animations are frame generators in the engine; the coordinator plays them on a fixed tick and diffs against the last frame, exactly like static frames.
 - **Any pad press aborts the running animation** and jumps to the resolved state. Input is never queued behind eye candy.
-- Library is three primitives only: `ripple(origin, color, direction)`, `pulse(color)`, `fade(from, to, ms)`.
-- Global setting `animations: full | minimal | off`; `minimal` = pulse only.
+- Anything that is not a grid frame, the transport buttons above all, must be schedulable **against a specific frame** of an animation rather than firing at its start or its end.
+- Primitives: `expand(origin, colour)`, `collapse(target, colour)`, `wipe(colour, direction)`, `breathe(pad)`, `blink(pad)`. No fade and no partial intensity: there is no intensity.
+- Global setting `animations: full | minimal | off`; `minimal` = the column wipe only, no rings.
 
 ---
 
@@ -186,10 +240,11 @@ If the focus lacks a property, that knob is inert. Per-page `knobs` config overr
 
 Since there is no persistent readout, the grid becomes a transient one.
 
-- On the **first tick**, overlay a value bar on the whole grid. Hold it while turning plus **~700 ms** after the last tick, then fade back to the page.
-- 16 pads in reading order = 16 steps; the last lit pad dims proportionally for sub-step resolution.
+- On the **first tick**, overlay a value bar on the whole grid. Hold it while turning plus **~700 ms** after the last tick, then return to the page with a column wipe.
+- **16 pads = 16 steps, filling upwards from the bottom row.** About six percent a pad. Level rises, so the bar rises; cover position filling downwards (§6.3) is then a deliberate exception rather than an arbitrary one.
+- **No sub-step resolution.** The original design dimmed the last lit pad proportionally, which needs a brightness this device does not have. Two substitutes were built and tried on the hardware and both were rejected: blinking the pad above the run read as a fault, because blink already means "not confirmed" (§5.2), and capping the run with a second colour read as a pad that did not belong to the bar. Sixteen steps is finer than a dimmer needs.
 - The HUD is **per-knob, not per-entity** — the knob you touched decides which property is shown. If two knobs are turned together, show the most recent.
-- After a period of inactivity, the **first tick is a half step**, so "peek by nudging" is cheap.
+- The bar is a single contiguous run in one colour growing from one edge, which is a shape a page never produces, so it is recognisable as "not a page" before its colour is even read.
 
 ### 6.2 Peek
 
@@ -197,19 +252,25 @@ Since there is no persistent readout, the grid becomes a transient one.
 
 ### 6.3 Color language per property
 
-Constant across every page:
+Constant across every page. **One flat colour per property, not a gradient**: every ramp in the original design needed many graded steps along one hue, and the palette has neither brightness nor controllable saturation. What survives is one fixed colour naming which property you are holding, and the length of the bar carrying the value.
 
-- brightness — warm white ramp
-- color temp — amber → blue gradient
-- hue — the actual color across the whole grid, no bar
-- saturation — white → the current hue
-- volume — green bar; top pad red above a configurable "loud" threshold
-- cover position — bar fills **top-down** (it's a blind)
-- climate — see below
+| Property | Bar colour | Note |
+|---|---|---|
+| brightness | white | |
+| colour temp | orange | |
+| saturation | green | |
+| hue | **cut** | see below |
+| volume | green | pads above a configurable "loud" threshold switch to red-pink, an extra colour appearing rather than a shade changing |
+| cover position | blue | fills **top-down**, the one exception, because it is a blind |
+| climate | see §6.4 | |
+
+**Hue is cut entirely.** It wanted the grid to show the actual colour being chosen, sweeping across all 16 pads. Usable hue repeats every 13 or 14 palette steps with only five unambiguous entries, so 16 pads would show two or three repeats of a handful of colours, reading as "these pads are grouped" rather than as a continuous dial. The one property where seeing the result was the whole point is the one the palette cannot show. Hue gets an ordinary bar or a pad-per-preset instead.
+
+**There is no red at any index.** Everywhere the original design says red, it means red-pink, which is as close as the palette gets.
 
 ### 6.4 Climate
 
-Two numbers, so: **fill = setpoint**, one contrasting pad = **current temperature**, making the gap visible. Fill color by direction relative to current: blue when asking for cooling, red for heating, white within ±0.3 °C. Mode (cool/heat/auto) is **not** a knob — assign it to a pad.
+Two numbers, so: **fill = setpoint**, one contrasting pad = **current temperature**, making the gap visible. Fill colour by direction relative to current: blue when asking for cooling, red-pink for heating, white within ±0.3 °C. The current-temperature marker is a **white pad on the same 16-step scale**, so the distance still to travel is the gap between the top of the fill and the marker. Mode (cool/heat/auto) is **not** a knob — assign it to a pad.
 
 ### 6.5 Behavior
 
@@ -217,32 +278,38 @@ Two numbers, so: **fill = setpoint**, one contrasting pad = **current temperatur
 - Min/max reached: one quick full-bar flash.
 - If the target is off (light off, player muted), the first tick **turns it on at the lowest step** rather than adjusting an invisible value.
 - The HUD interrupts page animations; any pad press cancels the HUD and executes immediately.
+- The HUD **snaps on in one frame** and never animates in. How the grid arrived is a channel of its own: snap means HUD, rings mean you navigated, a bare column wipe means something else moved you.
 
 ### 6.6 Optional persistent meters
 
-Per-page opt-in: `meters: {row: 4, knobs: [5, 7]}` reserves a row as mini bars (two 2-pad or four 1-pad). Low resolution, but "is it loud" and "is the AC heating or cooling" read fine from brightness and color. **Off by default** — it costs pads.
+**Cut.** The original was a per-page opt-in reserving a row as mini bars, justified as "is it loud" and "is the AC heating or cooling" reading fine from brightness and colour. The brightness half does not exist, and a two-pad meter with no gradation cannot show a level. It was opt-in and off by default; it does not earn the pads it costs.
 
 ---
 
 ## 7. Configuration surface
 
-Config subentries, one per page, using HA selectors (`AreaSelector`, `EntitySelector`, `LabelSelector`, `ColorRGBSelector`). Shape:
+Config subentries, one per page, using HA selectors (`AreaSelector`, `EntitySelector`, `LabelSelector`, `SelectSelector`). Shape:
 
 ```yaml
 page: living
   title: Living room
-  color: [255, 120, 0]
+  colour: orange          # one of blue, green, orange, red, purple
   source: area
   area: living
   parent: home
-  back_pad: 16
   idle_timeout: 60
   pads:
     3:  {tap: {scene: scene.living_evening}, hold: {navigate: tv}}
     12: {tap: {event_only: coffee}}
   knobs:
     5: {target: media_player.living_tv}
+  buttons:
+    right: {navigate: tv}
 ```
+
+**Colour is a choice of five, not a colour picker.** The original used `ColorRGBSelector`, which would offer sixteen million colours the device cannot show and let a user pick two that look identical on the grid. A `SelectSelector` over the five measured colours cannot produce an unreadable surface. Warn at config time when a colour is used by more than one page, since past five, position rather than colour is doing the identifying.
+
+There is no `back_pad`: back and home are the transport buttons and are not configurable. `right`, `play` and `record` are, per page.
 
 Unlisted pads auto-fill from the source. Unlisted knobs use the global assignment against `focus`.
 
@@ -260,6 +327,7 @@ Unlisted pads auto-fill from the source. Unlisted knobs use the global assignmen
 - Navigation: stack push/pop/clear, graph jumps, shift gesture, idle timeout, external `navigate` service.
 - Sources: area/label/explicit fill order, explicit-overrides-source, more entities than slots, fewer entities than slots.
 - Gestures: tap vs hold thresholds, hold-then-turn, release ordering.
-- HUD: first-tick half step, debounce window, min/max flash, off-target first tick, pad press cancels HUD.
-- Animations: frame counts and abort-on-input, `minimal` and `off` modes.
+- HUD: debounce window, min/max flash, off-target first tick, pad press cancels HUD, 16 steps with no sub-step.
+- Animations: frame counts and abort-on-input, `minimal` and `off` modes. Plus, because every one of these was got wrong by hand first: **every step of an animation lasts the same time**, entering is rings-then-columns and leaving is columns-then-rings, the outgoing page stays lit ahead of the curtain rather than blanking, the incoming page is behind it in its real colours, and the transport buttons land on the frame they are supposed to.
+- LED language: no palette index above 95 is ever emitted, 127 and 96–126 are never used as colours, and only the five measured identity colours are offered in config.
 - Events: exactly one event per transition, correct `previous` payload, `trigger` field accuracy for pad vs service vs idle.
