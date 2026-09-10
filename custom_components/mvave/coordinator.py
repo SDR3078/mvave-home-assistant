@@ -26,11 +26,11 @@ from homeassistant.core import callback
 
 from .arming import async_arm
 from .const import LOGGER, MIDI_CHAR_UUID
-from .transport import MidiEvent, ParserState, frame_midi, parse_ble_midi
+from .transport import MidiEvent, ParserState, frame_many, frame_midi, parse_ble_midi
 from .vendor import VendorSession
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from bleak.backends.characteristic import BleakGATTCharacteristic
     from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
@@ -229,6 +229,21 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         if client is None:
             raise BleakError(f"{self.address}: not connected")
         await client.write_gatt_char(MIDI_CHAR_UUID, frame_midi(midi), response=False)
+
+    async def async_send_many(self, messages: Sequence[bytes]) -> None:
+        """Send several MIDI messages, packed into as few packets as will hold them.
+
+        A whole sixteen-pad frame fits in one write, which is the difference between the
+        grid redrawing at sixty frames a second and at four. Nothing is sent at all when
+        there is nothing to say.
+        """
+        client = self._client
+        if client is None:
+            raise BleakError(f"{self.address}: not connected")
+        if not messages:
+            return
+        for packet in frame_many(messages, client.mtu_size):
+            await client.write_gatt_char(MIDI_CHAR_UUID, packet, response=False)
 
     # ---------------------------------------------------------- availability
 

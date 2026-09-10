@@ -16,6 +16,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, LOGGER
 from .coordinator import MvaveCoordinator
+from .runner import SurfaceRunner
 from .services import async_setup_services
 
 if TYPE_CHECKING:
@@ -64,6 +65,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # The surface is the profile engine driving the grid. It builds itself once the device
+    # has been armed, because only then is the real note map known.
+    entry.async_on_unload(SurfaceRunner(hass, coordinator).async_start())
 
     # Start after the platforms, so entities are subscribed before the first connect.
     entry.async_on_unload(coordinator.async_start())

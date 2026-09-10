@@ -56,6 +56,14 @@ implementation plan and this file is the running to-do list.
   absolute encoders and always zero for relative ones, where the value *is* the step and
   never changes. Connect-time arming switches them to relative, so every turn had been
   dropped since that was added. `ArmResult` now records the mode and the entity reads it.
+- **It runs inside Home Assistant.** `registry.py` is the whole of what the engine needs
+  from the platform: what is in a room, what an entity is doing, call a service, fire an
+  event, plus a profile built from the area registry so a fresh install has a surface
+  before anybody configures anything. `runner.py` is everything with a clock in it, which
+  is why the engine has none: hold against tap, how long a value bar stays, collecting a
+  knob's thirty messages a second into one service call, and giving up on an entity that
+  never reports back. The note and controller numbers come from the device's own memory
+  by way of the arming step, so they stay right when the preset changes.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -98,12 +106,12 @@ implementation plan and this file is the running to-do list.
      bounding it belongs to the coordinator.
    - **Aborting an animation on input.** A press during a transition is currently queued
      behind it rather than cutting it short.
-   - **The coordinator side**: playing a frame sequence on a tick, diffing against what
-     the grid already shows, and rendering through the velocity palette of
-     HARDWARE-BLE.md section 9, with 127 and 96–126 never sent. The vendor RGB write stays
-     only as the `set_pad_color` escape hatch for a pad deliberately made static.
-   - **A `RegistryView` and `ActionSink` over Home Assistant**, which is the whole of what
-     the engine needs from the platform.
+   - **Telling somebody which knobs are live.** With no rings and no labels there is
+     nothing that says knob one adjusts the lamp you are holding and knob six does not.
+     The design's answer is that the assignment never changes so it is learned once, which
+     is a lot to ask on the first day. Open.
+   - **Rebuilding the profile when areas change.** It is built once, on the first connect
+     after a restart, so a room added later needs a reload.
    - **Two provisional colours to judge on the grid**: what an unreachable entity looks
      like, currently blue, and what a scene or script pad looks like, currently green.
      Every other colour in the language was chosen by looking at it; these two were not.

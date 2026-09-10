@@ -25,3 +25,8 @@ logger:
     homeassistant.components.bluetooth: debug
     habluetooth: debug
     bleak_esphome: debug
+
+# A house to point the surface at while the real one is elsewhere. The demo integration
+# ships lights with brightness, covers, media players and a thermostat, which between them
+# exercise every knob the engine knows about.
+demo:
