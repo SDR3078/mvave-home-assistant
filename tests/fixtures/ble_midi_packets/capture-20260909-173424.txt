@@ -1,0 +1,97 @@
+# capture 2026-09-09 17:34:24
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 84%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 F0 35 59 10 25 7F 80 F7                     # +3900 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +3932 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +4710 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +4811 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +5631 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +5679 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +5734 ms  sysex 5B [35 59 10 25 00] @0
+80 80 B0 1C 7F                                    # +20693 ms  cc ch1 #28=127 @0
+80 80 B0 1C 00                                    # +20890 ms  cc ch1 #28=0 @0
+80 80 B0 1D 7F                                    # +21708 ms  cc ch1 #29=127 @0
+80 80 B0 1D 00                                    # +21921 ms  cc ch1 #29=0 @0
+80 80 B0 19 7F                                    # +22843 ms  cc ch1 #25=127 @0
+80 80 B0 19 00                                    # +22944 ms  cc ch1 #25=0 @0
+80 80 B0 1A 7F                                    # +23552 ms  cc ch1 #26=127 @0
+80 80 B0 1A 00                                    # +23661 ms  cc ch1 #26=0 @0
+80 80 B0 1E 5A                                    # +36502 ms  cc ch1 #30=90 @0
+80 80 B0 1E 5B                                    # +36557 ms  cc ch1 #30=91 @0
+80 80 B0 1E 5C                                    # +36557 ms  cc ch1 #30=92 @0
+80 80 B0 1E 5D                                    # +36557 ms  cc ch1 #30=93 @0
+80 80 B0 1E 5E                                    # +36557 ms  cc ch1 #30=94 @0
+80 80 B0 1E 5F                                    # +36658 ms  cc ch1 #30=95 @0
+80 80 B0 1E 60                                    # +36658 ms  cc ch1 #30=96 @0
+80 80 B0 1E 61                                    # +36658 ms  cc ch1 #30=97 @0
+80 80 B0 1E 62                                    # +36659 ms  cc ch1 #30=98 @0
+80 80 B0 1E 63                                    # +36659 ms  cc ch1 #30=99 @0
+80 80 B0 1E 64                                    # +36660 ms  cc ch1 #30=100 @0
+80 80 B0 1E 65                                    # +36660 ms  cc ch1 #30=101 @0
+80 80 B0 1E 66                                    # +36660 ms  cc ch1 #30=102 @0
+80 80 B0 1E 67                                    # +36760 ms  cc ch1 #30=103 @0
+80 80 B0 1E 68                                    # +36760 ms  cc ch1 #30=104 @0
+80 80 B0 1E 69                                    # +36762 ms  cc ch1 #30=105 @0
+80 80 B0 1E 6A                                    # +36762 ms  cc ch1 #30=106 @0
+80 80 B0 1E 6B                                    # +36762 ms  cc ch1 #30=107 @0
+80 80 B0 1E 6C                                    # +36762 ms  cc ch1 #30=108 @0
+80 80 B0 1E 6D                                    # +36763 ms  cc ch1 #30=109 @0
+80 80 B0 1E 6E                                    # +36763 ms  cc ch1 #30=110 @0
+80 80 B0 1E 6F                                    # +36764 ms  cc ch1 #30=111 @0
+80 80 B0 1E 70                                    # +36764 ms  cc ch1 #30=112 @0
+80 80 B0 1E 71                                    # +36765 ms  cc ch1 #30=113 @0
+80 80 B0 1E 72                                    # +36765 ms  cc ch1 #30=114 @0
+80 80 B0 1E 73                                    # +36809 ms  cc ch1 #30=115 @0
+80 80 B0 1E 74                                    # +36809 ms  cc ch1 #30=116 @0
+80 80 B0 1E 75                                    # +36809 ms  cc ch1 #30=117 @0
+80 80 B0 1E 76                                    # +36864 ms  cc ch1 #30=118 @0
+80 80 B0 1E 77                                    # +36864 ms  cc ch1 #30=119 @0
+80 80 B0 1E 78                                    # +36865 ms  cc ch1 #30=120 @0
+80 80 B0 1E 79                                    # +36865 ms  cc ch1 #30=121 @0
+80 80 B0 1E 7A                                    # +36865 ms  cc ch1 #30=122 @0
+80 80 B0 1E 7B                                    # +36865 ms  cc ch1 #30=123 @0
+80 80 B0 1E 7C                                    # +36866 ms  cc ch1 #30=124 @0
+80 80 B0 1E 7D                                    # +36912 ms  cc ch1 #30=125 @0
+80 80 B0 1E 7E                                    # +36912 ms  cc ch1 #30=126 @0
+80 80 B0 1E 7F                                    # +36912 ms  cc ch1 #30=127 @0
+80 80 B0 1E 7E                                    # +43111 ms  cc ch1 #30=126 @0
+80 80 B0 1E 7D                                    # +43213 ms  cc ch1 #30=125 @0
+80 80 B0 1E 7C                                    # +43213 ms  cc ch1 #30=124 @0
+80 80 B0 1E 7B                                    # +43216 ms  cc ch1 #30=123 @0
+80 80 B0 1E 7A                                    # +43216 ms  cc ch1 #30=122 @0
+80 80 B0 1E 79                                    # +43254 ms  cc ch1 #30=121 @0
+80 80 B0 1E 78                                    # +43323 ms  cc ch1 #30=120 @0
+80 80 B0 1E 79                                    # +47440 ms  cc ch1 #30=121 @0
+80 80 B0 1E 7A                                    # +47522 ms  cc ch1 #30=122 @0
+80 80 B0 1E 7B                                    # +47614 ms  cc ch1 #30=123 @0
+80 80 B0 1E 7C                                    # +47615 ms  cc ch1 #30=124 @0
+80 80 B0 1E 7D                                    # +47616 ms  cc ch1 #30=125 @0
+80 80 B0 1E 7E                                    # +47616 ms  cc ch1 #30=126 @0
+80 80 B0 1E 7F                                    # +47617 ms  cc ch1 #30=127 @0

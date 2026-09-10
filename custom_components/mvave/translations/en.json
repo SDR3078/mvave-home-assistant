@@ -1,0 +1,32 @@
+{
+  "config": {
+    "flow_title": "{name} ({address})",
+    "step": {
+      "bluetooth_confirm": {
+        "description": "Set up {name} as a control surface?"
+      },
+      "user": {
+        "data": {
+          "address": "Device"
+        },
+        "description": "Pick a BLE MIDI controller that is switched on and in range."
+      }
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "no_devices_found": "No BLE MIDI controller was found. Switch it on, make sure nothing else is connected to it, and try again."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": {
+        "name": "Connected"
+      }
+    }
+  },
+  "exceptions": {
+    "device_not_found": {
+      "message": "Could not reach {address}: {reason}"
+    }
+  }
+}

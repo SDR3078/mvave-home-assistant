@@ -1,0 +1,132 @@
+# capture 2026-09-09 17:21:24
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 85%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 99 24 69                                    # +19688 ms  note_on ch10 note 36 vel 105 @0
+# sent 80 80 99 24 7F
+80 80 89 24 40                                    # +19858 ms  note_off ch10 note 36 vel 64 @0
+80 80 99 24 5B                                    # +21087 ms  note_on ch10 note 36 vel 91 @0
+# sent 80 80 99 24 7F
+80 80 89 24 40                                    # +21191 ms  note_off ch10 note 36 vel 64 @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +24990 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +25026 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +25094 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +26105 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +26206 ms  sysex 5B [35 59 10 25 00] @0
+80 80 B9 28 7F                                    # +31968 ms  cc ch10 #40=127 @0
+# sent 80 80 B9 28 7F
+80 80 B9 28 00                                    # +33104 ms  cc ch10 #40=0 @0
+80 80 B9 29 7F                                    # +34323 ms  cc ch10 #41=127 @0
+# sent 80 80 B9 29 7F
+80 80 B9 29 00                                    # +34409 ms  cc ch10 #41=0 @0
+80 80 B9 29 7F                                    # +35525 ms  cc ch10 #41=127 @0
+# sent 80 80 B9 29 7F
+80 80 B9 29 00                                    # +35629 ms  cc ch10 #41=0 @0
+80 80 B9 00 2A 20 00 80 C9 7F                     # +36660 ms  cc ch10 #0=42 @0; cc ch10 #32=0 @0; program ch10 127 @0
+# sent 80 80 B9 00 7F
+80 80 C9 00 2A 20 00 7F                           # +38525 ms  program ch10 0 @0; program ch10 42 @0; program ch10 32 @0; program ch10 0 @0; program ch10 127 @0
+80 80 B0 1B 7F                                    # +41708 ms  cc ch1 #27=127 @0
+# sent 80 80 B0 1B 7F
+80 80 B0 1B 00                                    # +41822 ms  cc ch1 #27=0 @0
+80 80 B0 1E 7E                                    # +52636 ms  cc ch1 #30=126 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 7D                                    # +52671 ms  cc ch1 #30=125 @0
+80 80 B0 1E 7C                                    # +52671 ms  cc ch1 #30=124 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 7B                                    # +52673 ms  cc ch1 #30=123 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 7A                                    # +52731 ms  cc ch1 #30=122 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 79                                    # +52733 ms  cc ch1 #30=121 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 78                                    # +52771 ms  cc ch1 #30=120 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 77                                    # +52832 ms  cc ch1 #30=119 @0
+80 80 B0 1E 76                                    # +52832 ms  cc ch1 #30=118 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 75                                    # +52833 ms  cc ch1 #30=117 @0
+80 80 B0 1E 74                                    # +52833 ms  cc ch1 #30=116 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 73                                    # +52884 ms  cc ch1 #30=115 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 72                                    # +52941 ms  cc ch1 #30=114 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 71                                    # +52982 ms  cc ch1 #30=113 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 70                                    # +53048 ms  cc ch1 #30=112 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 6F                                    # +53088 ms  cc ch1 #30=111 @0
+80 80 B0 1E 6E                                    # +53088 ms  cc ch1 #30=110 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 6D                                    # +53089 ms  cc ch1 #30=109 @0
+80 80 B0 1E 6C                                    # +53089 ms  cc ch1 #30=108 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 6B                                    # +53157 ms  cc ch1 #30=107 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 6A                                    # +53190 ms  cc ch1 #30=106 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 69                                    # +53241 ms  cc ch1 #30=105 @0
+80 80 B0 1E 68                                    # +53241 ms  cc ch1 #30=104 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 67                                    # +53241 ms  cc ch1 #30=103 @0
+80 80 B0 1E 66                                    # +53241 ms  cc ch1 #30=102 @0
+# sent 80 80 B0 1E 7F
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 65                                    # +53287 ms  cc ch1 #30=101 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 64                                    # +53344 ms  cc ch1 #30=100 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 63                                    # +53386 ms  cc ch1 #30=99 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 62                                    # +53447 ms  cc ch1 #30=98 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 61                                    # +53487 ms  cc ch1 #30=97 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 60                                    # +53558 ms  cc ch1 #30=96 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5F                                    # +53593 ms  cc ch1 #30=95 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5E                                    # +53650 ms  cc ch1 #30=94 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5D                                    # +53693 ms  cc ch1 #30=93 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5C                                    # +53753 ms  cc ch1 #30=92 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5B                                    # +53790 ms  cc ch1 #30=91 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 5A                                    # +53855 ms  cc ch1 #30=90 @0
+# sent 80 80 B0 1E 7F
+80 80 B0 1E 59                                    # +53958 ms  cc ch1 #30=89 @0
+# sent 80 80 B0 1E 7F

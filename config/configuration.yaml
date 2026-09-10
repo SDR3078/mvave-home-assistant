@@ -1,0 +1,27 @@
+# Development Home Assistant for the mvave integration.
+#
+# default_config: is deliberately absent. It pulls in 21 components, including three
+# that probe the LAN (zeroconf, ssdp, dhcp). A second instance on a household network
+# would discover and offer to adopt devices the production instance already owns,
+# including the Bluetooth proxy this integration needs to itself. It also costs startup
+# time on every restart, and restart is the inner loop because Home Assistant does not
+# reload Python for custom integrations.
+#
+# No recorder either: Developer Tools shows live state and events, which is all that is
+# needed to watch a pad press arrive, and it keeps startup short.
+#
+# bluetooth is not listed: it loads as a dependency when the ESPHome proxy is added.
+
+homeassistant:
+  name: DEV mvave
+
+frontend:
+config:
+
+logger:
+  default: warning
+  logs:
+    custom_components.mvave: debug
+    homeassistant.components.bluetooth: debug
+    habluetooth: debug
+    bleak_esphome: debug

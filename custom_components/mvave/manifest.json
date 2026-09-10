@@ -1,0 +1,19 @@
+{
+  "domain": "mvave",
+  "name": "M-Vave",
+  "bluetooth": [
+    {
+      "connectable": true,
+      "service_uuid": "03b80e5a-ede8-4b33-a751-6ce34ec4c700"
+    }
+  ],
+  "codeowners": ["@SDR3078"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/SDR3078/mvave-home-assistant",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/SDR3078/mvave-home-assistant/issues",
+  "loggers": ["bleak", "bleak_retry_connector"],
+  "version": "0.1.0"
+}

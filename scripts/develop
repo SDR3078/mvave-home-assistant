@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# Run the development Home Assistant against this repository's custom_components.
+#
+# Works both inside the devcontainer (Home Assistant on the container's Python) and
+# outside it (Home Assistant in .venv314 on the host).
+#
+# Two deliberate differences from ludeeus/integration_blueprint's version:
+#
+#  1. A symlink instead of PYTHONPATH. The template exports PYTHONPATH=$PWD/custom_components,
+#     but custom_components is a namespace package, so Python looks for a directory
+#     *containing* one of that name. With the template's value the import raises and
+#     Home Assistant, which suppresses that error, reports zero custom integrations.
+#     scripts/setup creates the link; this script checks it is there.
+#
+#  2. A restart loop. Home Assistant exits 100 to ask for a restart, so "Restart" in the
+#     browser relaunches it here and Python changes are picked up without leaving the UI.
+#     Custom integrations are never reloaded in place, so every edit needs a restart.
+#
+# Set HASS_PIP=1 to let Home Assistant install integration requirements at startup. Do
+# that once after a version bump, then leave it off so nothing moves underneath the
+# hardware tools in this directory, which share the interpreter.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Prefer a host virtual environment, but only if it actually runs. Inside the container
+# the workspace is mounted, so .venv314/bin/hass is present and executable while its
+# interpreter is not: the shebang points at a path on the host. Testing the interpreter
+# rather than the script is what tells the two apart, and the error you get otherwise
+# ("required file not found", about a file that is clearly there) sends you hunting.
+if [[ -x "${PWD}/.venv314/bin/python" ]] && "${PWD}/.venv314/bin/python" -c "" 2>/dev/null; then
+    export PATH="${PWD}/.venv314/bin:${PATH}"
+fi
+
+if ! command -v hass >/dev/null; then
+    echo "No Home Assistant on PATH. Run scripts/setup first." >&2
+    exit 1
+fi
+
+mkdir -p config
+if [[ ! -e config/custom_components ]]; then
+    ln -s ../custom_components config/custom_components
+    echo "linked config/custom_components -> ../custom_components"
+fi
+
+PIP_FLAG="--skip-pip"
+if [[ "${HASS_PIP:-0}" == "1" ]]; then
+    PIP_FLAG=""
+    echo "package installation ENABLED for this run"
+elif ! python3 -c "import hass_frontend" 2>/dev/null; then
+    # Home Assistant installs its own web interface at first run, into the container's
+    # writable layer rather than the image. Recreating the container discards it, and
+    # with installation off you get a server that answers 404 to everything. Seed
+    # automatically instead of leaving that trap for the next person.
+    PIP_FLAG=""
+    echo "web interface not present: enabling package installation for this run"
+fi
+
+while true; do
+    set +e
+    hass --config "${PWD}/config" --debug ${PIP_FLAG}
+    rc=$?
+    set -e
+    # homeassistant.const.RESTART_EXIT_CODE
+    if [[ ${rc} -ne 100 ]]; then
+        exit "${rc}"
+    fi
+    echo "--- restart requested ---"
+done

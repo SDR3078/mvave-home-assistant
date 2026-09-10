@@ -1,0 +1,27 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The protocol packages are imported as top-level `transport` and `devices`, not through
+# `custom_components.mvave`, whose __init__ imports Home Assistant. That keeps the
+# pure tests free of the platform, and it is exactly how they will import once the
+# protocol code moves to PyPI. "." is here for the Home Assistant facing tests.
+pythonpath = [".", "custom_components/mvave"]
+# Required by pytest-homeassistant-custom-component.
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# ruff excludes .venv by default but not .venv314; config/ is Home Assistant's runtime
+# state, and the handoff brief's code blocks are prose, not source.
+extend-exclude = ["*.md", ".venv*", "config"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+# The pure protocol code, checked as the top-level packages it will become on PyPI. Going
+# through custom_components.mvave instead would drag in Home Assistant.
+mypy_path = "custom_components/mvave"
+packages = ["transport", "devices"]

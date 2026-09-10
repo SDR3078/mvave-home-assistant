@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# One-time setup, run automatically by the devcontainer's postCreateCommand.
+# Safe to re-run.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Home Assistant 2026.9 sets REQUIRED_PYTHON_VER = (3, 14, 2). The devcontainer's Python
+# feature is asked for "3.14", which is a range, so check rather than assume.
+python3 - <<'PY'
+import sys
+if sys.version_info < (3, 14, 2):
+    sys.exit(
+        f"Python {sys.version.split()[0]} is too old: Home Assistant needs 3.14.2 or newer.\n"
+        "Pin a full version in .devcontainer.json's python feature and rebuild."
+    )
+PY
+
+python3 -m pip install --upgrade pip
+python3 -m pip install --requirement requirements-dev.txt
+
+# Home Assistant installs each integration's requirements at startup, but scripts/develop
+# runs with --skip-pip so nothing moves underneath the hardware tools in this directory.
+# The integrations this project actually needs are therefore installed here, at the exact
+# versions Home Assistant pins, read from its own manifests so there is nothing to keep in
+# sync. Two of them cannot be left to runtime anyway: the web interface is imported during
+# its own setup, in the same process that would have just installed it, and the ESPHome
+# config flow is imported when you open it.
+python3 - <<'PY'
+import json, pathlib, subprocess, sys
+
+import homeassistant.components
+
+NEEDED = ["frontend", "bluetooth", "esphome"]
+
+# Read the manifests off disk. Importing the component module instead would need the very
+# library the manifest is being consulted for.
+components = pathlib.Path(homeassistant.components.__file__).parent
+requirements: list[str] = []
+for domain in NEEDED:
+    manifest = components / domain / "manifest.json"
+    requirements += json.loads(manifest.read_text()).get("requirements", [])
+
+print("installing what Home Assistant pins for " + ", ".join(NEEDED) + ":")
+for requirement in requirements:
+    print(f"  {requirement}")
+subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *requirements])
+PY
+
+# Home Assistant looks for custom integrations inside its configuration directory. The
+# code lives at the top of the repository instead, so link it into place. This is what
+# a devcontainer usually does with a bind mount, and it works the same way outside one.
+mkdir -p config
+if [[ ! -e config/custom_components ]]; then
+    ln -s ../custom_components config/custom_components
+    echo "linked config/custom_components -> ../custom_components"
+fi
+
+echo
+echo "Ready. Start Home Assistant with: scripts/develop"

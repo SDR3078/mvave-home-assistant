@@ -1,0 +1,34 @@
+# capture 2026-09-09 21:33:27
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 74%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 99 34 6D                                    # +5325 ms  note_on ch10 note 52 vel 109 @0
+80 80 89 34 40                                    # +5367 ms  note_off ch10 note 52 vel 64 @0
+80 80 99 34 71                                    # +6257 ms  note_on ch10 note 52 vel 113 @0
+80 80 89 34 40                                    # +6292 ms  note_off ch10 note 52 vel 64 @0

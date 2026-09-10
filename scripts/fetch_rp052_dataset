@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Fetch trueroad's BLE-MIDI packet test data set for tests/test_parser_rp052_dataset.py.
+# The repository carries no licence, so it is downloaded on demand rather than vendored,
+# into a git-ignored directory. Safe to re-run; it pulls if already present.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+target="$here/../tests/fixtures/external/BLE_MIDI_packet_data_set"
+
+if [ -d "$target/.git" ]; then
+  git -C "$target" pull --ff-only --quiet
+else
+  mkdir -p "$(dirname "$target")"
+  git clone --depth 1 --quiet https://github.com/trueroad/BLE_MIDI_packet_data_set "$target"
+fi
+
+count=$(find "$target" -maxdepth 1 -name '*.jsonl' | wc -l)
+echo "data set at $target ($count packet files)"

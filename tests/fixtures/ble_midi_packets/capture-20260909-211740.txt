@@ -1,0 +1,42 @@
+# capture 2026-09-09 21:17:40
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 76%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 F0 01 80 F7                                 # +7003 ms  sysex 1B [01] @0
+80 80 F0 01 80 F7                                 # +7507 ms  sysex 1B [01] @0
+80 80 B9 00 27 20 00 80 C9 7F                     # +9362 ms  cc ch10 #0=39 @0; cc ch10 #32=0 @0; program ch10 127 @0
+80 80 C9 00 27 20 00 7F                           # +9931 ms  program ch10 0 @0; program ch10 39 @0; program ch10 32 @0; program ch10 0 @0; program ch10 127 @0
+80 80 C9 00 27 20 00 7F                           # +10469 ms  program ch10 0 @0; program ch10 39 @0; program ch10 32 @0; program ch10 0 @0; program ch10 127 @0
+80 80 C9 28 7F                                    # +12434 ms  program ch10 40 @0; program ch10 127 @0
+80 80 C9 28 00                                    # +13104 ms  program ch10 40 @0; program ch10 0 @0
+80 80 C9 28 7F                                    # +13729 ms  program ch10 40 @0; program ch10 127 @0
+80 80 C9 29 7F                                    # +16328 ms  program ch10 41 @0; program ch10 127 @0
+80 80 C9 29 00                                    # +16485 ms  program ch10 41 @0; program ch10 0 @0
+80 80 C9 29 7F                                    # +16997 ms  program ch10 41 @0; program ch10 127 @0
+80 80 C9 29 00                                    # +17108 ms  program ch10 41 @0; program ch10 0 @0

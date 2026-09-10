@@ -1,0 +1,56 @@
+{
+  "name": "mvave-home-assistant",
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "postCreateCommand": "scripts/setup",
+  // Published to the host, so Home Assistant is reachable at http://<devbox>:8123 from
+  // anywhere on the LAN, including a phone standing next to the pad. forwardPorts below
+  // covers the same port for anyone who does open this in VS Code's Dev Containers.
+  "appPort": ["8123:8123"],
+  "forwardPorts": [8123],
+  "portsAttributes": {
+    "8123": {
+      "label": "Home Assistant",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "github.vscode-pull-request-github",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ryanluker.vscode-coverage-gutters"
+      ],
+      "settings": {
+        "files.eol": "\n",
+        "editor.tabSize": 4,
+        "editor.formatOnPaste": true,
+        "editor.formatOnSave": true,
+        "editor.formatOnType": false,
+        "files.trimTrailingWhitespace": true,
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.autoImportCompletions": true,
+        "python.defaultInterpreterPath": "/usr/local/python/current/bin/python",
+        "python.analysis.extraPaths": ["${workspaceFolder}/custom_components/mvave"],
+        "ruff.importStrategy": "fromEnvironment",
+        "files.watcherExclude": {
+          "**/.venv*/**": true,
+          "**/config/.storage/**": true
+        },
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.14"
+    },
+    "ghcr.io/devcontainers-extra/features/apt-packages:1": {
+      "packages": "ffmpeg,libturbojpeg0,libpcap-dev"
+    }
+  }
+}

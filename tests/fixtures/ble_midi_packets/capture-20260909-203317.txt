@@ -1,0 +1,64 @@
+# capture 2026-09-09 20:33:17
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 77%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 B0 1E 7E                                    # +9049 ms  cc ch1 #30=126 @0
+80 80 B0 1E 7D                                    # +9049 ms  cc ch1 #30=125 @0
+80 80 B0 1E 7C                                    # +9050 ms  cc ch1 #30=124 @0
+80 80 B0 1E 7B                                    # +9056 ms  cc ch1 #30=123 @0
+80 80 B0 1E 7A                                    # +9122 ms  cc ch1 #30=122 @0
+80 80 B0 1E 79                                    # +9124 ms  cc ch1 #30=121 @0
+80 80 B0 1E 78                                    # +9125 ms  cc ch1 #30=120 @0
+80 80 B0 1E 77                                    # +9126 ms  cc ch1 #30=119 @0
+80 80 B0 1E 76                                    # +9127 ms  cc ch1 #30=118 @0
+80 80 B0 1E 75                                    # +9136 ms  cc ch1 #30=117 @0
+80 80 B0 1E 74                                    # +9137 ms  cc ch1 #30=116 @0
+80 80 B0 1E 73                                    # +9138 ms  cc ch1 #30=115 @0
+80 80 B0 1E 72                                    # +9148 ms  cc ch1 #30=114 @0
+80 80 B0 1E 71 1E 70 1E 6F 1E 6E 1E 6D 1E 6C 1E 6B  # +9149 ms  cc ch1 #30=113 @0; cc ch1 #30=112 @0; cc ch1 #30=111 @0; cc ch1 #30=110 @0; cc ch1 #30=109 @0; cc ch1 #30=108 @0; cc ch1 #30=107 @0
+80 80 B0 1E 6A                                    # +9150 ms  cc ch1 #30=106 @0
+80 80 B0 1E 69                                    # +9150 ms  cc ch1 #30=105 @0
+80 80 B0 1E 68                                    # +9151 ms  cc ch1 #30=104 @0
+80 80 B0 1E 67                                    # +9151 ms  cc ch1 #30=103 @0
+80 80 B0 1E 66                                    # +9152 ms  cc ch1 #30=102 @0
+80 80 B0 1E 65                                    # +9153 ms  cc ch1 #30=101 @0
+80 80 B0 1E 64                                    # +9153 ms  cc ch1 #30=100 @0
+80 80 B0 1E 63                                    # +9154 ms  cc ch1 #30=99 @0
+80 80 B0 1E 62                                    # +9216 ms  cc ch1 #30=98 @0
+80 80 B0 1E 61                                    # +9222 ms  cc ch1 #30=97 @0
+80 80 B0 1E 60                                    # +9222 ms  cc ch1 #30=96 @0
+80 80 B0 1E 53                                    # +9223 ms  cc ch1 #30=83 @0
+80 80 B0 1E 52                                    # +9227 ms  cc ch1 #30=82 @0
+80 80 B0 1E 51                                    # +9227 ms  cc ch1 #30=81 @0
+80 80 B0 1E 40                                    # +14371 ms  cc ch1 #30=64 @0
+80 80 B0 1E 3F                                    # +14432 ms  cc ch1 #30=63 @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +18014 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +18253 ms  sysex 5B [35 59 10 25 00] @0
+80 80 F0 35 59 10 25 7F 80 F7                     # +19759 ms  sysex 5B [35 59 10 25 7f] @0
+80 80 F0 35 59 10 25 00 80 F7                     # +19906 ms  sysex 5B [35 59 10 25 00] @0

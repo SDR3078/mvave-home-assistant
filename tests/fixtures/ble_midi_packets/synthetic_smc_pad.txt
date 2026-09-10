@@ -1,0 +1,20 @@
+# SYNTHETIC packets in the shape the SMC-PAD is expected to produce over BLE, built by hand from
+# the USB measurements in mvave-smc-pad-ableton/docs/HARDWARE.md. This is NOT a recording.
+# Real captures from scripts/record_packets.py go in their own files next to this one.
+#
+# Format: one packet per line, hex bytes, '#' starts a comment. Every *.txt in this directory is
+# decoded by tests/test_parser.py and must produce no parser errors.
+#
+# Launcher preset as measured over USB: pads are notes 1-16 in reading order, buttons 17-21,
+# channel 1 (0 on the wire). Press = note-on velocity 127, release = note-on velocity 0.
+# Encoders are relative, centre-64: 63 = one click counter-clockwise, 65 = one click clockwise.
+
+86 C1 90 01 7F                      # pad 1 press at 833 ms
+87 B9 90 01 00                      # pad 1 release at 953 ms, note-on velocity 0
+88 80 90 10 7F 85 10 00             # pad 16 tap: press at 1024, release at 1029 via running status
+89 90 90 11 7F                      # play button (note 17) press at 1168
+89 A4 90 11 00                      # play button release at 1188
+8A 80 B0 07 41                      # encoder 1, bank 1 (CC 7): one click clockwise
+8A 82 B0 07 3F                      # encoder 1, bank 1 (CC 7): one click counter-clockwise
+8A 90 B0 07 41 92 07 41 94 07 41    # three clicks in one packet, running status with timestamps
+8B 80 B0 0A 3F 0A 3F 0A 3F          # encoder 8, bank 2 (CC 10): three clicks, timestamps inherited

@@ -1,0 +1,124 @@
+# capture 2026-09-09 20:35:19
+# device SMC-PAD AA:BB:CC:DD:EE:FF
+# via proxy 192.168.69.35
+# mtu 512
+# service 00001800-0000-1000-8000-00805f9b34fb Generic Access Profile
+#   char 00002a00-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a01-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a04-0000-1000-8000-00805f9b34fb [read]
+# service 00001801-0000-1000-8000-00805f9b34fb Generic Attribute Profile
+#   char 00002a05-0000-1000-8000-00805f9b34fb [indicate]
+# service 0000180a-0000-1000-8000-00805f9b34fb Device Information
+#   char 00002a29-0000-1000-8000-00805f9b34fb [read]
+#   char 00002a24-0000-1000-8000-00805f9b34fb [read]
+# service 0000180f-0000-1000-8000-00805f9b34fb Battery Service
+#   char 00002a19-0000-1000-8000-00805f9b34fb [read,notify]
+# service 0000ae40-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae41-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae42-0000-1000-8000-00805f9b34fb [notify]
+# service 03b80e5a-ede8-4b33-a751-6ce34ec4c700 Unknown
+#   char 7772e5db-3868-4112-a1a9-f2669d106bf3 [read,write-without-response,notify]
+# service 0000ae00-0000-1000-8000-00805f9b34fb Vendor specific
+#   char 0000ae01-0000-1000-8000-00805f9b34fb [write-without-response]
+#   char 0000ae02-0000-1000-8000-00805f9b34fb [notify]
+# manufacturer: sincoaudio
+# model: ble device
+# battery: 77%
+# initial read: 0 bytes
+#
+# Packets: hex bytes, then '#', arrival in ms, decoded events.
+
+80 80 B0 1E 41                                    # +6777 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +6860 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +6909 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +6963 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7013 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7074 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7112 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7167 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7214 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7269 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7291 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7372 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7373 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7474 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7484 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41 1E 41 1E 41                        # +7485 ms  cc ch1 #30=65 @0; cc ch1 #30=65 @0; cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7576 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7577 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7679 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7682 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7722 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41 1E 41 1E 41                        # +7724 ms  cc ch1 #30=65 @0; cc ch1 #30=65 @0; cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7783 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7823 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41 1E 41 1E 41                        # +7823 ms  cc ch1 #30=65 @0; cc ch1 #30=65 @0; cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7887 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7936 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +7987 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41 1E 41 1E 41                        # +7998 ms  cc ch1 #30=65 @0; cc ch1 #30=65 @0; cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8034 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8089 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8136 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8200 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8240 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8294 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8294 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41 1E 41                              # +8311 ms  cc ch1 #30=65 @0; cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8338 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8440 ms  cc ch1 #30=65 @0
+80 80 B0 1E 41                                    # +8507 ms  cc ch1 #30=65 @0
+80 80 B0 1E 3F                                    # +10240 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10285 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10342 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10389 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +10390 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10445 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10491 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10546 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10590 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10658 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10692 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +10701 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10751 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10793 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +10799 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10862 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10908 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +10979 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +10985 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11005 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11067 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11068 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11107 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11169 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11208 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11273 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11308 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11374 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11413 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11418 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11477 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11514 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11573 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11582 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11616 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11632 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11673 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11725 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F                              # +11725 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11786 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11788 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11810 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11878 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11882 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11980 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11981 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +11993 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +11994 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +12031 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +12083 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +12083 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F 1E 3F 1E 3F                        # +12100 ms  cc ch1 #30=63 @0; cc ch1 #30=63 @0; cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +12129 ms  cc ch1 #30=63 @0
+80 80 B0 1E 3F                                    # +12186 ms  cc ch1 #30=63 @0

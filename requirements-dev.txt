@@ -1,0 +1,9 @@
+# Development and test dependencies.
+#
+# Home Assistant is deliberately NOT pinned here. pytest-homeassistant-custom-component
+# pins the exact Home Assistant release it is built against, so pinning a second one only
+# creates a resolver conflict. Bump this package to move Home Assistant.
+pytest-homeassistant-custom-component==0.13.364
+
+ruff==0.16.6
+mypy==2.3.1

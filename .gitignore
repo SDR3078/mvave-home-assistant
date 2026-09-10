@@ -1,0 +1,27 @@
+# Virtual environments. .venv314 is 717 MB; the glob catches future interpreters too.
+.venv*/
+
+# Python artefacts
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# The dev Home Assistant's runtime state: .storage holds auth tokens, and the rest is
+# a database, logs and downloaded dependencies. Only the configuration is tracked.
+config/*
+!config/configuration.yaml
+
+# Editor and tool state
+.vscode/
+.claude/settings.local.json
+
+# Third-party test data fetched by scripts/fetch_rp052_dataset. Unlicensed, so never vendored.
+tests/fixtures/external/
+
+# ESPHome build artefacts and Wi-Fi credentials for the dev proxy.
+scripts/esphome/secrets.yaml
+scripts/esphome/.esphome/
