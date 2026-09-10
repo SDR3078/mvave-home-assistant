@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from .frames import Frame, collapse, expand, wipe
+from .frames import Frame, collapse, expand, value_bar, wipe
 from .model import (
     Activate,
     Back,
@@ -34,6 +34,7 @@ from .model import (
     Toggle,
 )
 from .ports import RegistryView
+from .properties import PROPERTIES, primary_for, property_for
 from .render import BACK_BUTTON, HOME_BUTTON, Rendering, ViewState, assignable, render
 from .resolve import resolve
 
@@ -57,12 +58,39 @@ class ButtonPress:
 
 
 @dataclass(frozen=True, slots=True)
+class Turn:
+    """One encoder, and how many steps it moved. Clockwise is positive.
+
+    The encoders are relative and have no rings, so this is all a knob ever says: it has no
+    position of its own and cannot be read by looking at it.
+    """
+
+    knob: int
+    steps: int
+
+
+@dataclass(frozen=True, slots=True)
 class Idle:
     """No input for long enough that the page should give up and go home."""
 
 
 #: Anything that can reach the surface from outside.
-InputEvent = Press | ButtonPress | Idle
+InputEvent = Press | ButtonPress | Turn | Idle
+
+
+@dataclass(frozen=True, slots=True)
+class Hud:
+    """The transient value bar: whose value, which one, and what it was set to.
+
+    The value is what was *asked for*, not what has been confirmed. A knob that waited for
+    a round trip before moving its own bar would feel broken, and unlike a pad there is
+    nothing dangerous about showing an intention here: the bar disappears in a second and
+    the page underneath tells the truth.
+    """
+
+    entity_id: str
+    property_key: str
+    value: float
 
 
 # ------------------------------------------------------------------------ output
@@ -151,6 +179,10 @@ class Surface:
         self.stack: list[str] = [profile.root_id]
         self.focus: str | None = None
         self.pending: set[str] = set()
+        #: The value bar currently covering the page, if one is. The coordinator takes
+        #: it away again once the knob has been still long enough; the engine has no
+        #: clock and so cannot decide when that is.
+        self.hud: Hud | None = None
 
     # ------------------------------------------------------------------ where
 
@@ -172,7 +204,19 @@ class Surface:
         return resolve(page or self.page, self.registry, self.profile)
 
     def rendering(self) -> Rendering:
-        """What the grid should be showing, once anything moving has settled."""
+        """What the grid should be showing, once anything moving has settled.
+
+        A value bar covers the whole page while one is up. That is deliberate: sixteen pads
+        is not enough to show a level *and* a room at once, and a bar squeezed into a row
+        would be both unreadable and permanently in the way.
+        """
+        if self.hud is not None:
+            bar = self._bar(self.hud)
+            if bar is not None:
+                return bar
+        return self._page_rendering()
+
+    def _page_rendering(self) -> Rendering:
         page = self.page
         return render(
             page,
@@ -186,6 +230,18 @@ class Surface:
             ),
         )
 
+    def _bar(self, hud: Hud) -> Rendering | None:
+        """The value bar, or None if the property has stopped making sense."""
+        prop = PROPERTIES.get(hud.property_key)
+        if prop is None:
+            return None
+        # No rhythms. A bar snaps on and holds still: how the grid arrived is a channel of
+        # its own, and a bar that animated in would look like a page change.
+        return Rendering(
+            frame=value_bar(hud.value, prop.colour),
+            buttons=self._page_rendering().buttons,
+        )
+
     # ------------------------------------------------------------------ input
 
     def handle(self, event: InputEvent) -> Outcome:
@@ -194,6 +250,8 @@ class Surface:
             return self._press(event)
         if isinstance(event, ButtonPress):
             return self._button(event)
+        if isinstance(event, Turn):
+            return self._turn(event)
         return self._idle()
 
     def _press(self, event: Press) -> Outcome:
@@ -234,6 +292,70 @@ class Surface:
             return NOTHING_HAPPENED
         return self._perform(self.page.buttons.get(event.name, Nothing()), origin=None)
 
+    def _turn(self, event: Turn) -> Outcome:
+        """One knob, one property, one value.
+
+        A knob pointed at something without that property is inert rather than falling back
+        to something else. The alternative is the same knob doing different things
+        depending on what happened to be focused, which is the end of muscle memory.
+        """
+        target = self.page.knobs.get(event.knob) or self.focus
+        if target is None:
+            return NOTHING_HAPPENED
+        state = self.registry.state_of(target)
+        if state is None or state.is_opaque:
+            return NOTHING_HAPPENED
+        prop = property_for(event.knob, state)
+        if prop is None:
+            return NOTHING_HAPPENED
+
+        showing = self.hud
+        if showing is not None and (showing.entity_id, showing.property_key) == (
+            target,
+            prop.key,
+        ):
+            # Continue from what the bar is already showing rather than from the entity.
+            # The entity lags by a round trip, and a knob sends thirty messages a second,
+            # so re-reading it every step means a fast turn barely moves and then jumps
+            # backwards when the answer finally arrives.
+            value = showing.value + prop.step * event.steps
+        elif state.is_active and (current := prop.read(state)) is not None:
+            value = current + prop.step * event.steps
+        else:
+            # Adjusting something that is off means adjusting a value nobody can see. The
+            # first click turns it on at the bottom of its range instead, so the next one
+            # has somewhere visible to go.
+            value = prop.step
+        value = max(0.0, min(1.0, value))
+
+        domain, service, data = prop.write(state, value)
+        self.hud = Hud(target, prop.key, value)
+        return Outcome(calls=(Call(domain, service, data),))
+
+    def peek(self, entity_id: str) -> None:
+        """Put an entity's main value on the grid without changing it.
+
+        What holding a pad does, and the only thing that stands in for the rings these
+        encoders do not have: you cannot see what a knob is set to until you ask.
+        """
+        state = self.registry.state_of(entity_id)
+        if state is None or state.is_opaque:
+            return
+        prop = primary_for(state)
+        if prop is None:
+            return
+        self.hud = Hud(entity_id, prop.key, prop.read(state) or 0.0)
+
+    def clear_hud(self) -> Outcome:
+        """Take the bar away, once the coordinator says the knob has been still long enough.
+
+        Nothing is animated. The bar snaps on, so it snaps off; and it appears every single
+        time anybody touches a knob, which is often enough that a transition stops being a
+        flourish and becomes something to sit through.
+        """
+        self.hud = None
+        return NOTHING_HAPPENED
+
     def _idle(self) -> Outcome:
         """Give up and go home, quietly.
 
@@ -263,7 +385,11 @@ class Surface:
             # ordinary page once you have pointed the knobs at something, and a surface
             # you can get into a state you cannot get out of is a surface people stop
             # trusting.
-            self.focus = None if self.focus == action.entity_id else action.entity_id
+            if self.focus == action.entity_id:
+                self.focus = None
+                return self.clear_hud()
+            self.focus = action.entity_id
+            self.peek(action.entity_id)
             return Outcome()
         if isinstance(action, Service):
             return Outcome(calls=(Call(action.domain, action.service, dict(action.data)),))
@@ -334,8 +460,10 @@ class Surface:
         before = self.rendering().frame
         move()
         # Focus does not follow you between pages. A lamp singled out in the kitchen has
-        # no business still holding the knobs once you are looking at the bedroom.
+        # no business still holding the knobs once you are looking at the bedroom, and
+        # a bar showing its brightness has no business surviving the journey either.
         self.focus = None
+        self.hud = None
         after = self.rendering().frame
 
         if entering is not None:

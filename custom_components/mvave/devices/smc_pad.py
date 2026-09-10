@@ -61,6 +61,12 @@ PAD_PAYLOAD_MAX: Final = 16
 BUTTON_LED_OFFSET: Final = 22
 ENCODER_MODE_ABSOLUTE: Final = 0x00
 ENCODER_MODE_RELATIVE: Final = 0x03
+#: What a relative encoder sends per step once armed. The two values are configurable
+#: (section 7), and these are the centre-64 convention every other controller uses, so
+#: a step is the value minus this centre.
+ENCODER_CENTRE: Final = 64
+ENCODER_STEP_DOWN: Final = 63
+ENCODER_STEP_UP: Final = 65
 LED_NONE: Final = 0xFF
 
 # Region 4 starts with a live state block. Byte 6 is the base pad bank counted from zero,
@@ -473,7 +479,9 @@ def armed_pad_bank(image: bytes, bank: int) -> bytes:
     return bytes(records)
 
 
-def relative_encoder_table(image: bytes, minimum: int = 63, maximum: int = 65) -> bytes:
+def relative_encoder_table(
+    image: bytes, minimum: int = ENCODER_STEP_DOWN, maximum: int = ENCODER_STEP_UP
+) -> bytes:
     """The sixteen encoder records rewritten as relative, keeping each one's CC.
 
     Relative is the only usable mode for an endless control: absolute mode is a counter

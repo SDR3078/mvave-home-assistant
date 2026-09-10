@@ -43,6 +43,10 @@ class ArmResult:
     state: DisplayState
     preset: Preset
     armed_notes: tuple[int, ...] = ()
+    #: Whether the encoders were switched to relative. It changes how a turn has to be
+    #: decoded, and getting that wrong is silent: every turn is discarded rather than
+    #: reported wrongly.
+    encoders_relative: bool = False
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -80,6 +84,7 @@ async def async_arm(session: VendorSession) -> ArmResult:
     # 24 separate round trips.
     await session.write(pad_bank_address(state.slot, state.bank), armed_pad_bank(image, state.bank))
     await session.write(encoder_table_address(state.slot), relative_encoder_table(image))
+    result.encoders_relative = True
 
     # Buttons are one byte each, and their record carries a SysEx payload that must not
     # be disturbed, so they are written individually.

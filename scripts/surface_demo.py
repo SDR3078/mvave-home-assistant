@@ -24,9 +24,10 @@ import asyncio
 import contextlib
 import sys
 import time
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import bleak
 
@@ -35,7 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(REPO_ROOT / "custom_components" / "mvave"))
 
 from devices.smc_pad import (  # noqa: E402
+    ENCODER_CENTRE,
     FACTORY_BUTTONS,
+    FACTORY_KNOB_FIRST_CC,
     FACTORY_PAD_FIRST_NOTE,
     PAD_NUMBER_BY_READING_ORDER,
 )
@@ -56,7 +59,16 @@ from engine import (  # noqa: E402
     SourceKind,
     compose,
 )
-from engine.surface import ButtonPress, ButtonTiming, Idle, Outcome, Press, Surface  # noqa: E402
+from engine.surface import (  # noqa: E402
+    ButtonPress,
+    ButtonTiming,
+    Idle,
+    InputEvent,
+    Outcome,
+    Press,
+    Surface,
+    Turn,
+)
 from preview_leds import MIDI_CHAR, Grid, connect  # noqa: E402
 from transport import ParserState, parse_ble_midi  # noqa: E402
 
@@ -66,6 +78,10 @@ HOLD_SECONDS = 0.5
 #: How long the pretend house takes to answer, so the blink that means "asked but not
 #: confirmed yet" is actually visible. A real Zigbee lamp is in this range.
 LATENCY_SECONDS = 0.45
+
+#: How long the value bar stays after the knob stops. The engine has no clock, so deciding
+#: this is the coordinator's job, and here that means this script.
+HUD_SECONDS = 0.9
 
 #: Reading-order position of each pad, by the note it sends. Pad 1 is the bottom left on
 #: this device, so this is not the identity mapping.
@@ -78,6 +94,12 @@ READING_BY_NOTE = {
 BUTTON_BY_CC = {cc: key for key, _, cc in FACTORY_BUTTONS}
 BUTTON_INDEX = {key: index for index, (key, _, _) in enumerate(FACTORY_BUTTONS)}
 
+#: Which encoder a controller number belongs to. Each knob has two, one per bank; the bank
+#: is a mode of the same physical control, so both mean the same knob here.
+KNOB_BY_CC = {
+    FACTORY_KNOB_FIRST_CC + bank * 8 + knob: knob + 1 for bank in (0, 1) for knob in range(8)
+}
+
 
 # ----------------------------------------------------------------- a pretend house
 
@@ -86,6 +108,23 @@ HOUSE = {
     "kitchen": ("light.counter", "light.table", "switch.kettle", "scene.dinner"),
     "bedroom": ("light.bed", "cover.blind", "switch.heater", "light.broken"),
     "office": ("light.desk", "light.monitor", "script.focus"),
+}
+
+#: Service fields that are reported back under a different name.
+REPORTED_AS = {"position": "current_position"}
+
+#: Lights need a brightness before a knob has anything to read, which is also true of the
+#: real thing: an entity that does not report the attribute cannot be adjusted.
+ATTRIBUTES: dict[str, dict[str, object]] = {
+    "light.lamp": {"brightness": 128},
+    "light.floor": {"brightness": 40},
+    "light.counter": {"brightness": 255},
+    "light.table": {"brightness": 90},
+    "light.bed": {"brightness": 12},
+    "light.desk": {"brightness": 200},
+    "light.monitor": {"brightness": 64},
+    "media_player.tv": {"volume_level": 0.35},
+    "cover.blind": {"current_position": 0},
 }
 
 STATES = {
@@ -130,6 +169,9 @@ class World:
     """A house made of a dictionary, standing in for Home Assistant."""
 
     states: dict[str, str] = field(default_factory=lambda: dict(STATES))
+    attributes: dict[str, dict[str, object]] = field(
+        default_factory=lambda: {key: dict(value) for key, value in ATTRIBUTES.items()}
+    )
 
     def entities_in_area(self, area_id: str) -> tuple[str, ...]:
         return HOUSE.get(area_id, ())
@@ -139,10 +181,26 @@ class World:
 
     def state_of(self, entity_id: str) -> EntityState | None:
         state = self.states.get(entity_id)
-        return None if state is None else EntityState(entity_id, state)
+        if state is None:
+            return None
+        return EntityState(entity_id, state, self.attributes.get(entity_id, {}))
+
+    def adjust(self, entity_id: str, data: Mapping[str, Any]) -> None:
+        """What setting a value would eventually do.
+
+        A service field is not always the attribute it lands in, and a fake house that
+        pretends otherwise hides real bugs: a blind is *set* with ``position`` and
+        *reports* ``current_position``, so writing the field straight back leaves the
+        reader looking at a number that never changes.
+        """
+        attributes = self.attributes.setdefault(entity_id, {})
+        for key, value in data.items():
+            if key != "entity_id":
+                attributes[REPORTED_AS.get(key, key)] = value
+        self.states[entity_id] = "open" if entity_id.startswith("cover.") else "on"
 
     def apply(self, entity_id: str) -> None:
-        """What a service call would eventually do."""
+        """What a toggle would eventually do."""
         current = self.states.get(entity_id)
         if current in ("unavailable", "unknown", None):
             return
@@ -173,6 +231,7 @@ class Runner:
         #: Background work still running, held so it is not garbage collected.
         self._tasks: set[asyncio.Task[None]] = set()
         self._idle: asyncio.Task[None] | None = None
+        self._hud: asyncio.Task[None] | None = None
 
     # ------------------------------------------------------------- output
 
@@ -231,6 +290,11 @@ class Runner:
             elif event.type == "cc" and event.data1 in BUTTON_BY_CC:
                 key = f"button:{BUTTON_BY_CC[event.data1]}"
                 self._begin(key) if event.data2 else self._end(key)
+            elif event.type == "cc" and event.data1 in KNOB_BY_CC:
+                # Relative: the value *is* the step, measured from the centre. There is no
+                # position to compare against, which is why subtracting consecutive values
+                # silently discards every turn.
+                self.dispatch_event(Turn(KNOB_BY_CC[event.data1], event.data2 - ENCODER_CENTRE))
 
     def _begin(self, key: str) -> None:
         self._holds[key] = asyncio.create_task(self._hold(key))
@@ -256,28 +320,54 @@ class Runner:
         self.dispatch(key, held=False)
 
     def dispatch(self, key: str, held: bool) -> None:
-        """Hand one input to the engine and queue whatever it asks for."""
+        """Turn a pad or button key back into an event."""
         kind, _, rest = key.partition(":")
-        event = Press(int(rest), held) if kind == "pad" else ButtonPress(rest, held)
+        self.dispatch_event(Press(int(rest), held) if kind == "pad" else ButtonPress(rest, held))
+
+    def dispatch_event(self, event: InputEvent) -> None:
+        """Hand one input to the engine and carry out whatever it asks for."""
         outcome = self.surface.handle(event)
-        print(f"  {event} -> {self.surface.page.title}", flush=True)
+        if not isinstance(event, Turn):
+            print(f"  {event} -> {self.surface.page.title}", flush=True)
 
         for call in outcome.calls:
             entity_id = call.data.get("entity_id")
-            print(f"    call {call.domain}.{call.service} {entity_id}", flush=True)
-            if isinstance(entity_id, str):
+            if not isinstance(entity_id, str):
+                continue
+            if call.service == "toggle":
+                print(f"    call {call.domain}.{call.service} {entity_id}", flush=True)
                 self._spawn(self._answer(entity_id))
+            else:
+                # A knob is answered at once. Waiting would make the bar lag the finger,
+                # and unlike a pad there is nothing being claimed: the bar shows what was
+                # asked for and disappears a moment later.
+                self.world.adjust(entity_id, call.data)
         for emit in outcome.emits:
             print(f"    event {emit.tag}", flush=True)
         if outcome.animation:
             self.queue.put_nowait(outcome)
         self._restart_idle()
+        if self.surface.hud is not None:
+            self._restart_hud()
 
     def _spawn(self, work: Coroutine[None, None, None]) -> None:
         """Run something in the background and keep hold of it until it finishes."""
         task = asyncio.create_task(work)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+    def _restart_hud(self) -> None:
+        """Begin the value bar's countdown again, because the knob just moved."""
+        if self._hud is not None:
+            self._hud.cancel()
+        self._hud = asyncio.create_task(self._wait_hud())
+
+    async def _wait_hud(self) -> None:
+        """Take the bar away once the knob has been still long enough."""
+        await asyncio.sleep(HUD_SECONDS)
+        outcome = self.surface.clear_hud()
+        if outcome.animation:
+            self.queue.put_nowait(outcome)
 
     def _restart_idle(self) -> None:
         """Begin the page's idle countdown again, because something just happened."""

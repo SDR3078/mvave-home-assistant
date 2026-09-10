@@ -19,6 +19,7 @@ from homeassistant.helpers.event import async_call_later
 
 from .const import LOGGER
 from .devices import resolve_layout
+from .devices.smc_pad import ENCODER_CENTRE
 from .entity import MvaveEntity
 
 if TYPE_CHECKING:
@@ -161,9 +162,17 @@ class MvaveButtonEvent(_MvaveEventEntity):
 class MvaveKnobEvent(_MvaveEventEntity):
     """One rotary encoder, reported as a direction and a number of steps.
 
-    The factory encoders are absolute: they report a position, so a direction has to be
-    derived by comparing against the previous one. Switching them to relative mode makes
-    the device report the step directly; this arithmetic gives the same answer either way.
+    There are two encodings and the difference is not cosmetic. The factory encoders are
+    **absolute**: they report a position, so a direction has to be derived by comparing
+    against the previous one, and they saturate at both ends and then send nothing at all.
+    Arming switches them to **relative**, where the device reports the step itself as a
+    value either side of 64 and never changes: a stream of clockwise steps is the same
+    number over and over.
+
+    Subtracting consecutive values, which is right for the first, gives zero for every
+    message of the second. Every turn is then silently discarded, which is exactly what
+    happened here once arming was added and nobody turned a knob for a while. So the mode
+    is read from what arming actually did rather than assumed.
 
     Turns are accumulated rather than reported one unit at a time. The device emits one
     message per unit of travel, so a single turn of a knob produced over a thousand
@@ -200,13 +209,7 @@ class MvaveKnobEvent(_MvaveEventEntity):
         if bank is None:
             return
 
-        previous = self._last.get(bank)
-        self._last[bank] = event.data2
-        if previous is None:
-            # First message since the entity loaded: a position with nothing to compare
-            # against says nothing about which way the knob turned.
-            return
-        steps = event.data2 - previous
+        steps = self._steps(bank, event.data2)
         if steps == 0 or abs(steps) > MAX_PLAUSIBLE_STEP:
             return
 
@@ -219,6 +222,21 @@ class MvaveKnobEvent(_MvaveEventEntity):
         self._pending_bank = bank
         self._pending_value = event.data2
         self._schedule_flush()
+
+    def _steps(self, bank: int, value: int) -> int:
+        """How far the knob turned, by whichever rule this encoder is actually using."""
+        previous = self._last.get(bank)
+        self._last[bank] = value
+        arming = self.coordinator.arming
+        if arming is not None and arming.encoders_relative:
+            # The value *is* the step, measured from the centre. Nothing to compare
+            # against, so nothing is lost on the first message either.
+            return value - ENCODER_CENTRE
+        if previous is None:
+            # A position with nothing to compare against says nothing about which way the
+            # knob turned.
+            return 0
+        return value - previous
 
     @callback
     def _schedule_flush(self) -> None:

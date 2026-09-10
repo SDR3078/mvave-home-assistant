@@ -111,7 +111,7 @@ def expand(origin: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[F
         )
         for step in range(rings)
     )
-    return closing + _open_from_left(colour, arriving)
+    return closing + uncover(colour, arriving)
 
 
 def collapse(target: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
@@ -152,11 +152,15 @@ def wipe(colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
         tuple(colour if column_of(index) <= step else leaving[index] for index in range(PAD_COUNT))
         for step in range(COLUMNS)
     )
-    return closing + _open_from_left(colour, arriving)
+    return closing + uncover(colour, arriving)
 
 
-def _open_from_left(colour: int, arriving: Frame) -> tuple[Frame, ...]:
-    """Uncover a frame one column at a time, left to right."""
+def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
+    """Uncover a frame one column at a time, left to right.
+
+    The second half of entering a page, and the whole of leaving a value bar behind. Left
+    to right because that is how a grid is read.
+    """
     return tuple(
         tuple(arriving[index] if column_of(index) <= step else colour for index in range(PAD_COUNT))
         for step in range(COLUMNS)

@@ -50,6 +50,12 @@ implementation plan and this file is the running to-do list.
   buttons take LED feedback, confirmed on the hardware, where only play had been tried.
   That returns the sixteenth pad to content and removes a colour collision, since any
   colour a back pad could take was either an identity colour or white.
+- **The knob entities had been silently discarding every turn**, found by measuring what
+  the encoders actually send rather than trusting the code. They computed a turn as the
+  difference between consecutive controller values, which is right for the factory
+  absolute encoders and always zero for relative ones, where the value *is* the step and
+  never changes. Connect-time arming switches them to relative, so every turn had been
+  dropped since that was added. `ArmResult` now records the mode and the entity reads it.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -76,12 +82,17 @@ implementation plan and this file is the running to-do list.
    transitions, the two rhythms, the page model, the two protocols the platform reaches in
    through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
    holds, the transport buttons, the idle timeout and `handle(event) -> Outcome`.
-   **Proven on the hardware** with `scripts/surface_demo.py`, which drives the real pad
-   from the real engine against a pretend house. What is left:
-   - **Knobs.** The global assignment, per-page overrides, peek, the transient bar, and
-     the debounce that stops one turn firing forty service calls. Nothing about the
-     encoders is built yet.
+   The knobs are built too: the fixed global assignment, per-page overrides, holding a pad
+   to peek at its value, the transient bar, and the clamps. **Proven on the hardware** with
+   `scripts/surface_demo.py`, which drives the real pad from the real engine against a
+   pretend house, and which found four defects that the tests had not. What is left:
    - **The shift gesture**: holding the left button turning row one into a page switcher.
+   - **Debouncing knob service calls.** The engine emits one per step by design, and a
+     knob sends about thirty a second. Coalescing them belongs to the coordinator, which
+     is also where the existing event entities already do it.
+   - **The min and max flash.** The design asks for one quick full-bar flash on reaching
+     either end. The bar being full or empty is most of that signal already, and adding it
+     needs an outcome to be able to set its own pace.
    - **A timeout on the unconfirmed blink.** An entity that accepts a command and never
      reports back leaves its pad swinging forever. The engine has no clock by design, so
      bounding it belongs to the coordinator.
