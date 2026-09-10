@@ -179,6 +179,29 @@ on failure; a reconnect storm blinds every other Bluetooth integration on that p
 
 ## 3. Integration architecture
 
+**A control is either a trigger or a control, and the two need opposite treatment.**
+Learned the hard way on hardware **[v]**: one turn of an encoder produced 1040 decoded
+messages, because the device sends one per unit of travel. Firing an event entity for
+each puts a thousand state changes through Home Assistant and triggers every attached
+automation a thousand times.
+
+- **As a trigger** (skip a track, run a scene), a turn is discrete. Accumulate the steps
+  until the knob has been still for about two tenths of a second, then report one event
+  carrying the total, flushing early if the direction or bank changes. Measured after
+  the change: 126 messages became 2 events. The delay lands only at the end of the
+  gesture, where nobody notices it.
+- **As a control** (a lamp following your hand), a turn is continuous, and coalescing is
+  exactly wrong: the value has to move while the knob is still moving. That path belongs
+  to the profile engine, which subscribes to the same decoded stream and calls the target
+  service directly, without an event entity in between. It throttles on a different
+  principle: send the newest value at most every N milliseconds rather than wait for
+  quiet. Twenty or thirty updates a second is already past what a lamp can follow, since
+  most transition in about a tenth of a second, and a wireless bulb drops commands well
+  before that.
+
+Never route continuous control through the event entities, and never send a service call
+per MIDI message.
+
 **No polling coordinator.** The device has nothing to poll. The closest precedent, a
 Bluetooth lock holding its connection open, uses no coordinator at all: a plain dataclass
 in `entry.runtime_data`, with entities subscribing to callbacks in `async_added_to_hass`.

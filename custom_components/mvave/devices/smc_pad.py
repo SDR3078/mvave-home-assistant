@@ -29,6 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
+from .layout import ButtonSpec, DeviceLayout, KnobSpec, PadSpec
+
 VENDOR_SERVICE: Final = "0000ae40-0000-1000-8000-00805f9b34fb"
 VENDOR_WRITE_CHAR: Final = "0000ae41-0000-1000-8000-00805f9b34fb"
 VENDOR_NOTIFY_CHAR: Final = "0000ae42-0000-1000-8000-00805f9b34fb"
@@ -420,3 +422,50 @@ def describe_vendor_packet(packet: bytes) -> str:
 def _check(name: str, value: int, maximum: int) -> None:
     if not 0 <= value <= maximum:
         raise ValueError(f"{name} must be 0 to {maximum}, got {value}")
+
+
+# --------------------------------------------------------------- factory layout
+
+# What the pad sends on its factory configuration, measured over the radio on
+# 2026-09-09 and re-measured after a full factory reset (docs/HARDWARE-BLE.md section 4).
+# Pads are numbered as the device numbers them: PAD1 is bottom-left.
+FACTORY_PAD_CHANNEL: Final = 9  # channel 10, 0-based on the wire
+FACTORY_PAD_FIRST_NOTE: Final = 36
+FACTORY_CONTROL_CHANNEL: Final = 0  # channel 1: buttons and encoders
+FACTORY_BUTTONS: Final = (
+    ("left", "Left", 25),
+    ("right", "Right", 26),
+    ("play", "Play", 27),
+    ("stop", "Stop", 28),
+    ("record", "Record", 29),
+)
+FACTORY_KNOB_FIRST_CC: Final = 30  # bank 1 is 30-37, bank 2 is 38-45
+
+SMC_PAD_FACTORY_LAYOUT: Final = DeviceLayout(
+    model="SMC-PAD",
+    pads=tuple(
+        PadSpec(
+            key=f"pad_{number}",
+            number=number,
+            channel=FACTORY_PAD_CHANNEL,
+            note=FACTORY_PAD_FIRST_NOTE + number - 1,
+        )
+        for number in range(1, PAD_COUNT + 1)
+    ),
+    buttons=tuple(
+        ButtonSpec(key=key, name=name, channel=FACTORY_CONTROL_CHANNEL, cc=cc)
+        for key, name, cc in FACTORY_BUTTONS
+    ),
+    knobs=tuple(
+        KnobSpec(
+            key=f"knob_{number}",
+            number=number,
+            channel=FACTORY_CONTROL_CHANNEL,
+            ccs={
+                1: FACTORY_KNOB_FIRST_CC + number - 1,
+                2: FACTORY_KNOB_FIRST_CC + 8 + number - 1,
+            },
+        )
+        for number in range(1, 9)
+    ),
+)

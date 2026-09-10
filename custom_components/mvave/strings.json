@@ -22,6 +22,30 @@
       "connected": {
         "name": "Connected"
       }
+    },
+    "event": {
+      "pad": {
+        "name": "Pad {number}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released"
+            }
+          }
+        }
+      },
+      "knob": {
+        "name": "Knob {number}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "clockwise": "Turned clockwise",
+              "counter_clockwise": "Turned counter-clockwise"
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {

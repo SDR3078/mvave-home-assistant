@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 type MvaveConfigEntry = ConfigEntry[MvaveCoordinator]
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

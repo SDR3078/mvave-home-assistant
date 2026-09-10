@@ -18,6 +18,10 @@ implementation plan and this file is the running to-do list.
   `binary_sensor.py`, the manifest, strings and `hacs.json`.
 - **The extraction seam.** `transport/` and `devices/` import as top-level packages, so
   the pure suite runs with no Home Assistant present. Verified: 83 tests on Python 3.11.
+- **Proven against hardware.** The pad is discovered by its service UUID through the
+  ESPHome proxy, connects, and its presses arrive decoded. 30 entities: a connectivity
+  sensor and one event entity per pad, button and encoder. Knob turns are coalesced, so
+  126 MIDI messages become 2 events.
 
 ## Build
 
@@ -25,9 +29,9 @@ implementation plan and this file is the running to-do list.
    `tests/fixtures/smc_pad_presets.bin`, which holds the owner's own presets, stays in a
    public repo; three tests depend on it, and `smc_pad_factory_slot0.bin` is the neutral
    one. Then the CI workflows from PLAN.md section 4.
-2. **Prove the transport against hardware:** add the ESPHome proxy by address, let the
-   pad be discovered, watch a press arrive. Then the `event` entities, one per pad and
-   per encoder, and the services.
+2. **Services**: `mvave.send_raw` and `mvave.set_pad_color`, registered in `async_setup`
+   from a `services.py`, targeted by device, raising translated errors. Plus a
+   `services.yaml`, which hassfest requires the moment a service is registered.
 3. **Connect-time setup for the SMC-PAD**, in this order, all through `devices/smc_pad.py`:
    read the state block (slot, base bank, toggle); read that slot's image; decode the map;
    write the displayed bank back with every pad Note-typed on its channel and its Led byte
