@@ -8,7 +8,7 @@ behind it. Anything explicitly configured wins, and whatever is left over stays 
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from typing import Final
 
@@ -79,14 +79,17 @@ def default_actions(entity_id: str) -> tuple[PadAction, PadAction]:
 
 
 def _ordered(entity_ids: Sequence[str]) -> list[str]:
-    """Sort entities into the order a page lays them out, keeping registry order within."""
+    """Sort entities into the order a page lays them out, keeping registry order within.
+
+    Python's sort is stable, so the registry's own order survives inside each domain
+    without having to be part of the key. It used to be, by way of ``list.index``, which
+    made the whole thing quadratic: laying out a room of two hundred entities cost five
+    times what one of twenty did, for no reason anybody would ever have noticed and no
+    reason to keep.
+    """
     ranked = {domain: rank for rank, domain in enumerate(DOMAIN_ORDER)}
     return sorted(
-        entity_ids,
-        key=lambda entity_id: (
-            ranked.get(entity_id.split(".", 1)[0], len(DOMAIN_ORDER)),
-            entity_ids.index(entity_id),
-        ),
+        entity_ids, key=lambda entity_id: ranked.get(entity_id.split(".", 1)[0], len(DOMAIN_ORDER))
     )
 
 
@@ -133,14 +136,17 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
             slots[index] = slot
 
     if page.source.kind is SourceKind.PAGES:
-        filling: list[Slot] = _page_slots(page, profile)
+        filling: Iterable[Slot] = _page_slots(page, profile)
     else:
         placed = {slot.entity_id for slot in slots if slot is not None}
-        filling = [
+        # A generator rather than a list: a room can hold hundreds of entities and a grid
+        # holds sixteen, and there is no reason to work out what the other hundreds would
+        # have looked like.
+        filling = (
             Slot(*default_actions(entity_id), colour=_colour(entity_id, profile))
             for entity_id in source_entities(page.source, registry)
             if entity_id not in placed
-        ]
+        )
 
     empty = (index for index in range(PAD_COUNT) if slots[index] is None)
     for slot, index in zip(filling, empty, strict=False):

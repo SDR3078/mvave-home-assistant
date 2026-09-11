@@ -97,6 +97,11 @@ implementation plan and this file is the running to-do list.
   own write rather than replacing the one already waiting. Every one of them needed
   several things to happen inside a single notification, which the parser makes possible
   because one packet can carry several messages, and none would have shown up in a test.
+- **A config flow**, in three screens with one job each: which rooms get a page and in
+  what order, a colour for each room, and a colour for each kind of thing. White is never
+  on offer, because white is what "off" means and the readability of a page rests on it.
+  Saving rebuilds the surface in place and keeps you where you were standing, rather than
+  reloading the entry and spending twenty seconds reconnecting over a colour.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze

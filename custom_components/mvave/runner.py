@@ -28,6 +28,7 @@ from .engine import BUTTONS, PAD_COUNT, STEP_SECONDS, TICK_SECONDS, Frame, chang
 from .engine.surface import (
     ButtonPress,
     ButtonTiming,
+    EventType,
     Idle,
     InputEvent,
     Outcome,
@@ -332,11 +333,12 @@ class SurfaceRunner:
 
     @callback
     def _turned(self, knob: int, steps: int) -> None:
-        """Collect a knob's steps, then make one call for the lot.
+        """Collect a knob's steps, then make one call and one announcement for the lot.
 
-        Every step still reaches the engine at once, so the bar follows the finger. Only
-        the service call waits, because a knob sends about thirty messages a second and
-        nobody wants thirty light commands out of one gesture.
+        Every step still reaches the engine at once, so the bar follows the finger. What
+        waits is everything that leaves this machine: a knob sends around thirty messages
+        a second, and neither a light nor an automation wants thirty of anything out of
+        one gesture.
         """
         if steps == 0:
             return
@@ -359,10 +361,10 @@ class SurfaceRunner:
                 signature[1] or "nothing",
             )
         self._steps[knob] = self._steps.get(knob, 0) + steps
-        # The announcement goes out per step and only the call waits. An automation
-        # watching a knob wants to see it move, and thirty light commands out of one
-        # gesture is the thing the debounce exists to prevent.
-        self._perform(replace(outcome, calls=()))
+        # Neither the call nor the announcement goes out per step. Every step still reaches
+        # the engine, so the bar follows the finger, but a knob sends around thirty
+        # messages a second and firing an event for each would wake every automation
+        # listening thirty times over for one gesture.
         self._restart("knob", KNOB_DEBOUNCE_SECONDS, self._flush_knobs)
         self._pending_call = outcome
         self._redraw()
@@ -371,10 +373,24 @@ class SurfaceRunner:
     def _flush_knobs(self, _now: Any = None) -> None:
         """Make the one call the whole turn asked for."""
         self._timers.pop("knob", None)
-        self._steps.clear()
-        if self._pending_call is not None:
-            self._perform(replace(self._pending_call, emits=()))
-            self._pending_call = None
+        moved, self._steps = self._steps, {}
+        outcome, self._pending_call = self._pending_call, None
+        if outcome is None:
+            return
+        # One announcement for the whole gesture, carrying how far it actually went. The
+        # engine's own event describes a single step, which is the right thing for it to
+        # know and the wrong thing to put on the bus.
+        self._perform(
+            replace(
+                outcome,
+                emits=tuple(
+                    replace(emit, data={**emit.data, "steps": moved[emit.data["knob"]]})
+                    if emit.type is EventType.KNOB_TURNED and emit.data.get("knob") in moved
+                    else emit
+                    for emit in outcome.emits
+                ),
+            )
+        )
 
     # ---------------------------------------------------------------- output
 
