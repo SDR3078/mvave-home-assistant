@@ -14,6 +14,7 @@ than in ``engine/``, it is in the wrong place.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
@@ -338,6 +339,12 @@ class SurfaceRunner:
             task.cancel()
         if key in self._fired:
             self._fired.discard(key)
+            # The finger has lifted, so a bar the hold put up can start counting down. It
+            # does not count down while the finger is still there: holding a pad to look at
+            # a value and having it vanish under your hand is the surface deciding you have
+            # finished looking.
+            if self.surface is not None and self.surface.hud is not None and not self._fired:
+                self._restart("hud", HUD_SECONDS, self._drop_hud)
             return
         self._dispatch(_event_for(key, held=False))
 
@@ -459,7 +466,8 @@ class SurfaceRunner:
             if isinstance(entity_id, str) and entity_id in self.surface.pending:
                 self._restart(f"confirm:{entity_id}", CONFIRM_SECONDS, self._give_up(entity_id))
         self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
-        if self.surface.hud is not None:
+        # Not while a finger is still down on a pad: see `_up`.
+        if self.surface.hud is not None and not self._fired:
             self._restart("hud", HUD_SECONDS, self._drop_hud)
 
     def _perform(self, outcome: Outcome) -> None:
@@ -702,6 +710,21 @@ class SurfaceRunner:
         entity_id = event.data["entity_id"]
         # A bar follows its entity, but not while a knob is still turning: see `settled`.
         self.surface.settled(entity_id, follow="knob" not in self._timers)
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            # Every state change that reaches the surface, with the moment it arrived.
+            # Answers the question a slow-looking readout always raises: is the value
+            # reported rarely, or reported often and shown once? Measured against Home
+            # Assistant's own brightness slider, one continuous drag produces exactly one
+            # state change, on release. There is nothing finer to couple to: the state
+            # machine is the finest granularity Home Assistant has, and listening for
+            # service calls instead catches no more, because one change is one call.
+            new_state = event.data.get("new_state")
+            LOGGER.debug(
+                "%s: %s is %s",
+                self.coordinator.address,
+                entity_id,
+                new_state.state if new_state else None,
+            )
         cancel = self._timers.pop(f"confirm:{entity_id}", None)
         if cancel is not None:
             cancel()
