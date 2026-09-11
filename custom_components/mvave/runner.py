@@ -39,8 +39,8 @@ from .registry import HomeAssistantRegistry, HomeAssistantSink, build_profile
 if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant
 
-    from .arming import ArmResult
     from .coordinator import MvaveCoordinator
+    from .devices.layout import DeviceLayout
     from .transport import MidiEvent
 
 #: How long a pad must be held before it counts as a hold rather than a tap. Long enough
@@ -143,7 +143,9 @@ class SurfaceRunner:
             self._lit.clear()
             return
         if self.surface is None:
-            self._learn(arming)
+            if arming.layout is None:
+                return
+            self._learn(arming.layout)
             self.surface = Surface(build_profile(self.hass), HomeAssistantRegistry(self.hass))
             LOGGER.info(
                 "%s: surface ready with %d pages",
@@ -156,28 +158,31 @@ class SurfaceRunner:
         self._lit.clear()
         self._redraw()
 
-    def _learn(self, arming: ArmResult) -> None:
+    def _learn(self, layout: DeviceLayout) -> None:
         """Take the note and controller numbers from the device rather than guessing.
 
         They move: the preset changes them, and so do the octave keys. The arming step has
-        already read the real map out of the device's memory, so this uses that instead of
-        the factory layout, which is wrong the moment anybody switches preset.
+        already read the real map out of the device's memory, and the same map is what the
+        event entities match against, so there is one answer to "which pad is that" rather
+        than two that can disagree.
+
+        Matching is on the number alone, without the channel. The device ignores the
+        channel on the LED path entirely, and a preset that puts pads on an unusual channel
+        should still work rather than going silently dead.
         """
+        by_number = {spec.number: spec for spec in layout.pads}
         self._notes = {
-            index: arming.armed_notes[pad - 1]
+            index: by_number[pad].note
             for index, pad in enumerate(PAD_NUMBER_BY_READING_ORDER)
-            if pad - 1 < len(arming.armed_notes)
+            if pad in by_number
         }
         self._pads = {note: index for index, note in self._notes.items()}
 
-        named = list(zip(BUTTONS_IN_RECORD_ORDER, arming.preset.buttons, strict=False))
-        self._buttons = {record.number: name for name, record in named}
-        self._lights = {name: record.number for name, record in named}
-        # Sixteen encoder records are the eight knobs in two banks. A bank is a mode of the
-        # same physical control, so both controllers mean the same knob.
-        self._knobs = {
-            record.cc: index % 8 + 1 for index, record in enumerate(arming.preset.encoders)
-        }
+        self._buttons = {spec.cc: spec.key for spec in layout.buttons}
+        self._lights = {spec.key: spec.cc for spec in layout.buttons}
+        # A bank is a mode of the same physical control, so every controller a knob can
+        # send on means that knob.
+        self._knobs = {cc: spec.number for spec in layout.knobs for cc in spec.ccs.values()}
         LOGGER.debug(
             "%s: learned the device's own map: pads %s, buttons %s, knobs %s",
             self.coordinator.address,
@@ -276,9 +281,19 @@ class SurfaceRunner:
     def _dispatch(self, event: InputEvent | None) -> None:
         if event is None:
             return
+        # Whatever was playing is over. Input is never queued behind eye candy: a press
+        # during a transition has to land now, not once the pretty part has finished.
+        self._cancel_animation()
         outcome = self._handle(event)
         self._perform(outcome)
         self._play(outcome)
+
+    @callback
+    def _cancel_animation(self) -> None:
+        """Stop a transition mid-flight, leaving the grid to be redrawn as it now is."""
+        if self._playing is not None:
+            self._playing.cancel()
+            self._playing = None
 
     def _handle(self, event: InputEvent) -> Outcome:
         """Ask the engine, and set the timers its answer implies."""
@@ -307,12 +322,12 @@ class SurfaceRunner:
         """Start a transition, replacing whatever was already running."""
         if not outcome.animation:
             return
-        if self._playing is not None:
-            self._playing.cancel()
+        self._cancel_animation()
         self._playing = self.hass.async_create_task(self._animate(outcome), eager_start=False)
 
     async def _animate(self, outcome: Outcome) -> None:
         """Play a transition, and change the transport lights on the frame that owns them."""
+        mine = asyncio.current_task()
         try:
             if outcome.buttons is ButtonTiming.START:
                 await self._show_buttons()
@@ -322,12 +337,14 @@ class SurfaceRunner:
                     await self._show_buttons()
                 await asyncio.sleep(STEP_SECONDS)
             await self._show_buttons()
-        except asyncio.CancelledError:
-            raise
         finally:
-            self._started = time.monotonic()
-            self._playing = None
-            self._redraw()
+            # Only if this is still the animation in charge. A cancelled one finishes
+            # after the press that replaced it, and clearing the new task here would leave
+            # the next input with nothing to cancel.
+            if self._playing is mine:
+                self._started = time.monotonic()
+                self._playing = None
+                self._redraw()
 
     @callback
     def _redraw(self) -> None:
@@ -338,8 +355,12 @@ class SurfaceRunner:
         self._watch(self.surface)
         if self._playing is None:
             frame = compose(rendering, time.monotonic() - self._started)
+            # Rendered once and handed to both. A knob turn redraws around thirty times a
+            # second, and each render re-resolves every slot of the page.
             self.hass.async_create_task(self._send(frame), eager_start=False)
-            self.hass.async_create_task(self._show_buttons(), eager_start=False)
+            self.hass.async_create_task(
+                self._show_buttons(dict(rendering.buttons)), eager_start=False
+            )
         # A ticker is only worth its wake-ups while something is actually moving.
         if rendering.rhythms and self._ticker is None:
             self._ticker = self.hass.async_create_task(self._tick(), eager_start=False)
@@ -384,11 +405,12 @@ class SurfaceRunner:
             return
         self._shown = frame
 
-    async def _show_buttons(self) -> None:
+    async def _show_buttons(self, wanted: dict[str, bool] | None = None) -> None:
         """Light the transport buttons that would do something if pressed."""
         if self.surface is None:
             return
-        wanted = self.surface.rendering().buttons
+        if wanted is None:
+            wanted = dict(self.surface.rendering().buttons)
         messages = [
             bytes((NOTE_ON, self._lights[name], BUTTON_ON if lit else 0))
             for name, lit in wanted.items()
@@ -472,11 +494,6 @@ class SurfaceRunner:
         if cancel is not None:
             cancel()
         self._redraw()
-
-
-#: The transport buttons in the order their records appear in a preset, which is the order
-#: the arming step reads them in.
-BUTTONS_IN_RECORD_ORDER = ("left", "right", "play", "stop", "record")
 
 
 def _event_for(key: str, held: bool) -> InputEvent | None:

@@ -27,11 +27,13 @@ from .devices.smc_pad import (
     armed_pad_bank,
     button_led_address,
     encoder_table_address,
+    layout_from_preset,
     pad_bank_address,
     relative_encoder_table,
 )
 
 if TYPE_CHECKING:
+    from .devices.layout import DeviceLayout
     from .devices.smc_pad import DisplayState, Preset
     from .vendor import VendorSession
 
@@ -43,6 +45,10 @@ class ArmResult:
     state: DisplayState
     preset: Preset
     armed_notes: tuple[int, ...] = ()
+    #: The device's real control map, read out of its own memory. The factory layout
+    #: is only a guess, and it stops being right the moment anybody changes preset or
+    #: presses an octave key.
+    layout: DeviceLayout | None = None
     #: Whether the encoders were switched to relative. It changes how a turn has to be
     #: decoded, and getting that wrong is silent: every turn is discarded rather than
     #: reported wrongly.
@@ -63,7 +69,7 @@ async def async_arm(session: VendorSession) -> ArmResult:
     """Read the device's configuration and rewrite it for host control."""
     state = await session.read_state()
     preset = await session.read_preset(state.slot)
-    result = ArmResult(state=state, preset=preset)
+    result = ArmResult(state=state, preset=preset, layout=layout_from_preset(preset, state.bank))
 
     bank = preset.banks[state.bank - 1]
 

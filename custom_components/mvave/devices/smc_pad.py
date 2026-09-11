@@ -519,6 +519,51 @@ FACTORY_BUTTONS: Final = (
 )
 FACTORY_KNOB_FIRST_CC: Final = 30  # bank 1 is 30-37, bank 2 is 38-45
 
+#: How many encoders a bank holds. Sixteen records are the eight knobs twice over, and a
+#: bank is a mode of the same physical control rather than a separate one.
+KNOBS_PER_BANK: Final = 8
+
+
+def layout_from_preset(preset: Preset, bank: int, model: str = "SMC-PAD") -> DeviceLayout:
+    """The device's real map, read out of its own memory rather than assumed.
+
+    The factory layout below is a guess, and it stays right exactly until somebody changes
+    preset or presses an octave key. This is what the device is sending *now*, which is
+    what an entity has to match against if "pad 5 was pressed" is to keep meaning pad 5.
+
+    Keys are the same either way, so entities keep their identity across a preset change:
+    only the numbers underneath them move.
+    """
+    records = preset.banks[bank - 1]
+    pads = tuple(
+        PadSpec(
+            key=f"pad_{number}",
+            number=number,
+            channel=records[number - 1].channel,
+            note=records[number - 1].note,
+        )
+        for number in range(1, PAD_COUNT + 1)
+    )
+    buttons = tuple(
+        ButtonSpec(key=key, name=name, channel=record.channel, cc=record.number)
+        for (key, name, _), record in zip(FACTORY_BUTTONS, preset.buttons, strict=False)
+    )
+    banks = max(1, len(preset.encoders) // KNOBS_PER_BANK)
+    knobs = tuple(
+        KnobSpec(
+            key=f"knob_{number}",
+            number=number,
+            channel=FACTORY_CONTROL_CHANNEL,
+            ccs={
+                index + 1: preset.encoders[index * KNOBS_PER_BANK + number - 1].cc
+                for index in range(banks)
+            },
+        )
+        for number in range(1, KNOBS_PER_BANK + 1)
+    )
+    return DeviceLayout(model=model, pads=pads, buttons=buttons, knobs=knobs)
+
+
 SMC_PAD_FACTORY_LAYOUT: Final = DeviceLayout(
     model="SMC-PAD",
     pads=tuple(

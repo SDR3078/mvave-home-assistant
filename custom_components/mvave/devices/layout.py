@@ -61,9 +61,26 @@ class KnobSpec:
 
 @dataclass(frozen=True, slots=True)
 class DeviceLayout:
-    """Every control on one device."""
+    """Every control on one device.
+
+    A control is looked up by its key rather than held onto, because the layout is
+    replaced wholesale every time the device is armed: the numbers change with the preset
+    and with the octave keys, while "pad 5" is still pad 5.
+    """
 
     model: str
     pads: tuple[PadSpec, ...]
     buttons: tuple[ButtonSpec, ...]
     knobs: tuple[KnobSpec, ...]
+
+    def pad(self, key: str) -> PadSpec | None:
+        """One pad by its stable key, or None if this layout has no such pad."""
+        return next((spec for spec in self.pads if spec.key == key), None)
+
+    def button(self, key: str) -> ButtonSpec | None:
+        """One button by its stable key."""
+        return next((spec for spec in self.buttons if spec.key == key), None)
+
+    def knob(self, key: str) -> KnobSpec | None:
+        """One encoder by its stable key."""
+        return next((spec for spec in self.knobs if spec.key == key), None)

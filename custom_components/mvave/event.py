@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from . import MvaveConfigEntry
     from .coordinator import MvaveCoordinator
-    from .devices.layout import ButtonSpec, KnobSpec, PadSpec
+    from .devices.layout import ButtonSpec, DeviceLayout, KnobSpec, PadSpec
     from .transport import MidiEvent
 
 # Nothing here talks to the device, so updates need no serialising.
@@ -74,14 +74,36 @@ async def async_setup_entry(
         len(layout.knobs),
     )
 
-    entities: list[EventEntity] = [MvavePadEvent(coordinator, pad) for pad in layout.pads]
-    entities += [MvaveButtonEvent(coordinator, button) for button in layout.buttons]
-    entities += [MvaveKnobEvent(coordinator, knob) for knob in layout.knobs]
+    # The layout resolved here is a starting point only: entities re-read the device's own
+    # map on every message, and it is only known once the device has been armed.
+    entities: list[EventEntity] = [MvavePadEvent(coordinator, pad, layout) for pad in layout.pads]
+    entities += [MvaveButtonEvent(coordinator, button, layout) for button in layout.buttons]
+    entities += [MvaveKnobEvent(coordinator, knob, layout) for knob in layout.knobs]
     async_add_entities(entities)
 
 
 class _MvaveEventEntity(MvaveEntity, EventEntity):
-    """Shared plumbing: subscribe to decoded MIDI while the entity is loaded."""
+    """Shared plumbing: subscribe to decoded MIDI while the entity is loaded.
+
+    A control is looked up by key on every message rather than held onto. The note and
+    controller numbers move with the preset and with the octave keys, so an entity holding
+    the ones it was built with would quietly start matching the wrong pad, or none. The key
+    does not move: pad 5 is pad 5 whatever it happens to be sending today.
+    """
+
+    def __init__(self, coordinator: MvaveCoordinator, key: str, fallback: DeviceLayout) -> None:
+        """Initialise for one control, with the layout to use until the device is read."""
+        super().__init__(coordinator, key)
+        self._key = key
+        self._fallback = fallback
+
+    @property
+    def layout(self) -> DeviceLayout:
+        """What the device is sending now, or the guess made before it was ever read."""
+        arming = self.coordinator.arming
+        if arming is not None and arming.layout is not None:
+            return arming.layout
+        return self._fallback
 
     async def async_added_to_hass(self) -> None:
         """Start listening for MIDI, and for the link going up or down."""
@@ -113,15 +135,17 @@ class MvavePadEvent(_MvaveEventEntity):
     _attr_device_class = EventDeviceClass.BUTTON
     _attr_translation_key = "pad"
 
-    def __init__(self, coordinator: MvaveCoordinator, spec: PadSpec) -> None:
+    def __init__(
+        self, coordinator: MvaveCoordinator, spec: PadSpec, fallback: DeviceLayout
+    ) -> None:
         """Initialise the entity for one pad."""
-        super().__init__(coordinator, spec.key)
+        super().__init__(coordinator, spec.key, fallback)
         self._attr_event_types = [ButtonEventType.PRESS_START, ButtonEventType.PRESS_END]
-        self._spec = spec
         self._attr_translation_placeholders = {"number": str(spec.number)}
 
     def _handle_midi(self, event: MidiEvent) -> None:
-        if event.channel != self._spec.channel or event.data1 != self._spec.note:
+        spec = self.layout.pad(self._key)
+        if spec is None or event.channel != spec.channel or event.data1 != spec.note:
             return
         if event.type == "note_on":
             # A note-on of velocity zero is a release, and the parser has already
@@ -141,18 +165,22 @@ class MvaveButtonEvent(_MvaveEventEntity):
 
     _attr_device_class = EventDeviceClass.BUTTON
 
-    def __init__(self, coordinator: MvaveCoordinator, spec: ButtonSpec) -> None:
+    def __init__(
+        self, coordinator: MvaveCoordinator, spec: ButtonSpec, fallback: DeviceLayout
+    ) -> None:
         """Initialise the entity for one button."""
-        super().__init__(coordinator, spec.key)
+        super().__init__(coordinator, spec.key, fallback)
         self._attr_event_types = [ButtonEventType.PRESS_START, ButtonEventType.PRESS_END]
         self._spec = spec
         self._attr_name = spec.name
 
     def _handle_midi(self, event: MidiEvent) -> None:
+        spec = self.layout.button(self._key)
         if (
-            event.type != "cc"
-            or event.channel != self._spec.channel
-            or event.data1 != self._spec.cc
+            spec is None
+            or event.type != "cc"
+            or event.channel != spec.channel
+            or event.data1 != spec.cc
         ):
             return
         event_type = ButtonEventType.PRESS_START if event.data2 else ButtonEventType.PRESS_END
@@ -185,12 +213,14 @@ class MvaveKnobEvent(_MvaveEventEntity):
 
     _attr_translation_key = "knob"
 
-    def __init__(self, coordinator: MvaveCoordinator, spec: KnobSpec) -> None:
+    def __init__(
+        self, coordinator: MvaveCoordinator, spec: KnobSpec, fallback: DeviceLayout
+    ) -> None:
         """Initialise the entity for one encoder."""
-        super().__init__(coordinator, spec.key)
+        super().__init__(coordinator, spec.key, fallback)
         self._attr_event_types = [CLOCKWISE, COUNTER_CLOCKWISE]
-        self._spec = spec
         self._attr_translation_placeholders = {"number": str(spec.number)}
+        self._controller = 0
         self._last: dict[int, int] = {}
         self._pending_steps = 0
         self._pending_bank = 0
@@ -203,11 +233,15 @@ class MvaveKnobEvent(_MvaveEventEntity):
         self.async_on_remove(self._cancel_pending)
 
     def _handle_midi(self, event: MidiEvent) -> None:
-        if event.type != "cc" or event.channel != self._spec.channel:
+        spec = self.layout.knob(self._key)
+        if spec is None or event.type != "cc" or event.channel != spec.channel:
             return
-        bank = self._spec.bank_of(event.data1)
+        bank = spec.bank_of(event.data1)
         if bank is None:
             return
+        # Remembered rather than looked up when the turn is reported: by then the map may
+        # have been replaced, and the number that arrived is the one worth reporting.
+        self._controller = event.data1
 
         steps = self._steps(bank, event.data2)
         if steps == 0 or abs(steps) > MAX_PLAUSIBLE_STEP:
@@ -268,6 +302,6 @@ class MvaveKnobEvent(_MvaveEventEntity):
             CLOCKWISE if steps > 0 else COUNTER_CLOCKWISE,
             steps=abs(steps),
             bank=self._pending_bank,
-            controller=self._spec.ccs[self._pending_bank],
+            controller=self._controller,
             value=self._pending_value,
         )

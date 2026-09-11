@@ -64,6 +64,12 @@ implementation plan and this file is the running to-do list.
   knob's thirty messages a second into one service call, and giving up on an entity that
   never reports back. The note and controller numbers come from the device's own memory
   by way of the arming step, so they stay right when the preset changes.
+- **Every control is matched against the device's own map.** The arming step builds a
+  `DeviceLayout` out of the preset it just read, and both the event entities and the
+  surface use that one map instead of the factory guess. Keys stay put, so "pad 5 was
+  pressed" keeps meaning pad 5 across a preset change while the note underneath moves.
+  Checked by building a layout from a real dump and asserting it equals the constant that
+  was written from measurements, which tests both at once.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -80,12 +86,7 @@ implementation plan and this file is the running to-do list.
 2. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
    unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
    MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
-3. **Build the entities from the map that was read** rather than from the advertised
-   name. The arming step already decodes the real note and controller numbers, which
-   change with the preset and the octave keys, so the current name-based layout is wrong
-   the moment the user switches preset. Needs entities added after the first connect
-   rather than at platform setup.
-4. **Engine** (brief, milestone 4), building the language now specified in
+3. **Engine** (brief, milestone 4), building the language now specified in
    `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
    transitions, the two rhythms, the page model, the two protocols the platform reaches in
    through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
@@ -104,8 +105,6 @@ implementation plan and this file is the running to-do list.
    - **A timeout on the unconfirmed blink.** An entity that accepts a command and never
      reports back leaves its pad swinging forever. The engine has no clock by design, so
      bounding it belongs to the coordinator.
-   - **Aborting an animation on input.** A press during a transition is currently queued
-     behind it rather than cutting it short.
    - **Telling somebody which knobs are live.** With no rings and no labels there is
      nothing that says knob one adjusts the lamp you are holding and knob six does not.
      The design's answer is that the assignment never changes so it is learned once, which
@@ -115,7 +114,7 @@ implementation plan and this file is the running to-do list.
    - **Two provisional colours to judge on the grid**: what an unreachable entity looks
      like, currently blue, and what a scene or script pad looks like, currently green.
      Every other colour in the language was chosen by looking at it; these two were not.
-5. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+4. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 
 ## Device questions still open
