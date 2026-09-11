@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from bleak import BleakError
@@ -26,6 +26,7 @@ from homeassistant.helpers.event import async_call_later, async_track_state_chan
 from .const import LOGGER
 from .devices.smc_pad import ENCODER_CENTRE, PAD_NUMBER_BY_READING_ORDER
 from .engine import BUTTONS, PAD_COUNT, STEP_SECONDS, TICK_SECONDS, Frame, changed_pads, compose
+from .engine.model import Profile, SourceKind
 from .engine.surface import (
     ButtonPress,
     ButtonTiming,
@@ -84,6 +85,66 @@ BUTTON_ON = 5
 EVENT_TYPE = "mvave_event"
 
 
+@dataclass(frozen=True, slots=True)
+class SurfaceView:
+    """What the surface looks like from outside, for the entities that report it.
+
+    A value rather than a set of accessors, because every entity that reads it wants a
+    consistent answer and because comparing two of them is how the runner decides whether
+    anything worth writing to the state machine has actually changed. A knob turn redraws
+    thirty times a second and none of those are a state change.
+    """
+
+    page_id: str | None = None
+    page_title: str | None = None
+    parent_page_id: str | None = None
+    source: str | None = None
+    area_id: str | None = None
+    depth: int = 0
+    root_page_id: str | None = None
+    focus: str | None = None
+    #: Every page as (id, label), in the profile's own order. Labels are what a person
+    #: picks from, so they are made unique here rather than in each thing that shows them.
+    pages: tuple[tuple[str, str], ...] = ()
+
+    def page_for(self, label: str) -> str | None:
+        """The page id behind a label somebody chose."""
+        return next((page_id for page_id, shown in self.pages if shown == label), None)
+
+    @property
+    def labels(self) -> list[str]:
+        """Every page, as a person sees it."""
+        return [label for _, label in self.pages]
+
+    @property
+    def current_label(self) -> str | None:
+        """The label of the page showing now."""
+        return next(
+            (label for page_id, label in self.pages if page_id == self.page_id),
+            None,
+        )
+
+
+def page_labels(profile: Profile) -> tuple[tuple[str, str], ...]:
+    """Page ids paired with names nobody can confuse for each other.
+
+    Areas cannot share a name, so this only ever fires when a page's title collides with
+    the index's, and the alternative is a picker with two identical entries where choosing
+    either one gets you whichever came first.
+    """
+    labels: list[tuple[str, str]] = []
+    taken: set[str] = set()
+    for page in profile.pages.values():
+        label = page.title
+        if label in taken:
+            label = f"{page.title} ({page.id})"
+        while label in taken:
+            label = f"{page.title} ({page.id}) {len(taken)}"
+        taken.add(label)
+        labels.append((page.id, label))
+    return tuple(labels)
+
+
 class SurfaceRunner:
     """Drives one profile against one device: input in, light out, timing in between."""
 
@@ -98,7 +159,7 @@ class SurfaceRunner:
         self.entry = entry
         self.coordinator = coordinator
         self.surface: Surface | None = None
-        self.sink = HomeAssistantSink(hass, entry, EVENT_TYPE)
+        self.sink = HomeAssistantSink(hass, entry, EVENT_TYPE, coordinator.address)
 
         self._notes: dict[int, int] = {}  # reading-order pad -> note it answers to
         self._pads: dict[int, int] = {}  # note -> reading-order pad
@@ -131,10 +192,66 @@ class SurfaceRunner:
         self._watching: CALLBACK_TYPE | None = None
         self._started = time.monotonic()
         self._unsubscribe: list[CALLBACK_TYPE] = []
+        #: Entities that show where the surface is. Told only when the answer changes.
+        self._watchers: list[CALLBACK_TYPE] = []
+        self._announced = SurfaceView()
         #: Held across every write. Both caches below are read, awaited over and then
         #: written, so two writers in flight at once would each diff against what the
         #: other has not recorded yet and the grid would end up showing neither.
         self._writing = asyncio.Lock()
+
+    # ------------------------------------------------------------------ view
+
+    @property
+    def view(self) -> SurfaceView:
+        """Where the surface is, for anything outside that reports it.
+
+        Empty while the link is down. The entities showing it are unavailable then anyway,
+        and inventing a last known page would be a claim about a device nobody is talking
+        to.
+        """
+        surface = self.surface
+        if surface is None:
+            return SurfaceView()
+        page = surface.page
+        return SurfaceView(
+            page_id=page.id,
+            page_title=page.title,
+            parent_page_id=page.parent_id,
+            source=str(page.source.kind),
+            area_id=page.source.key if page.source.kind is SourceKind.AREA else None,
+            depth=surface.depth,
+            root_page_id=surface.profile.root_id,
+            focus=surface.focus,
+            pages=page_labels(surface.profile),
+        )
+
+    @callback
+    def async_add_listener(self, listener: CALLBACK_TYPE) -> CALLBACK_TYPE:
+        """Follow where the surface is. Returns the callback that stops following."""
+        self._watchers.append(listener)
+
+        @callback
+        def _remove() -> None:
+            if listener in self._watchers:
+                self._watchers.remove(listener)
+
+        return _remove
+
+    @callback
+    def _announce(self) -> None:
+        """Tell the watchers, but only when what they show has actually changed.
+
+        The gate is the whole point. This is reached from every redraw, which during a
+        knob turn is thirty a second, and an entity that wrote its state that often would
+        put thirty rows a second into the database for a page that did not move.
+        """
+        view = self.view
+        if view == self._announced:
+            return
+        self._announced = view
+        for listener in list(self._watchers):
+            listener()
 
     # ------------------------------------------------------------------ life
     def _task(self, work: Coroutine[Any, Any, None], what: str) -> asyncio.Task[None]:
@@ -172,6 +289,7 @@ class SurfaceRunner:
         if self._watching is not None:
             self._watching()
             self._watching = None
+        self._announce()
 
     @callback
     def _forget_presses(self) -> None:
@@ -193,6 +311,7 @@ class SurfaceRunner:
             # its hold fires into nothing, the key stays marked as fired, and the next tap
             # of that pad is swallowed as though it were that release.
             self._forget_presses()
+            self._announce()
             return
         if self.surface is None:
             if arming.layout is None:
@@ -509,6 +628,9 @@ class SurfaceRunner:
     @callback
     def _redraw(self) -> None:
         """Put the settled state on the grid, and watch whatever it shows."""
+        # Before the early return, not after: the link going down is exactly the moment the
+        # entities reporting where the surface is need to hear that it is nowhere.
+        self._announce()
         if self.surface is None or not self.coordinator.connected:
             return
         rendering = self.surface.rendering()

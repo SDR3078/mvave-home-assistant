@@ -83,6 +83,25 @@ def colour_for(domain: str) -> int:
     return DOMAIN_COLOURS.get(domain, ACTION)
 
 
+#: What each velocity is called, for anything that has to describe the grid in words
+#: rather than light it. A number is meaningless to somebody reading a mirror of the pad
+#: on a screen, and these are the names the owner gave them at the grid.
+NAMES: Final[Mapping[int, str]] = {
+    OFF: "dark",
+    BLUE: "blue",
+    GREEN: "green",
+    ORANGE: "orange",
+    RED: "red",
+    PURPLE: "purple",
+    WHITE: "white",
+}
+
+
+def name_for(colour: int) -> str:
+    """What a velocity is called, or the number itself if it is not one of the named."""
+    return NAMES.get(colour, str(colour))
+
+
 #: Bar colours, one flat colour per property rather than a gradient. Every ramp the design
 #: originally wanted needed many graded steps along one hue, which needs a brightness or a
 #: saturation control the device does not have.

@@ -21,6 +21,7 @@ from .const import LOGGER
 from .devices import resolve_layout
 from .devices.smc_pad import ENCODER_CENTRE
 from .entity import MvaveEntity
+from .runner import HOLD_SECONDS
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -38,6 +39,16 @@ PARALLEL_UPDATES = 0
 
 CLOCKWISE = "clockwise"
 COUNTER_CLOCKWISE = "counter_clockwise"
+
+#: What a control that can be held reports. The two long forms are Home Assistant's own
+#: standard strings for the gesture, which is what the automation editor and the logbook
+#: know how to describe.
+HOLDABLE_EVENTS = (
+    ButtonEventType.PRESS_START,
+    ButtonEventType.PRESS_END,
+    ButtonEventType.LONG_PRESS_START,
+    ButtonEventType.LONG_PRESS_END,
+)
 
 # The largest jump treated as one turn rather than a counter reset. The factory encoders
 # are absolute and saturate at each end, so a bank change or a reconnect can show as a
@@ -82,7 +93,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class _MvaveEventEntity(MvaveEntity, EventEntity):
+class _MvaveHoldableEvent(MvaveEntity, EventEntity):
     """Shared plumbing: subscribe to decoded MIDI while the entity is loaded.
 
     A control is looked up by key on every message rather than held onto. The note and
@@ -96,6 +107,9 @@ class _MvaveEventEntity(MvaveEntity, EventEntity):
         super().__init__(coordinator, key)
         self._key = key
         self._fallback = fallback
+        self._hold_timer: CALLBACK_TYPE | None = None
+        self._long = False
+        self._payload: dict[str, Any] = {}
 
     @property
     def layout(self) -> DeviceLayout:
@@ -109,6 +123,9 @@ class _MvaveEventEntity(MvaveEntity, EventEntity):
         """Start listening for MIDI, and for the link going up or down."""
         self.async_on_remove(self.coordinator.async_add_midi_listener(self._handle_midi))
         self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
+        # A finger down when the entity is removed would otherwise leave a timer that
+        # fires into a dead entity.
+        self.async_on_remove(self._cancel_hold)
 
     def _handle_midi(self, event: MidiEvent) -> None:
         """Called for every decoded message. Subclasses pick out their own."""
@@ -128,8 +145,47 @@ class _MvaveEventEntity(MvaveEntity, EventEntity):
         self._trigger_event(event_type, payload)
         self.async_write_ha_state()
 
+    # --------------------------------------------------------------------- holds
 
-class MvavePadEvent(_MvaveEventEntity):
+    def _pressed(self, **payload: Any) -> None:
+        """A control went down. Starts the clock that turns a press into a hold.
+
+        The threshold is imported from the runner rather than chosen again here, and that
+        is the whole point: the same physical gesture has to become ``pad_held`` on the bus
+        and ``long_press_start`` on this entity at the same instant, or an automation
+        watching one and a page reacting to the other disagree about what just happened.
+        """
+        self._payload = payload
+        self._long = False
+        self._cancel_hold()
+        self._hold_timer = async_call_later(self.hass, HOLD_SECONDS, self._became_a_hold)
+        self._fire(ButtonEventType.PRESS_START, **payload)
+
+    def _released(self, **payload: Any) -> None:
+        """A control came back up, ending whichever kind of press it turned out to be."""
+        self._cancel_hold()
+        long, self._long = self._long, False
+        self._fire(ButtonEventType.LONG_PRESS_END if long else ButtonEventType.PRESS_END, **payload)
+
+    @callback
+    def _became_a_hold(self, _now: datetime) -> None:
+        """Fired while the finger is still down, not when it lifts.
+
+        Waiting for the release would mean a hold is only announced once you stop holding,
+        which is backwards, and it is also when the surface itself acts on one.
+        """
+        self._hold_timer = None
+        self._long = True
+        self._fire(ButtonEventType.LONG_PRESS_START, **self._payload)
+
+    @callback
+    def _cancel_hold(self) -> None:
+        if self._hold_timer is not None:
+            self._hold_timer()
+            self._hold_timer = None
+
+
+class MvavePadEvent(_MvaveHoldableEvent):
     """One velocity-sensitive pad."""
 
     _attr_device_class = EventDeviceClass.BUTTON
@@ -140,7 +196,7 @@ class MvavePadEvent(_MvaveEventEntity):
     ) -> None:
         """Initialise the entity for one pad."""
         super().__init__(coordinator, spec.key, fallback)
-        self._attr_event_types = [ButtonEventType.PRESS_START, ButtonEventType.PRESS_END]
+        self._attr_event_types = list(HOLDABLE_EVENTS)
         self._attr_translation_placeholders = {"number": str(spec.number)}
 
     def _handle_midi(self, event: MidiEvent) -> None:
@@ -150,17 +206,12 @@ class MvavePadEvent(_MvaveEventEntity):
         if event.type == "note_on":
             # A note-on of velocity zero is a release, and the parser has already
             # normalised it to note_off, so velocity here is always a real strike.
-            self._fire(
-                ButtonEventType.PRESS_START,
-                note=event.data1,
-                velocity=event.data2,
-                channel=event.channel + 1,
-            )
+            self._pressed(note=event.data1, velocity=event.data2, channel=event.channel + 1)
         elif event.type == "note_off":
-            self._fire(ButtonEventType.PRESS_END, note=event.data1, channel=event.channel + 1)
+            self._released(note=event.data1, channel=event.channel + 1)
 
 
-class MvaveButtonEvent(_MvaveEventEntity):
+class MvaveButtonEvent(_MvaveHoldableEvent):
     """One transport or function button, which sends a control change of 127 then 0."""
 
     _attr_device_class = EventDeviceClass.BUTTON
@@ -170,9 +221,13 @@ class MvaveButtonEvent(_MvaveEventEntity):
     ) -> None:
         """Initialise the entity for one button."""
         super().__init__(coordinator, spec.key, fallback)
-        self._attr_event_types = [ButtonEventType.PRESS_START, ButtonEventType.PRESS_END]
+        self._attr_event_types = list(HOLDABLE_EVENTS)
         self._spec = spec
-        self._attr_name = spec.name
+        # A key rather than the layout's English name. The pads and the knobs are already
+        # translated and these were the three words left in the interface that could not
+        # be; a device whose entity names are half translated looks broken in a way that
+        # is nobody's fault but ours.
+        self._attr_translation_key = f"button_{spec.key}"
 
     def _handle_midi(self, event: MidiEvent) -> None:
         spec = self.layout.button(self._key)
@@ -183,11 +238,14 @@ class MvaveButtonEvent(_MvaveEventEntity):
             or event.data1 != spec.cc
         ):
             return
-        event_type = ButtonEventType.PRESS_START if event.data2 else ButtonEventType.PRESS_END
-        self._fire(event_type, controller=event.data1, channel=event.channel + 1)
+        payload = {"controller": event.data1, "channel": event.channel + 1}
+        if event.data2:
+            self._pressed(**payload)
+        else:
+            self._released(**payload)
 
 
-class MvaveKnobEvent(_MvaveEventEntity):
+class MvaveKnobEvent(_MvaveHoldableEvent):
     """One rotary encoder, reported as a direction and a number of steps.
 
     There are two encodings and the difference is not cosmetic. The factory encoders are
@@ -212,6 +270,14 @@ class MvaveKnobEvent(_MvaveEventEntity):
     """
 
     _attr_translation_key = "knob"
+    #: Off unless somebody asks for it, and it is the noise that decides that rather than
+    #: the usefulness. One turn of a knob is over a thousand MIDI messages; even coalesced
+    #: into one event per gesture, a person adjusting a lamp for ten seconds writes a row
+    #: for every pause. The surface itself consumes every turn already, so what is left
+    #: here is the raw "knob three moved four steps" that only an automation wiring the
+    #: hardware up to something else would ever want. The pads are the opposite case and
+    #: stay on: they are the thing people point automations at.
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self, coordinator: MvaveCoordinator, spec: KnobSpec, fallback: DeviceLayout

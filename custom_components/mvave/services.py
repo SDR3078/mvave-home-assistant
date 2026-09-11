@@ -10,17 +10,25 @@ disappearing with the entry.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from bleak import BleakError
 from homeassistant.const import ATTR_DEVICE_ID
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
 from .const import DOMAIN, LOGGER
+from .engine.describe import describe_page
+from .engine.frames import PAD_COUNT
 
 if TYPE_CHECKING:
     from . import MvaveConfigEntry, MvaveData
@@ -30,9 +38,19 @@ SERVICE_SEND_RAW = "send_raw"
 SERVICE_NAVIGATE = "navigate"
 SERVICE_FOCUS = "focus"
 SERVICE_HOME = "home"
+SERVICE_PRESS_SLOT = "press_slot"
+SERVICE_GET_PAGES = "get_pages"
 ATTR_DATA = "data"
 ATTR_PAGE = "page"
 ATTR_ENTITY = "entity_id"
+ATTR_SLOT = "slot"
+ATTR_ACTION = "action"
+
+#: What a simulated press can be. An enum rather than a boolean called ``hold``: the two
+#: gestures do genuinely different things, and ``hold: false`` reads like the absence of
+#: something rather than the presence of the other one.
+TAP = "tap"
+HOLD = "hold"
 
 # The device arrives through the call's target, which Home Assistant merges into the
 # data. It can be absent, null, a single id or a list of them depending on how the call
@@ -132,8 +150,23 @@ FOCUS_SCHEMA = TARGET_SCHEMA.extend({vol.Required(ATTR_ENTITY): cv.entity_id})
 
 
 def _surfaces(call: ServiceCall) -> list[SurfaceRunner]:
-    """Every surface the call is aimed at, ready to be told something."""
-    return [_data_for_device(call.hass, device_id).runner for device_id in _target_devices(call)]
+    """Every surface the call is aimed at, ready to be told something.
+
+    A surface that has not been built yet says so. It used to say nothing at all, and an
+    automation aimed at a device that was still connecting simply had no effect and left
+    nothing behind to explain why.
+    """
+    runners = []
+    for device_id in _target_devices(call):
+        data = _data_for_device(call.hass, device_id)
+        if data.runner.surface is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="surface_not_ready",
+                translation_placeholders={"address": data.coordinator.address},
+            )
+        runners.append(data.runner)
+    return runners
 
 
 async def _async_navigate(call: ServiceCall) -> None:
@@ -162,6 +195,76 @@ async def _async_home(call: ServiceCall) -> None:
         runner.drive(lambda surface: surface.go_home())
 
 
+PRESS_SLOT_SCHEMA = TARGET_SCHEMA.extend(
+    {
+        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=PAD_COUNT)),
+        vol.Optional(ATTR_ACTION, default=TAP): vol.In([TAP, HOLD]),
+    }
+)
+
+
+async def _async_press_slot(call: ServiceCall) -> None:
+    """Press a pad that nobody touched.
+
+    A **position**, on purpose, and named so nobody mistakes it for anything else. What a
+    pad means is resolved from the live registry and moves the day somebody adds a lamp to
+    a room, so a service that claimed to reach a particular light through a pad number
+    would be lying by the end of the month. Anything that wants a specific light should
+    call that light's own service; this is for driving the surface itself, which is what
+    you need when the pad is out of reach, out of battery, or not in your hands.
+    """
+    slot: int = call.data[ATTR_SLOT]
+    held = call.data[ATTR_ACTION] == HOLD
+    for runner in _surfaces(call):
+        # One based on the way in, because that is how a person counts pads; zero based
+        # everywhere inside, because that is how a frame is indexed.
+        runner.drive(lambda surface, pad=slot - 1: surface.press(pad, held=held))
+
+
+GET_PAGES_SCHEMA = TARGET_SCHEMA.extend({vol.Optional(ATTR_PAGE): cv.string})
+
+
+async def _async_get_pages(call: ServiceCall) -> ServiceResponse:
+    """Say what every page means, without having to walk to the device and look.
+
+    Pulled rather than published. This is the one thing about the surface that is both
+    bulky and almost never changing, which is exactly the shape Home Assistant already
+    moved out of entity attributes and into an action for weather forecasts, calendar
+    events and to-do items. Somebody generating a cheat sheet asks once; nobody charts it.
+    """
+    wanted: str | None = call.data.get(ATTR_PAGE)
+    response: dict[str, Any] = {}
+    for device_id in _target_devices(call):
+        data = _data_for_device(call.hass, device_id)
+        surface = data.runner.surface
+        if surface is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="surface_not_ready",
+                translation_placeholders={"address": data.coordinator.address},
+            )
+        if wanted is not None and surface.profile.page(wanted) is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_page",
+                translation_placeholders={
+                    "page": wanted,
+                    "pages": data.runner.page_names(),
+                },
+            )
+        pages = [
+            page for page in surface.profile.pages.values() if wanted is None or page.id == wanted
+        ]
+        view = data.runner.view
+        response[device_id] = {
+            "current_page": view.page_id,
+            "focus": view.focus,
+            "depth": view.depth,
+            "pages": [describe_page(page, surface.registry, surface.profile) for page in pages],
+        }
+    return response
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's services. Called once, from async_setup."""
@@ -169,3 +272,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_NAVIGATE, _async_navigate, schema=NAVIGATE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_FOCUS, _async_focus, schema=FOCUS_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_HOME, _async_home, schema=TARGET_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_PRESS_SLOT, _async_press_slot, schema=PRESS_SLOT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_PAGES,
+        _async_get_pages,
+        schema=GET_PAGES_SCHEMA,
+        # Nothing about this belongs in the state machine: it is big, it is per-call, and
+        # it changes only when somebody reconfigures the surface.
+        supports_response=SupportsResponse.ONLY,
+    )

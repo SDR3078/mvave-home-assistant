@@ -30,7 +30,74 @@
           "event_type": {
             "state": {
               "press_start": "Pressed",
-              "press_end": "Released"
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
+            }
+          }
+        }
+      },
+      "button_left": {
+        "name": "Left",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
+            }
+          }
+        }
+      },
+      "button_right": {
+        "name": "Right",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
+            }
+          }
+        }
+      },
+      "button_play": {
+        "name": "Play",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
+            }
+          }
+        }
+      },
+      "button_stop": {
+        "name": "Stop",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
+            }
+          }
+        }
+      },
+      "button_record": {
+        "name": "Record",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press_start": "Pressed",
+              "press_end": "Released",
+              "long_press_start": "Held",
+              "long_press_end": "Released after holding"
             }
           }
         }
@@ -45,6 +112,19 @@
             }
           }
         }
+      }
+    },
+    "button": {
+      "back": {
+        "name": "Back"
+      },
+      "home": {
+        "name": "Home"
+      }
+    },
+    "sensor": {
+      "focus": {
+        "name": "Focus"
       }
     }
   },
@@ -72,6 +152,9 @@
     },
     "unknown_page": {
       "message": "This surface has no page called {page}. It has: {pages}."
+    },
+    "surface_not_ready": {
+      "message": "The surface on {address} is not running yet. It builds itself once the device connects and has been read."
     }
   },
   "services": {
@@ -106,6 +189,30 @@
         "data": {
           "name": "Data",
           "description": "Hex bytes, spaced however you like. Must begin with a status byte, for example 99 24 05 to light pad 1 green."
+        }
+      }
+    },
+    "press_slot": {
+      "name": "Press a pad",
+      "description": "Press one of the sixteen pads as though a finger had. The pad is a position, not a thing: it does whatever is on that position of the page showing at the time. To act on one particular light, call that light's own action instead.",
+      "fields": {
+        "slot": {
+          "name": "Pad",
+          "description": "Which pad, counted from one, reading order: 1 is the top left and 16 is the bottom right."
+        },
+        "action": {
+          "name": "Press or hold",
+          "description": "A press does the pad's usual thing. A hold does what holding it does, which for a light is to point the knobs at it."
+        }
+      }
+    },
+    "get_pages": {
+      "name": "What the pads mean",
+      "description": "Return every page and what is on each of its sixteen pads, resolved as it stands right now. Nothing is written on this device, and a room page fills itself from whatever is in the room, so this is the only way to find out what a pad will do without walking over and pressing it.",
+      "fields": {
+        "page": {
+          "name": "Page",
+          "description": "Just this one page. Leave it empty for all of them. For a room page this is the area's id."
         }
       }
     }

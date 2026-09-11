@@ -291,7 +291,7 @@ class Surface:
             return self._turn(event)
         return self._idle()
 
-    def _press(self, event: Press) -> Outcome:
+    def _press(self, event: Press, trigger: Trigger = Trigger.PAD) -> Outcome:
         slots = self.slots()
         if not 0 <= event.pad < len(slots):
             return NOTHING_HAPPENED
@@ -310,14 +310,18 @@ class Surface:
             # one. It shudders instead, the same as one nobody can reach, so "nothing
             # happens" is never something somebody has to work out for themselves.
             return Outcome(animation=refuse(self.rendering().frame, event.pad))
-        outcome = self._perform(action, origin=event.pad, trigger=Trigger.PAD)
+        outcome = self._perform(action, origin=event.pad, trigger=trigger)
         # Fired even when the pad does nothing the engine understands, because "pad 5 was
         # held" is exactly the thing somebody wants to hang an automation on.
+        #
+        # Carrying the trigger matters as much here as it does on a page change: a press
+        # can come from a service as well as from a finger, and an automation that cannot
+        # tell the two apart will eventually trigger itself.
         return self._also(
             outcome,
             Emit(
                 EventType.PAD_HELD if event.held else EventType.PAD_PRESSED,
-                {"pad": event.pad, "entity_id": slot.entity_id},
+                {"pad": event.pad, "entity_id": slot.entity_id, "trigger": str(trigger)},
             ),
         )
 
@@ -542,6 +546,25 @@ class Surface:
     def go_home(self) -> Outcome:
         """Clear the navigation history from outside."""
         return self._perform(Home(), origin=None, trigger=Trigger.SERVICE)
+
+    def go_back(self) -> Outcome:
+        """Pop one level of navigation history from outside."""
+        return self._perform(Back(), origin=None, trigger=Trigger.SERVICE)
+
+    def press(self, pad: int, held: bool = False) -> Outcome:
+        """Press a pad that nobody touched.
+
+        A **position**, deliberately, not an entity: "whatever is on pad five right now",
+        which is the only thing about a pad that is stable. What the pad means is resolved
+        from the live registry and moves when a room gains a lamp, so an outside caller
+        naming a position is honest in a way one naming a target through a position would
+        not be. Anything that wants a specific lamp should call that lamp's own service.
+
+        The refusal, the hold, the animation and the event are all exactly what a finger
+        would get. Only the trigger differs, so an automation cannot mistake its own
+        press for a person's.
+        """
+        return self._press(Press(pad, held), trigger=Trigger.SERVICE)
 
     # ------------------------------------------------------------- navigating
 

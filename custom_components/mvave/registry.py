@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import format_mac
 
-from .const import CONF_DOMAIN_COLOURS, CONF_PAGE_COLOURS, CONF_PAGES
+from .const import CONF_DOMAIN_COLOURS, CONF_PAGE_COLOURS, CONF_PAGES, DOMAIN
 from .engine import IDENTITY, EntityState, Page, Profile, Source, SourceKind
 from .engine.palette import BLUE, DOMAIN_COLOURS
 
@@ -93,10 +95,14 @@ class HomeAssistantRegistry:
 class HomeAssistantSink:
     """Changing the world. Satisfies ``engine.ports.ActionSink``."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, event_type: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, event_type: str, address: str
+    ) -> None:
         self.hass = hass
         self.entry = entry
         self.event_type = event_type
+        self.address = address
+        self._device_id: str | None = None
 
     def call(self, domain: str, service: str, data: Mapping[str, Any]) -> None:
         """Call a service without waiting for it.
@@ -116,7 +122,32 @@ class HomeAssistantSink:
 
     def fire(self, event_type: str, data: Mapping[str, Any]) -> None:
         """Fire an event on the bus, for a page that would rather an automation decided."""
-        self.hass.bus.async_fire(self.event_type, {"type": event_type, **data})
+        device_id = self.device_id
+        payload: dict[str, Any] = {"type": event_type, **data}
+        if device_id is not None:
+            payload[ATTR_DEVICE_ID] = device_id
+        self.hass.bus.async_fire(self.event_type, payload)
+
+    @property
+    def device_id(self) -> str | None:
+        """Which device this came from, which the event has to say.
+
+        Home Assistant's own guidance on integration events is explicit that an event
+        about a device carries a ``device_id``, and without one the automation editor
+        cannot offer the event against the device somebody is looking at. The address is
+        already in the payload, but nothing in the interface is indexed by a MAC.
+
+        Looked up once and kept. The device is registered when the first entity is added,
+        which is after the surface starts, so this cannot be resolved in the constructor;
+        its id never changes afterwards.
+        """
+        if self._device_id is None:
+            device = dr.async_get(self.hass).async_get_device(
+                identifiers={(DOMAIN, format_mac(self.address))}
+            )
+            if device is not None:
+                self._device_id = device.id
+        return self._device_id
 
 
 def _usable(entry: er.RegistryEntry) -> bool:

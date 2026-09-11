@@ -109,6 +109,51 @@ implementation plan and this file is the running to-do list.
   dependency creeping in would leave it passing and meaning nothing. Verified by running
   it: 274 tests pass on 3.11 with no Home Assistant present. Plus a release check that the
   manifest version equals the tag, since HACS reads one and Home Assistant reads the other.
+- **The integration produces entities about the surface, not about the hardware.** It
+  used to be thirty event entities and a connectivity sensor, which is a description of a
+  MIDI controller rather than of a control surface. The rule that settled it, after two
+  agents surveyed what core integrations actually do: **a pad is a position, a page is a
+  thing**. What sits on pad five is resolved from the live area registry, so it moves the
+  day somebody adds a bulb to that room, with no navigation and no reconfiguration; a
+  page, a focus and a home button are facts about the profile and keep their meaning. So
+  there is a settable `select` for the page, a `sensor` for what the knobs are on, and
+  `button` entities for the two gestures a page may never rebind — and deliberately no
+  per-slot buttons, because a dashboard button labelled "Kitchen lamp" that quietly starts
+  closing a blind is the worst kind of bug and no naming scheme can prevent it. The pad
+  events stay enabled and the knob events are now off by default, which is the line core
+  itself splits along: Hue, Shelly and Z-Wave JS enable theirs and have no logic of their
+  own, while Bang & Olufsen disables around ninety per remote and ESPHome's Voice PE
+  withholds the press "used to control the device itself". Pads and buttons also report
+  `long_press_start` and `long_press_end` now, on Home Assistant's own standard strings and
+  at the same threshold the engine uses, so the entity and the surface cannot disagree
+  about what a gesture was.
+- **Two defects that had been shipping, and one absence.** Bus events carried the MAC
+  address but not a `device_id`, which Home Assistant's guidance on integration events
+  requires and which is what lets the automation editor offer an event against the device
+  somebody is looking at. The five transport buttons had hard-coded English names while
+  the pads and knobs were already translated. And there was no `logbook.py`, so every
+  transition appeared in a timeline as a row saying `mvave_event`.
+- **`mvave.get_pages`** answers the question this device creates by design. Nothing is
+  written on it and a room page fills itself from the live registry, so the running
+  integration is the only thing that can say what a pad would do — not the configuration,
+  and not anybody who was not there when it was set up. It returns the resolved answer in
+  the same vocabulary the LEDs use, including the one thing the grid physically cannot
+  say: an unreachable pad and a pad that is off are the same white. Pull-only, because
+  sixteen live slots in an entity's attributes would be a database row for every light
+  toggled anywhere on the visible page — which is the same conclusion Home Assistant
+  reached for weather forecasts, calendar events and to-do items.
+- **`mvave.press_slot`** presses a position from outside, for when the pad is out of reach
+  or out of battery. Named in hardware language on purpose so nobody mistakes it for a way
+  to reach a particular lamp, and recorded with `trigger: service` so an automation can
+  never mistake its own effect for a person.
+- **A `select.py` in a custom integration shadows the standard library.** The test
+  configuration put the integration's own directory at the *front* of `sys.path`, so
+  `import select` — which `subprocess` and `asyncio` both do — found ours. It had been
+  harmless only because pytest imports `subprocess` before it reads its own configuration.
+  The path is appended in `tests/conftest.py` now. It surfaced by hiding a second trap:
+  the same file imported as `engine.model` and as `custom_components.mvave.engine.model`
+  is two classes, so every `is` comparison between them is False and a page built through
+  one and resolved through the other comes back empty.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -141,11 +186,26 @@ implementation plan and this file is the running to-do list.
      is a lot to ask on the first day. Open.
    - **Rebuilding the profile when areas change.** It is built once, on the first connect
      after a restart, so a room added later needs a reload.
-   - **Two provisional colours to judge on the grid**: what an unreachable entity looks
-     like, currently blue, and what a scene or script pad looks like, currently green.
-     Every other colour in the language was chosen by looking at it; these two were not.
+   - **One provisional colour to judge on the grid**: what a scene or script pad looks
+     like, currently purple. Every other colour in the language was chosen by looking at
+     it; this one was not. Unreachable no longer has a colour at all — it shows white like
+     anything that is off and shudders when pressed, which was the owner's idea and buys
+     back a fifth of the vocabulary.
 4. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
+
+## Also open
+
+- **A websocket subscription for the live grid.** `mvave.get_pages` answers "what does
+  this mean" and is deliberately pull-only. A wall tablet mirroring the grid as it
+  changes wants a subscription instead, which is what `weather` does alongside its own
+  action. Nothing needs it yet.
+- **Per-pad overrides in configuration.** The engine has taken `PadConfig` since it was
+  written; there is no screen for it. Probably config subentries.
+- **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
+  applies when an entity is first registered and never again, which is correct — Home
+  Assistant does not overrule a choice somebody may have made — but it means this only
+  takes effect on a fresh setup.
 
 ## Device questions still open
 

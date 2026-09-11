@@ -40,7 +40,13 @@ class MvaveData:
 
 type MvaveConfigEntry = ConfigEntry[MvaveData]
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.EVENT,
+    Platform.SELECT,
+    Platform.SENSOR,
+]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

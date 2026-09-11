@@ -110,8 +110,10 @@ Fire `ble_midi_event` on every transition. One event type per transition, never 
 
 ```yaml
 type: page_entered | page_exited | focus_set | focus_cleared
-    | pad_pressed | pad_held | knob_turned
-device_id, address
+    | pad_pressed | pad_held | knob_turned | tagged
+device_id, address          # device_id is required by HA's own guidance on
+                            # integration events, and is what lets the automation
+                            # editor offer these against the device you are looking at
 page_id, page_title, page_source, area_id, parent_page_id, depth
 entity_id                 # focus target or toggled entity
 pad, note, velocity       # pad events only
@@ -124,26 +126,47 @@ previous: {page_id, area_id, entity_id}
 
 ### 4.2 State entities
 
-Dashboards must work without writing an automation:
+Rewritten 2026-09-11. The rule that emerged, and that the rest of this section follows from:
 
-- `select.<name>_page` — current page, settable
-- `sensor.<name>_area`, `sensor.<name>_focus`, `sensor.<name>_depth`
-- `binary_sensor.<name>_connected`
-- `event.<name>_pad`, `event.<name>_knob`
+> **A pad is a position; a page is a thing.** What sits on pad five is resolved from the live area registry, so it moves the day somebody adds a bulb to that room — no navigation, no reconfiguration, no notice. A page, a focus and a home button are facts about the profile and keep their meaning. So position may be named by position, and a target may never be.
+
+That is why there is no `button.<name>_slot_5`. A dashboard button labelled "Kitchen lamp" that quietly starts closing a blind is the worst class of bug: plausible, silent, and it does something, just not the thing anybody believes it does. No naming scheme fixes it, because the author's intent and the slot's contents move along two independent axes.
+
+What exists:
+
+| Entity | What it is for |
+|---|---|
+| `select.<name>` — the page, settable, named after the device itself | The device's main feature and the one piece of state anybody else has reason to read *or write*. Setting has to be a first-class verb: a presence sensor pre-selecting a room is navigation that nobody pressed. Depth, area, source and parent are **unrecorded attributes** on it rather than sensors of their own — nobody automates on stack depth, and three more things to scroll past in the entity picker is a real cost |
+| `sensor.<name>_focus` | Moves independently of the page, so it is a second fact, not an attribute of the first. This is also the only thing that can ever say what the eight unlabelled knobs are currently adjusting |
+| `binary_sensor.<name>_connected` | Always available, because it is the entity that reports its own outage |
+| `button.<name>_home`, `button.<name>_back` | The two gestures a page may never rebind (§3.4), which is exactly what makes them nameable — the line between a button entity that earns its place and sixteen that do not |
+| `event.<name>_pad_1…16`, `event.<name>_<transport button>` | **Enabled.** The pad is the product: "pad 5 was pressed, whatever it means today" is the standard remote-control automation and is legitimately about position |
+| `event.<name>_knob_1…8` | **Disabled by default.** One turn is over a thousand MIDI messages, and the engine consumes every one of them already. Core is split on this and the line it splits along is *does the device have an engine of its own* — Hue, Shelly and Z-Wave JS enable theirs and have none; Bang & Olufsen disables ~90 per remote and ESPHome's Voice PE withholds the press "used to control the device itself". This is the second kind |
+
+Pads and buttons report `press_start`, `press_end`, `long_press_start` and `long_press_end`, on Home Assistant's own standard strings, at the same threshold the engine uses for a hold — one constant, or an automation watching the entity and a page reacting to the gesture would disagree about what just happened.
+
+**Not an entity: the grid.** Sixteen live slots in one entity's attributes would be a database row for every light toggled anywhere on the visible page, forever. Home Assistant has had this argument three times — weather forecasts, calendar events, to-do items — and settled it the same way each time: the entity stays small, and the bulk rides an action. Hence `get_pages` below.
 
 ### 4.3 Device triggers
 
-`entered page X`, `left page X`, `focused entity`, `pad N pressed/held`, `knob N turned` — so users can bypass the engine entirely in the automation UI.
+**Not built, deliberately.** Home Assistant stopped accepting new device automations in October 2025 ("Existing device automations will continue to work but new device automations won't be accepted"). Event entities cover the same ground since 2026.4, which is when `event.received` gained the ability to trigger on a specific event type aimed at a specific entity — before that release, one event entity per pad would not have been enough on its own.
+
+A `logbook.py` describes every bus event as a sentence instead, because one event type carrying a `type` field is right for automations and unreadable in a timeline.
 
 ### 4.4 Services
 
 ```
-ble_midi.navigate(device, page_id)
-ble_midi.focus(device, entity_id)
-ble_midi.home(device)
-ble_midi.set_pad_color(device, pad, rgb)      # escape hatch
-ble_midi.send_raw(device, data)               # escape hatch
+mvave.navigate(device, page)                  # page id, not title: titles follow a rename
+mvave.focus(device, entity_id)
+mvave.home(device)
+mvave.press_slot(device, slot: 1-16, action: tap | hold)
+mvave.get_pages(device, page?) -> response    # what every pad means, right now
+mvave.send_raw(device, data)                  # escape hatch
 ```
+
+`press_slot` is named in hardware language on purpose. It presses **whatever is at that position**, and is for driving the surface when the pad is out of reach or out of battery; anything that wants one particular lamp should call that lamp's own action. Anything reaching the surface from outside is recorded with `trigger: service`, so an automation can never mistake its own effect for a person.
+
+`get_pages` is pull-only (`SupportsResponse.ONLY`), and it is the answer to the problem this device creates by design: nothing is written on it, and a room page fills itself from the live registry, so **only the running integration can say what a pad would do** — not the configuration, and not anybody who was not there when it was set up. It returns the resolved answer, in the same vocabulary the LEDs use, so a card is a dumb renderer rather than a second implementation of the colour grammar. It also answers the one question the grid physically cannot: an unreachable pad and a pad that is off are the same white.
 
 Symmetric in/out is a requirement, not a nice-to-have: presence sensors pre-selecting a room, a wall tablet steering the pad, and an automation pushing to a "movie" page when the TV turns on all depend on it.
 

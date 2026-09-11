@@ -12,6 +12,7 @@ from .const import DOMAIN
 
 if TYPE_CHECKING:
     from .coordinator import MvaveCoordinator
+    from .runner import SurfaceRunner, SurfaceView
 
 
 class MvaveEntity(Entity):
@@ -37,3 +38,30 @@ class MvaveEntity(Entity):
     def available(self) -> bool:
         """Entities are usable only while the link is up."""
         return self.coordinator.connected
+
+
+class MvaveSurfaceEntity(MvaveEntity):
+    """An entity that reports where the surface is, rather than what the hardware did.
+
+    The line between this and :class:`MvaveEntity` is the one that matters in this
+    integration. A pad is a position on a device and means whatever is on it at the time;
+    a page, a focus and a home button are facts about the *profile*, which is the thing a
+    person actually reasons about. Everything hanging off this base is addressable without
+    knowing which pad anything happens to be sitting on today.
+    """
+
+    def __init__(self, runner: SurfaceRunner, key: str) -> None:
+        """Initialise for one surface."""
+        super().__init__(runner.coordinator, key)
+        self.runner = runner
+
+    @property
+    def view(self) -> SurfaceView:
+        """Where the surface is now."""
+        return self.runner.view
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the surface, and the link it depends on."""
+        self.async_on_remove(self.runner.async_add_listener(self.async_write_ha_state))
+        # Availability comes from the link, and the surface says nothing when it drops.
+        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))

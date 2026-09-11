@@ -1,10 +1,8 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The protocol packages are imported as top-level `transport` and `devices`, not through
-# `custom_components.mvave`, whose __init__ imports Home Assistant. That keeps the
-# pure tests free of the platform, and it is exactly how they will import once the
-# protocol code moves to PyPI. "." is here for the Home Assistant facing tests.
-pythonpath = [".", "custom_components/mvave"]
+# The import paths are set in tests/conftest.py rather than here, because `pythonpath`
+# always prepends and the integration directory holds a `select.py` that would then
+# shadow the standard library module of the same name. See that file for the whole story.
 # Required by pytest-homeassistant-custom-component.
 asyncio_mode = "auto"
 
