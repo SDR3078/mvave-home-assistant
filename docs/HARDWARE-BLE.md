@@ -404,7 +404,7 @@ Toggle, 2 Momentary, 3 Program, 4 MCP, 5 Custom, 6 Comb MCP. Records run PAD1 to
 the device's own numbering, bottom-left first. Every field was confirmed by writing it and
 watching the wire or the LED (sections 6 and 7).
 
-**What the dump held** (`tests/fixtures/smc_pad_presets.bin`, decoded by
+**What the dump held**, decoded by
 `devices/smc_pad.py` and checked by `tests/test_smc_pad.py`):
 
 | Slot | Contents |

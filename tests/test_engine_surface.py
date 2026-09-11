@@ -688,3 +688,23 @@ def test_a_page_that_stopped_existing_drops_you_home() -> None:
     rebuilt.stack = kept or [smaller.root_id]
     assert rebuilt.page.id == "home"
     assert rebuilt.depth == 0
+
+
+def test_a_bar_follows_the_entity_while_it_is_up() -> None:
+    # Somebody moving the same lamp from a phone while you are holding its pad. Being
+    # shown a stale value is the kind of thing that makes people stop trusting a display.
+    view = lit_lamp()
+    view.handle(Press(0, held=True))
+    assert view.hud is not None and view.hud.value == 128 / 255
+
+    view.registry.attributes["light.lamp"] = {"brightness": 255}
+    view.settled("light.lamp")
+    assert view.hud is not None and view.hud.value == 1.0
+
+
+def test_a_bar_ignores_an_entity_it_is_not_showing() -> None:
+    view = lit_lamp()
+    view.handle(Press(0, held=True))
+    before = view.hud
+    view.settled("light.somewhere_else")
+    assert view.hud == before

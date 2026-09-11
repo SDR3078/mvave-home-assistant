@@ -297,7 +297,8 @@ services replace most of that from inside the process that already holds the lin
 
 ## 6. Open decisions
 
-1. `tests/fixtures/smc_pad_presets.bin` is a dump of the owner's own presets. Three tests
+1. ~~`tests/fixtures/smc_pad_presets.bin` is a dump of the owner's own presets.~~ Removed
+   2026-09-11, history rewritten, the tests moved to the neutral factory image. Three tests
    depend on it **[v]**, so dropping it means rewriting them. Keep or rewrite.
 2. Development interface on the LAN, which allows a phone at the pad, or loopback only.
 3. Whether the pad's service UUID is in the primary advertisement or only in the scan

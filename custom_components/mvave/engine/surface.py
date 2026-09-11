@@ -495,8 +495,25 @@ class Surface:
         return Outcome(calls=(call,))
 
     def settled(self, entity_id: str) -> None:
-        """Told by the coordinator that an entity's real state has arrived."""
+        """Told by the coordinator that an entity's real state has arrived.
+
+        A bar showing that entity follows it. While a knob is turning this changes almost
+        nothing, because what arrives is what was asked for; it matters when the entity
+        disagrees, and when somebody else moves the same lamp from a phone while the bar
+        is up. Holding a pad to look at a value and being shown a stale one is the kind of
+        thing that makes people stop trusting a display.
+        """
         self.pending.discard(entity_id)
+        showing = self.hud
+        if showing is None or showing.entity_id != entity_id:
+            return
+        state = self.registry.state_of(entity_id)
+        prop = PROPERTIES.get(showing.property_key)
+        if state is None or prop is None:
+            return
+        value = prop.read(state)
+        if value is not None:
+            self.hud = replace(showing, value=value)
 
     # --------------------------------------------------------------- outside
 

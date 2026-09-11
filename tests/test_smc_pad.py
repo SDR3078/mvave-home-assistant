@@ -1,6 +1,15 @@
-"""The SMC-PAD vendor packets and memory layout, checked against hand-computed bytes and a
-real dump of the pad's eight preset slots (tests/fixtures/smc_pad_presets.bin, read over
-Bluetooth on 2026-09-09)."""
+"""The SMC-PAD vendor packets and memory layout.
+
+Checked against hand-computed bytes and against one real preset image: the device's own
+factory default, read from slot 0 after a full reset and a power cycle on 2026-09-09.
+
+There was a second fixture, a dump of all eight of the owner's slots, and the tests that
+used it were the strongest here: they decoded configurations nobody wrote by hand. It was
+removed because it is a dump of somebody's own device, and a repository is a poor place
+for that. What replaced it is weaker in one specific way, recorded on each test below, and
+the measurements it established are in ``docs/HARDWARE-BLE.md`` rather than in a file
+anybody has to keep.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +30,7 @@ from devices.smc_pad import (
     rgb_packet_for_pad,
 )
 
-DUMP = Path(__file__).parent / "fixtures" / "smc_pad_presets.bin"
+FACTORY = Path(__file__).parent / "fixtures" / "smc_pad_factory_slot0.bin"
 
 
 def test_record_zero_red_matches_hand_computed_bytes() -> None:
@@ -129,52 +138,7 @@ def test_state_block_refuses_unseen_values() -> None:
         parse_state(bytes.fromhex("78 00 32 04 00 00 02 00 01 01 02 05 00 00 00 00"))
 
 
-# --------------------------------------------------------------- the real dump
-
-
-def slot(number: int) -> bytes:
-    return DUMP.read_bytes()[number * PRESET_SIZE : (number + 1) * PRESET_SIZE]
-
-
-def test_factory_default_slot_decodes_to_the_measured_map() -> None:
-    preset = decode_preset(slot(3))
-    assert [b.number for b in preset.buttons] == [25, 26, 27, 28, 29]
-    assert [e.cc for e in preset.encoders] == list(range(30, 46))
-    assert not any(e.relative for e in preset.encoders)
-    bank3 = preset.banks[2]
-    assert sorted(r.note for r in bank3) == list(range(36, 52))
-    assert {r.type for r in bank3} == {"Note"}
-    assert {r.led for r in bank3} == {LED_NONE}
-    assert {r.rgb for r in bank3} == {(0xF0, 0x00, 0xF0)}
-    assert preset.pad(1, bank=3).note == 36 and preset.pad(16, bank=3).note == 51
-
-
-def test_sequencer_slot_matches_the_ableton_reference() -> None:
-    preset = decode_preset(slot(0))
-    assert [b.number for b in preset.buttons] == [120, 121, 117, 118, 119]
-    assert [e.cc for e in preset.encoders] == [
-        7,
-        8,
-        5,
-        6,
-        3,
-        4,
-        1,
-        2,
-        15,
-        16,
-        13,
-        14,
-        11,
-        12,
-        9,
-        10,
-    ]
-    assert all(e.relative for e in preset.encoders)
-    bank3 = preset.banks[2]
-    assert sorted(r.note for r in bank3) == list(range(101, 117))
-    assert {r.type for r in bank3} == {"MCP"}
-    assert all(r.led == r.note for r in bank3), "MCP records carry Led equal to their note"
+# ------------------------------------------------- what a rewrite reads back as
 
 
 def test_field_packets_target_the_right_bytes() -> None:
@@ -237,8 +201,73 @@ def test_factory_reset_image_is_the_pristine_default() -> None:
         assert {(r.min_velocity, r.max_velocity) for r in bank} == {(0, 127)}
 
 
-def test_experiment_slot_holds_the_type_dropdown_in_order() -> None:
-    preset = decode_preset(slot(6))
-    types = [preset.pad(n, bank=3).type for n in range(1, 8)]
-    assert types == ["Note", "MCP", "Comb MCP", "Custom", "CC Toggle", "Momentary", "Program"]
-    assert preset.pad(1, bank=3).led == 36, "Led set to the note by hand in MidiSuite"
+def test_a_type_byte_decodes_to_the_type_it_was_measured_to_mean() -> None:
+    """Pins what each type byte means, which is not the order the editor lists them in.
+
+    Weaker than it was. A slot configured by hand with one of each type proved the *device*
+    numbers them this way; writing the numbers and reading the names back only proves this
+    package has not renumbered them since. The measurement is in HARDWARE-BLE.md section 5.
+    """
+    from devices.smc_pad import PAD_BANK_SIZE, PAD_RECORD_SIZE, PAD_TABLE_OFFSET, PAD_TYPE_OFFSET
+
+    image = bytearray(FACTORY.read_bytes())
+    bank = PAD_TABLE_OFFSET + 2 * PAD_BANK_SIZE  # bank 3
+    for index in range(7):
+        image[bank + index * PAD_RECORD_SIZE + PAD_TYPE_OFFSET] = index
+
+    preset = decode_preset(bytes(image))
+    assert [preset.pad(n, bank=3).type for n in range(1, 8)] == [
+        "Note",
+        "CC Toggle",
+        "Momentary",
+        "Program",
+        "MCP",
+        "Custom",
+        "Comb MCP",
+    ]
+
+
+def test_arming_a_bank_reads_back_as_armed() -> None:
+    """The round trip the integration depends on at every connect.
+
+    Replaces a test that decoded the owner's own Ableton preset, which carried MCP pads
+    and relative encoders that nobody wrote by hand. This proves less about what a device
+    can hold and more about the pair of functions that actually matter: what the
+    integration writes is what the decoder reads back.
+    """
+    from devices.smc_pad import PAD_BANK_SIZE, PAD_TABLE_OFFSET, armed_pad_bank
+
+    image = bytearray(FACTORY.read_bytes())
+    start = PAD_TABLE_OFFSET + 2 * PAD_BANK_SIZE
+    image[start : start + PAD_BANK_SIZE] = armed_pad_bank(bytes(image), bank=3)
+
+    bank = decode_preset(bytes(image)).banks[2]
+    assert {record.type for record in bank} == {"Note"}
+    assert all(record.led == record.note for record in bank), "every pad answers to its own note"
+    # Only bank 3 was touched; the rest of the owner's configuration is left alone.
+    assert {record.led for record in decode_preset(bytes(image)).banks[1]} == {LED_NONE}
+
+
+def test_switching_the_encoders_to_relative_reads_back_as_relative() -> None:
+    """The other half of the same round trip.
+
+    Absolute encoders saturate and then send nothing, so this write is the difference
+    between a knob that works and one that stops. The controller numbers must survive it:
+    the entities match on those.
+    """
+    from devices.smc_pad import (
+        ENCODER_TABLE_OFFSET,
+        ENCODER_TABLE_SIZE,
+        relative_encoder_table,
+    )
+
+    image = bytearray(FACTORY.read_bytes())
+    before = [record.cc for record in decode_preset(bytes(image)).encoders]
+    image[ENCODER_TABLE_OFFSET : ENCODER_TABLE_OFFSET + ENCODER_TABLE_SIZE] = (
+        relative_encoder_table(bytes(image))
+    )
+
+    encoders = decode_preset(bytes(image)).encoders
+    assert all(record.relative for record in encoders)
+    assert {(record.minimum, record.maximum) for record in encoders} == {(63, 65)}
+    assert [record.cc for record in encoders] == before, "a rewrite must not move a knob"

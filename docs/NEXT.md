@@ -118,11 +118,7 @@ implementation plan and this file is the running to-do list.
 
 ## Build
 
-1. **Repository.** Decide whether `tests/fixtures/smc_pad_presets.bin`, which holds the
-   owner's own presets, stays in a public repo; three tests depend on it, and
-   `smc_pad_factory_slot0.bin` is the neutral one. That is the last thing standing between
-   here and pushing this somewhere, and it is a cheap rewrite now and an expensive one
-   later. Also still missing: a README.
+1. **Repository.** A README, and then this can be pushed somewhere.
 2. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
    unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
    MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
