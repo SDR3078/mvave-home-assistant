@@ -1,0 +1,214 @@
+# M-Vave for Home Assistant
+
+Turns an **M-Vave SMC-PAD** — an inexpensive Bluetooth LE MIDI pad controller — into a
+control surface for your house. Sixteen backlit pads, eight endless encoders and five
+transport buttons become a physical way to walk through your rooms, switch things on and
+off, and dim a lamp with your hand rather than your phone.
+
+No cloud, no polling, no MIDI software in between. Home Assistant connects to the pad over
+Bluetooth, reads the device's own configuration out of its memory, and drives the LEDs
+directly.
+
+> **Status: works, not yet released.** Everything below is running on real hardware. The
+> interfaces are settled; per-pad configuration is not built yet. See
+> [`docs/NEXT.md`](docs/NEXT.md) for what is left.
+
+---
+
+## What it looks like on the device
+
+You get a **grid of pages**. One page per room, plus an index listing them.
+
+- Press a room on the index and it opens: the page **grows out of the pad you pressed**,
+  ring by ring, then a curtain opens left to right. Going back runs the same thing in
+  reverse, shrinking into the pad the room lives on.
+- Inside a room, every pad is something in that room. **Tap** toggles it. **Hold** points
+  the knobs at it.
+- **Turn a knob** and a value bar covers the whole grid for a second — sixteen pads filling
+  from the bottom — then snaps back to the page.
+- The **left** transport button is back, held is home. **Stop** is home. A button is lit
+  only when pressing it would do something.
+- Leave it alone inside a room for thirty seconds and it returns to the index quietly —
+  no animation, no flash, because nothing happened and it must not look like it did.
+
+Nothing needs configuring for this to work. A fresh install builds a page per room out of
+your area registry and fills each one from what is actually in that room.
+
+## What the colours mean
+
+This is the whole language, and it is short because the hardware is unforgiving — see
+[the constraint](#the-constraint-that-shapes-everything) below.
+
+| The pad shows | It means |
+|---|---|
+| **Its own colour** | the thing behind it is **on**. Orange for lights and switches, blue for media players, green for covers, red for thermostats and locks, purple for scenes and scripts. All configurable |
+| **White** | the thing behind it is **off**. Never configurable — the readability of every page rests on this one rule |
+| **Dark** | nothing is assigned here. Pressing it does nothing |
+| **Breathing slowly** | the knobs are pointed at this one |
+| **Blinking fast** | commanded, not yet confirmed. It stops as soon as the entity reports back |
+| **Three quick blinks under your finger** | it refused: either nobody can reach that entity, or this pad genuinely does nothing |
+
+"Is anything still on in the kitchen?" becomes "is any pad not white", which is one glance.
+
+## The knobs
+
+Eight relative encoders, no rings, no markings. The assignment is **fixed everywhere**, so
+muscle memory works: knob one is brightness on every page, whatever you are looking at.
+
+| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|
+| brightness | colour temp | hue | saturation | volume | cover position | setpoint | whatever that entity's main value is |
+
+A knob pointed at something without that property is **inert** rather than falling back to
+something else. A page may redirect a knob to a different *entity* ("volume here always
+means the kitchen speaker"), never to a different property.
+
+Turning a knob moves the light **while you turn**, throttled to about seven commands a
+second. For comparison, Home Assistant's own brightness slider sends nothing at all until
+you let go, and its colour-temperature wheel sends two a second.
+
+---
+
+## Installing
+
+**HACS** (recommended): add `https://github.com/SDR3078/mvave-home-assistant` as a custom
+repository of type *Integration*, install, restart.
+
+**By hand:** copy `custom_components/mvave` into your `config/custom_components/`, restart.
+
+Then: switch the pad on, make sure nothing else is connected to it, and Home Assistant
+should discover it. Otherwise add it from **Settings → Devices & services → Add
+integration → M-Vave**.
+
+You need a Bluetooth adapter or an ESPHome Bluetooth proxy in range. The pad accepts one
+connection at a time and stops advertising while it is held, which is normal and is why the
+connectivity sensor reads the link directly rather than trusting the Bluetooth integration's
+view of it.
+
+### Configuring
+
+**Settings → Devices & services → M-Vave → Configure**, three screens:
+
+1. **Rooms** — which areas get a page, in the order they appear on the index.
+2. **Room colours** — one colour each. Also the colour of the curtain that sweeps in and out.
+3. **What things look like** — a colour per kind of thing, the same in every room.
+
+Saving rebuilds the surface in place and keeps you on the page you were standing on. It does
+not reconnect, which would cost twenty seconds.
+
+White is never offered, because white is what "off" means.
+
+---
+
+## What it gives Home Assistant
+
+### Entities
+
+The rule everything follows from: **a pad is a position; a page is a thing.** What sits on
+pad five is resolved from your live area registry, so it moves the day you add a bulb to
+that room. A page, a focus and a home button are facts about the profile and keep their
+meaning. So position may be named by position, and a target may never be.
+
+| Entity | |
+|---|---|
+| `select.<device>` | the page showing now, **settable**. Push the surface to a room from an automation, or read where somebody is standing |
+| `sensor.<device>_focus` | which entity the knobs are on |
+| `binary_sensor.<device>_connected` | the link |
+| `button.<device>_home`, `_back` | the two gestures a page may never rebind |
+| `event.<device>_pad_1…16` | one per pad: `press_start`, `press_end`, `long_press_start`, `long_press_end` |
+| `event.<device>_left`, `_right`, `_play`, `_stop`, `_record` | same, for the transport buttons |
+| `event.<device>_knob_1…8` | direction and step count. **Disabled by default** — one turn is over a thousand MIDI messages and the surface consumes them all already |
+
+There is deliberately no entity per *slot*. A dashboard button labelled "Kitchen lamp" that
+quietly starts closing a blind is the worst kind of bug, and no naming scheme prevents it.
+
+### Actions
+
+```yaml
+mvave.navigate:    {device_id, page}                      # page id, not title
+mvave.focus:       {device_id, entity_id}
+mvave.home:        {device_id}
+mvave.press_slot:  {device_id, slot: 1-16, action: tap|hold}
+mvave.get_pages:   {device_id, page?}                     # returns a response
+mvave.send_raw:    {device_id, data}                      # raw MIDI, escape hatch
+```
+
+`mvave.get_pages` is the answer to the problem this device creates by design: **nothing is
+written on it**, and a room page fills itself from the live registry, so the running
+integration is the only thing that can say what a pad would do. It returns every page and
+every pad, resolved, in the same vocabulary the LEDs use:
+
+```yaml
+slot: 1
+entity_id: light.ceiling_lights
+name: Ceiling Lights
+tap: toggle
+hold: focus
+shows: "on"        # on | off | unreachable | action | empty
+colour: orange
+```
+
+Including the one thing the grid physically cannot say: an unreachable pad and a pad that
+is off are both white.
+
+`mvave.press_slot` presses a **position**, for when the pad is out of reach or out of
+battery. Anything that wants one particular lamp should call that lamp's own action.
+
+### Events
+
+Every transition fires `mvave_event` with a `device_id`, and carries a `trigger` of `pad`,
+`button`, `service` or `idle` — so an automation can never mistake its own effect for a
+person. A logbook platform renders each one as a sentence.
+
+---
+
+## The constraint that shapes everything
+
+Measured on the hardware, and recorded in [`docs/HARDWARE-BLE.md`](docs/HARDWARE-BLE.md):
+
+**There is no brightness channel on this device by any route.** Not in the palette, which is
+pastel throughout with no shade families. Not on the MIDI channel, which is ignored on all
+sixteen. Not by switching a pad fast enough to average it, which reads as flicker. The
+vendor path that does dim is dimmer at every hue and manages about five full-grid updates a
+second against sixty, so it cannot animate.
+
+So "colour is identity, brightness is state" — which is how every design of this kind starts
+— **cannot be built**. What is left is five distinguishable colours plus white and dark,
+position, and slow motion. Every rule above is a consequence of that budget, and every one
+of them was judged by eye on the physical grid rather than reasoned about.
+
+---
+
+## Development
+
+```bash
+scripts/setup      # devcontainer dependencies
+scripts/develop    # Home Assistant with this integration loaded
+pytest tests       # 336 tests
+ruff check . && ruff format --check . && mypy
+```
+
+`transport/`, `devices/` and `engine/` import as **top-level packages with no Home
+Assistant present** — no platform imports, no I/O, no clock. CI runs them on Python 3.11
+through 3.14 with a step that *fails* if `homeassistant` is importable, because the point of
+that job is the absence. That seam is what makes the hard parts cheap to test: "what does
+the grid do when three lamps in a room go unavailable" is one line and needs no radio.
+
+Two scripts hold a live link to the pad, which is what made designing by eye possible —
+reconnecting between questions costs twenty seconds:
+
+- `scripts/led_console.py` — takes one instruction at a time and renders frames, rhythms,
+  bars and transitions. It can freeze an animation on a single step and log how long each
+  frame was actually on screen.
+- `scripts/surface_demo.py` — drives the real pad from the real engine against a pretend house.
+
+**Nothing written to the pad is permanent.** Every device write is a volatile RAM edit, so a
+power cycle restores your own presets exactly.
+
+Further reading: [`ble-midi-surface-design.md`](ble-midi-surface-design.md) is the design
+brief, [`docs/HARDWARE-BLE.md`](docs/HARDWARE-BLE.md) is everything measured about the
+protocol, and [`docs/NEXT.md`](docs/NEXT.md) is the running to-do list.
+
+## Licence
+
+MIT. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
