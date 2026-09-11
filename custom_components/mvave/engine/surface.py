@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
-from .frames import Frame, collapse, expand, value_bar, wipe
+from .frames import Frame, collapse, expand, refuse, value_bar, wipe
 from .model import (
     Activate,
     Back,
@@ -289,8 +289,14 @@ class Surface:
         if not 0 <= event.pad < len(slots):
             return NOTHING_HAPPENED
         slot = slots[event.pad]
-        if slot is None or not self._reachable(slot):
+        if slot is None:
             return NOTHING_HAPPENED
+        if not self._reachable(slot):
+            # It looks the same as one that is off, because it has to look like something
+            # and a colour reserved for "unreachable" would cost a fifth of the whole
+            # vocabulary. It says so under the finger instead, which is the only moment
+            # anybody can act on it.
+            return Outcome(animation=refuse(self.rendering().frame, event.pad))
         action = slot.hold if event.held else slot.tap
         outcome = self._perform(action, origin=event.pad, trigger=Trigger.PAD)
         # Fired even when the pad does nothing the engine understands, because "pad 5 was
@@ -306,10 +312,9 @@ class Surface:
     def _reachable(self, slot: Slot) -> bool:
         """Whether pressing this pad could do anything.
 
-        A pad showing an unreachable entity is inert rather than merely unhelpful. Sending
-        a command that cannot arrive would leave it moving forever waiting for a
-        confirmation that is never coming, and a pad that looks broken and then behaves
-        broken is at least honest.
+        A pad showing an unreachable entity refuses rather than pretending. Sending a
+        command that cannot arrive would leave it moving forever waiting for a
+        confirmation that is never coming.
 
         Scenes and scripts are exempt. Their resting state in Home Assistant is "unknown",
         which is not the same as unreachable, and they are exactly the pads people press.

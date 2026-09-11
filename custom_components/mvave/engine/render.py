@@ -15,7 +15,7 @@ from typing import Final
 
 from .frames import Frame, overlay
 from .model import Nothing, Page, Slot
-from .palette import ACTION, OFF, ON, STATE_OFF, UNASSIGNED, UNAVAILABLE
+from .palette import ACTION, ON, STATE_OFF, UNASSIGNED, colour_for
 from .ports import RegistryView
 from .rhythms import ALERT, BREATHE, Motion
 
@@ -62,47 +62,53 @@ class Rendering:
 def colour_of(slot: Slot | None, registry: RegistryView) -> int:
     """What one pad shows, before anything starts moving.
 
-    The order matters. A slot with a colour forced on it never reflects state at all. A
-    missing entity is rendered the same as an unreachable one, because from where a person
-    is standing they are the same thing: pressing it will not work.
+    Colour says what it is and white says it is off, so a pad's own colour appears only
+    when the thing behind it is on. A pad with nothing behind it that can be on or off, a
+    navigation pad or a bare action, simply shows its colour all the time.
     """
     if slot is None:
         return UNASSIGNED
-    if slot.colour is not None:
-        return slot.colour
 
     entity_id = slot.entity_id
     if entity_id is None:
         # Something without an entity behind it: a bare service call, an event for an
-        # automation to catch, a navigation pad with no colour of its own.
+        # automation to catch, a navigation pad. Nothing to be on or off about.
+        if slot.colour is not None:
+            return slot.colour
         return UNASSIGNED if isinstance(slot.tap, Nothing) else ACTION
 
     state = registry.state_of(entity_id)
-    if state is None:
-        # Nothing by that id exists at all, which is a configuration mistake rather than a
-        # flat battery. It shows the same either way, because pressing it will not work.
-        return UNAVAILABLE
     if slot.is_stateless:
         # Checked before the state, not after. A scene that has never been run reports
-        # "unknown", and calling that unreachable would light half a fresh grid as broken.
-        return ACTION
-    if state.is_opaque:
-        return UNAVAILABLE
-    return ON if state.is_active else STATE_OFF
+        # "unknown", and it has no on and off to report anyway.
+        return own_colour(slot)
+    if state is None or state.is_opaque:
+        # An entity nobody can reach shows the same as one that is off, and says so only
+        # when it is pressed, by refusing under the finger. A colour reserved for this
+        # would cost a fifth of the vocabulary for something rare and usually temporary.
+        return STATE_OFF
+    return own_colour(slot) if state.is_active else STATE_OFF
 
 
-def counterpart(colour: int) -> int:
+def counterpart(colour: int, slot: Slot | None = None) -> int:
     """The colour a moving pad alternates with.
 
-    For an entity, the other of the two state colours, so a pad that is being switched
-    swings between on and off rather than blinking to darkness. Anything else falls back to
-    off, because there is no second state for it to be between.
+    The other of its two states, so a pad being switched swings between on and off rather
+    than blinking to darkness. Off is white for everything, and on is whatever that pad's
+    own colour is, which is why this needs the slot rather than just the colour it happens
+    to be showing at this instant.
     """
-    if colour == ON:
-        return STATE_OFF
     if colour == STATE_OFF:
-        return ON
-    return OFF
+        return own_colour(slot)
+    return STATE_OFF
+
+
+def own_colour(slot: Slot | None) -> int:
+    """What a pad shows when what is behind it is on."""
+    if slot is not None and slot.colour is not None:
+        return slot.colour
+    entity_id = slot.entity_id if slot is not None else None
+    return ON if entity_id is None else colour_for(entity_id.split(".", 1)[0])
 
 
 def render(
@@ -118,12 +124,12 @@ def render(
     rhythms: dict[int, Motion] = {}
     for index, slot in enumerate(slots):
         entity_id = slot.entity_id if slot is not None else None
-        # Only a pad that is in one of the two states can be shown moving between them.
-        # Anything else has no second colour to swing to, and swinging to darkness is what
+        # Only a pad that is in one of its two states can be shown moving between them.
+        # A stateless pad has nothing to be between, and swinging to darkness is what
         # makes a pad look like it is failing rather than working.
-        if entity_id is None or frame[index] not in (ON, STATE_OFF):
+        if entity_id is None or (slot is not None and slot.is_stateless):
             continue
-        other = counterpart(frame[index])
+        other = counterpart(frame[index], slot)
         # A pending command outranks focus. Both are true at once often enough, and the
         # one that needs answering is "did that actually happen".
         if entity_id in view.pending:

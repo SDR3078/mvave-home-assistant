@@ -29,7 +29,7 @@ from engine.model import (
     SourceKind,
     Toggle,
 )
-from engine.palette import ACTION, BLUE, GREEN, ON, ORANGE, RED, STATE_OFF, UNASSIGNED, UNAVAILABLE
+from engine.palette import BLUE, GREEN, ON, ORANGE, PURPLE, STATE_OFF, UNASSIGNED
 from engine.render import (
     BACK_BUTTON,
     HOME_BUTTON,
@@ -238,23 +238,52 @@ def test_an_index_is_one_pad_per_page_in_that_page_s_own_colour() -> None:
 # ---------------------------------------------------------------------- rendering
 
 
-def test_a_page_shows_on_off_unassigned_and_unreachable_as_four_different_things() -> None:
+def test_a_page_shows_on_off_and_nothing_assigned_as_three_different_things() -> None:
     registry = FakeRegistry(
-        areas={"living": ("light.on", "light.off", "light.gone")},
-        states={"light.on": "on", "light.off": "off", "light.gone": "unavailable"},
+        areas={"living": ("light.on", "light.off")},
+        states={"light.on": "on", "light.off": "off"},
     )
     living = page(source=Source(SourceKind.AREA, "living"))
     frame = render(living, resolve(living, registry, EMPTY), registry).frame
-    assert frame[:4] == (ON, STATE_OFF, UNAVAILABLE, UNASSIGNED)
-    assert len(set(frame[:4])) == 4
+    assert frame[:3] == (ON, STATE_OFF, UNASSIGNED)
+    assert len(set(frame[:3])) == 3
 
 
-def test_an_entity_that_does_not_exist_looks_the_same_as_one_that_cannot_be_reached() -> None:
-    # From where a person is standing they are the same thing: pressing it will not work.
-    registry = FakeRegistry(areas={"living": ("light.typo",)})
+def test_a_pad_carries_the_colour_of_what_is_behind_it_only_while_it_is_on() -> None:
+    # Colour says what it is, white says it is off. That split is what lets a pad have a
+    # colour of its own without state losing its channel.
+    registry = FakeRegistry(
+        areas={"living": ("media_player.tv", "cover.blind", "climate.heat")},
+        states={"media_player.tv": "playing", "cover.blind": "open", "climate.heat": "off"},
+    )
     living = page(source=Source(SourceKind.AREA, "living"))
     frame = render(living, resolve(living, registry, EMPTY), registry).frame
-    assert frame[0] == UNAVAILABLE
+    assert frame[:3] == (BLUE, GREEN, STATE_OFF)
+
+
+def test_a_pad_can_be_given_a_colour_of_its_own() -> None:
+    registry = FakeRegistry(states={"light.a": "on", "light.b": "off"})
+    pinned = page(
+        pads={
+            0: PadConfig(tap=Toggle("light.a"), colour=GREEN),
+            1: PadConfig(tap=Toggle("light.b"), colour=GREEN),
+        }
+    )
+    frame = render(pinned, resolve(pinned, registry, EMPTY), registry).frame
+    # Its own colour when on, and white when off like everything else.
+    assert frame[:2] == (GREEN, STATE_OFF)
+
+
+def test_an_entity_nobody_can_reach_looks_like_one_that_is_off() -> None:
+    # It has to look like something, and a colour reserved for it would cost a fifth of
+    # the whole vocabulary for a condition that is rare and usually temporary. It says so
+    # under the finger instead, which is the only moment anybody can act on it.
+    registry = FakeRegistry(
+        areas={"living": ("light.typo", "light.flat")}, states={"light.flat": "unavailable"}
+    )
+    living = page(source=Source(SourceKind.AREA, "living"))
+    frame = render(living, resolve(living, registry, EMPTY), registry).frame
+    assert frame[:2] == (STATE_OFF, STATE_OFF)
 
 
 def test_a_scene_that_has_never_been_run_is_not_broken() -> None:
@@ -267,16 +296,9 @@ def test_a_scene_that_has_never_been_run_is_not_broken() -> None:
     )
     living = page(source=Source(SourceKind.AREA, "living"))
     frame = render(living, resolve(living, registry, EMPTY), registry).frame
-    assert frame[0] == ACTION
+    assert frame[0] == PURPLE
     # A script does have a lasting state: it is on while it is running.
     assert frame[1] == STATE_OFF
-
-
-def test_a_forced_colour_opts_a_pad_out_of_state_entirely() -> None:
-    registry = FakeRegistry(states={"light.a": "on"})
-    pinned = page(pads={0: PadConfig(tap=Toggle("light.a"), colour=RED)})
-    frame = render(pinned, resolve(pinned, registry, EMPTY), registry).frame
-    assert frame[0] == RED
 
 
 def test_the_focused_pad_breathes_and_nothing_else_moves() -> None:
@@ -360,17 +382,17 @@ def test_nothing_that_moves_ever_blinks_an_entity_to_darkness() -> None:
     view = ViewState(focus="light.on", pending=frozenset({"light.off"}))
     rhythms = render(living, slots, registry, view).rhythms
     assert rhythms[0].other == STATE_OFF
-    assert rhythms[1].other == ON
+    assert rhythms[1].other == ORANGE
     assert all(motion.other != UNASSIGNED for motion in rhythms.values())
 
 
-def test_a_pad_that_is_in_neither_state_never_moves_at_all() -> None:
-    # Blue means "there is nothing true to say about this". A blue pad blinking to black
-    # says something, and what it says is wrong.
-    registry = FakeRegistry(areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"})
+def test_a_pad_with_no_two_states_never_moves_at_all() -> None:
+    # A scene has nothing to be between, and swinging to darkness is what makes a pad look
+    # like it is failing rather than working.
+    registry = FakeRegistry(
+        areas={"living": ("scene.evening",)}, states={"scene.evening": "unknown"}
+    )
     living = page(source=Source(SourceKind.AREA, "living"))
     slots = resolve(living, registry, EMPTY)
-    view = ViewState(focus="light.gone", pending=frozenset({"light.gone"}))
-    rendering = render(living, slots, registry, view)
-    assert rendering.frame[0] == UNAVAILABLE
-    assert rendering.rhythms == {}
+    view = ViewState(focus="scene.evening", pending=frozenset({"scene.evening"}))
+    assert render(living, slots, registry, view).rhythms == {}

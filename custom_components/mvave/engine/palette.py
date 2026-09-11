@@ -14,6 +14,7 @@ which reads as flicker. So state is carried by colour, by position and by slow m
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Final
 
 #: Off. Velocity 127 is a second off, and 96 to 126 leave the pad unchanged, so neither
@@ -35,10 +36,12 @@ WHITE: Final = 40
 #: under red-green colour vision deficiency.
 IDENTITY: Final = (BLUE, PURPLE, GREEN, ORANGE, RED)
 
-#: What an entity looks like inside a page. One pair everywhere, learned once, whatever
-#: page you are on, which is also what Home Assistant's own interface does with amber and
-#: grey. These never have to be told apart from the IDENTITY colours above, because an
-#: index page has no on and off and a page has no rooms.
+#: What an entity looks like inside a page.
+#:
+#: **Colour says what it is, white says it is off.** That split is what lets a pad carry
+#: its own colour without state losing its channel: the question "is anything on in here"
+#: stays answerable at a glance, because it becomes "is that pad white". White is the one
+#: value that is never configurable, and the whole readability of a page rests on it.
 ON: Final = ORANGE
 STATE_OFF: Final = WHITE
 
@@ -46,22 +49,39 @@ STATE_OFF: Final = WHITE
 #: nothing, and it must not look like an entity that happens to be switched off.
 UNASSIGNED: Final = OFF
 
-#: An entity the surface cannot say anything true about: unreachable, or never yet heard
-#: from. It must not look like off, or the first thing a person does is press it and
-#: wonder why nothing happened.
+#: What a pad shows when it is on, by the domain of what is behind it. A default only:
+#: any pad can be given a colour of its own, and any of these can be changed.
 #:
-#: **Provisional.** Blue and green are free on a page, because identity colours only ever
-#: appear on an index, and the two never share a screen. Which of them should carry which
-#: meaning has not been judged on the physical grid yet, unlike everything else in this
-#: file. Blinking was considered and rejected: blinking already means "commanded but not
-#: confirmed", and one flaky Zigbee coordinator would otherwise set the whole grid moving,
-#: which is the documented way these surfaces become unreadable.
-UNAVAILABLE: Final = BLUE
+#: Purple appears only where the entity is stateless. Everything with an on and an off
+#: shows white when it is off, and purple against white is the one pair that was reported
+#: as too close on the physical grid, so a lamp coloured purple would be unreadable
+#: exactly when it mattered. A scene never shows white and so never runs into that.
+DOMAIN_COLOURS: Final[Mapping[str, int]] = {
+    "light": ORANGE,
+    "switch": ORANGE,
+    "input_boolean": ORANGE,
+    "fan": ORANGE,
+    "siren": ORANGE,
+    "media_player": BLUE,
+    "cover": GREEN,
+    "climate": RED,
+    "lock": RED,
+    "alarm_control_panel": RED,
+    "vacuum": RED,
+    "scene": PURPLE,
+    "script": PURPLE,
+    "button": PURPLE,
+    "input_button": PURPLE,
+}
 
-#: A pad that starts something rather than switching something: a scene, a script, a bare
-#: event for an automation to catch. There is nothing for it to reflect afterwards, so it
-#: cannot be on or off. **Provisional**, on the same terms as UNAVAILABLE above.
-ACTION: Final = GREEN
+#: For anything not listed, and for a pad with no entity behind it at all.
+ACTION: Final = ORANGE
+
+
+def colour_for(domain: str) -> int:
+    """The colour a domain shows when it is on, before any configuration is applied."""
+    return DOMAIN_COLOURS.get(domain, ACTION)
+
 
 #: Bar colours, one flat colour per property rather than a gradient. Every ramp the design
 #: originally wanted needed many graded steps along one hue, which needs a brightness or a

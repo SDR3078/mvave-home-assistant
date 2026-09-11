@@ -183,8 +183,9 @@ class PadConfig:
 
     tap: PadAction = NOTHING
     hold: PadAction = NOTHING
-    #: Force a colour rather than deriving one from state. Rarely wanted, and it opts the
-    #: pad out of ever showing whether anything is on.
+    #: What this pad shows when what is behind it is on, overriding the default for its
+    #: domain. Off is always white and is not configurable: the whole readability of a page
+    #: rests on "is that pad white" answering "is it on".
     colour: int | None = None
 
 

@@ -168,6 +168,32 @@ def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
     return sweep(column_order(), (colour,) * PAD_COUNT, arriving)
 
 
+#: How a pad says no. Three blinks, each half held for two frames, so it lasts a little
+#: over a quarter of a second and is plainly a reaction rather than a state.
+REFUSAL_BLINKS: Final = 3
+REFUSAL_HOLD: Final = 2
+
+
+def refuse(frame: Frame, pad: int) -> tuple[Frame, ...]:
+    """One pad shuddering to say nothing will happen, then going back to what it was.
+
+    This is the whole treatment for an entity nobody can reach. A colour reserved for it
+    would cost one of the five the grid has, permanently, for a condition that is rare and
+    usually temporary, and it would still only tell somebody something they can act on at
+    the moment they try. A refusal under the finger says it when it is useful and says
+    nothing the rest of the time.
+
+    It cannot add to the density problem either: only the pad being pressed can refuse, and
+    it is finished before anybody looks away.
+    """
+    dark = overlay(frame, pad, OFF)
+    return tuple(
+        state
+        for _ in range(REFUSAL_BLINKS)
+        for state in (*(dark,) * REFUSAL_HOLD, *(frame,) * REFUSAL_HOLD)
+    )
+
+
 def value_bar(fraction: float, colour: int, track: int = OFF) -> Frame:
     """A level, drawn as a run of lit pads growing upward from the bottom row.
 

@@ -168,9 +168,10 @@ That separation is what makes five colours enough. Identity colours live on the 
 |---|---|---|
 | Index: each room or page | one of **blue, green, orange, red-pink, purple** | the five that survived being shown together, scattered, across a room |
 | Index: beyond five pages | colours repeat, **fixed position identifies** | a sixth colour always collapsed into one of the five; position is a free channel and survives colour blindness |
-| Page: entity on | **orange** | one pair everywhere, learned once, independent of which page you are on. Matches Home Assistant's own amber for active |
-| Page: entity off | **white** | the only value distinct from all of blue, green, orange and red-pink |
+| Page: entity on | **its own colour**, defaulting by domain: orange for lights and switches, blue for a media player, green for a cover, red for a thermostat or a lock, purple for a scene or a script. Overridable per pad | Colour says what it is. It appears only while the thing is on, which is what lets a pad carry identity without state losing its channel |
+| Page: entity off | **white**, always, never configurable | The whole readability of a page rests on this. "Is anything on in here" becomes "is that pad white", which is one glance and one rule. It is also why purple is only ever a default for something stateless: purple against white is the one pair reported as too close, and a lamp coloured purple would be unreadable exactly when it mattered |
 | Page: nothing assigned | **dark** | pressing it does nothing, and it must not look like an entity that is off. This is why "off" cannot also be dark |
+| Page: entity nobody can reach | **white**, like one that is off, and it **shudders when pressed**: three quick blinks to dark and back, a little over a quarter of a second | A colour reserved for this would cost a fifth of the entire vocabulary, permanently, for a condition that is rare and usually temporary, and it would still only tell somebody something they can act on at the moment they try. A refusal under the finger says it exactly then and says nothing the rest of the time. It cannot add to the density problem either: only the pad being pressed can refuse, and it is over before anybody looks away |
 | Focused pad, the knob target | **breathing between on and off**: 1.4 s period, its own colour for about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
 | Waiting, commanded but not confirmed | **swinging between on and off**, about 2 Hz | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
 | `back` available | **left button lit** | see §1 |
@@ -184,7 +185,9 @@ That separation is what makes five colours enough. Identity colours live on the 
 
 **A pad only goes solid once the entity's real state arrives.** The surface is deliberately not optimistic: it never claims a lamp changed because somebody asked. The cost is that a slow cloud-connected device will swing for as long as it takes to answer, and there is as yet **no timeout** on that, which is the coordinator's job rather than the engine's since the engine has no clock.
 
-**Known collision, accepted.** A page whose identity colour is orange has a curtain (§5.3) the same colour as its own switched-on entities, so the curtain's edge is invisible on those pads for the length of the transition. It is transient, it affects one page out of five, and the alternative is dropping to four identity colours. Reversible: remove orange from the identity set and the collision goes.
+**Known collision, accepted.** A page's curtain (§5.3) is its identity colour, so it can match the colour of some of its own switched-on entities and the curtain's edge is then invisible on those pads for the length of the transition. It is transient and the alternative is spending colours the grid does not have.
+
+**The colour budget, which is the whole constraint.** Five colours plus dark and that is all. White is spent on "off" and is not configurable. Dark is spent on "nothing here". The remaining four carry both page identity and entity identity, which they can do because a page's colour appears only on an index and as a curtain, and an entity's only inside a page. Nothing is left over for a fault, which is why a fault is a reaction rather than a colour.
 
 ### 5.3 Transitions
 

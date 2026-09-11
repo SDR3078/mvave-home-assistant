@@ -35,6 +35,7 @@ from .frames import (
     expand,
     overlay,
     position,
+    refuse,
     row_of,
     sweep,
     uncover,
@@ -76,8 +77,8 @@ from .palette import (
     RED,
     STATE_OFF,
     UNASSIGNED,
-    UNAVAILABLE,
     WHITE,
+    colour_for,
     is_emittable,
 )
 from .ports import ActionSink, RegistryView
@@ -93,6 +94,7 @@ from .render import (
     colour_of,
     compose,
     counterpart,
+    own_colour,
     render,
 )
 from .resolve import default_actions, resolve, source_entities
@@ -124,7 +126,6 @@ __all__ = [
     "STEP_SECONDS",
     "TICK_SECONDS",
     "UNASSIGNED",
-    "UNAVAILABLE",
     "WHITE",
     "ActionSink",
     "Activate",
@@ -155,6 +156,7 @@ __all__ = [
     "changed_pads",
     "clockwise_order",
     "collapse",
+    "colour_for",
     "colour_of",
     "column_of",
     "column_order",
@@ -165,7 +167,9 @@ __all__ = [
     "expand",
     "is_emittable",
     "overlay",
+    "own_colour",
     "position",
+    "refuse",
     "render",
     "resolve",
     "row_of",

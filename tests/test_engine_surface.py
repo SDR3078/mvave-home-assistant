@@ -342,15 +342,32 @@ def test_a_focused_pad_swings_between_on_and_off_rather_than_going_dark() -> Non
 # ------------------------------------------------------------- unreachable pads
 
 
-def test_an_unreachable_pad_is_inert_rather_than_merely_unhelpful() -> None:
+def test_an_unreachable_pad_refuses_rather_than_pretending() -> None:
     # Commanding something that cannot answer would leave the pad moving forever, waiting
-    # for a confirmation that is never coming.
+    # for a confirmation that is never coming. It says so under the finger instead, which
+    # is the only moment anybody can act on it.
     registry = FakeRegistry(areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"})
     view = Surface(PROFILE, registry)
     view.handle(Press(0))
     outcome = view.handle(Press(0))
     assert outcome.calls == ()
     assert view.pending == set()
+    assert outcome.animation
+    # It shudders and then puts everything back exactly as it was.
+    assert outcome.animation[-1] == view.rendering().frame
+
+
+def test_a_refusal_only_touches_the_pad_that_was_pressed() -> None:
+    registry = FakeRegistry(
+        areas={"living": ("light.gone", "light.fine")},
+        states={"light.gone": "unavailable", "light.fine": "on"},
+    )
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    before = view.rendering().frame
+    for frame in view.handle(Press(0)).animation:
+        assert frame[1:] == before[1:]
+        assert frame[0] in (before[0], UNASSIGNED)
 
 
 def test_an_unreachable_pad_cannot_be_focused_either() -> None:
@@ -359,7 +376,6 @@ def test_an_unreachable_pad_cannot_be_focused_either() -> None:
     view.handle(Press(0))
     view.handle(Press(0, held=True))
     assert view.focus is None
-    assert view.rendering().rhythms == {}
 
 
 def test_a_scene_stays_pressable_even_though_its_state_is_unknown() -> None:
