@@ -1,6 +1,6 @@
 # Next steps
 
-Updated 2026-09-10. The device is understood; `docs/PLAN.md` is the corrected
+Updated 2026-09-11. The device is understood; `docs/PLAN.md` is the corrected
 implementation plan and this file is the running to-do list.
 
 ## Done
@@ -96,15 +96,9 @@ implementation plan and this file is the running to-do list.
    `scripts/surface_demo.py`, which drives the real pad from the real engine against a
    pretend house, and which found four defects that the tests had not. What is left:
    - **The shift gesture**: holding the left button turning row one into a page switcher.
-   - **Debouncing knob service calls.** The engine emits one per step by design, and a
-     knob sends about thirty a second. Coalescing them belongs to the coordinator, which
-     is also where the existing event entities already do it.
    - **The min and max flash.** The design asks for one quick full-bar flash on reaching
      either end. The bar being full or empty is most of that signal already, and adding it
      needs an outcome to be able to set its own pace.
-   - **A timeout on the unconfirmed blink.** An entity that accepts a command and never
-     reports back leaves its pad swinging forever. The engine has no clock by design, so
-     bounding it belongs to the coordinator.
    - **Telling somebody which knobs are live.** With no rings and no labels there is
      nothing that says knob one adjusts the lamp you are holding and knob six does not.
      The design's answer is that the assignment never changes so it is learned once, which
