@@ -36,7 +36,15 @@ from .model import (
 )
 from .ports import RegistryView
 from .properties import PROPERTIES, primary_for, property_for
-from .render import BACK_BUTTON, HOME_BUTTON, Rendering, ViewState, assignable, render
+from .render import (
+    BACK_BUTTON,
+    HOME_BUTTON,
+    Rendering,
+    ViewState,
+    assignable,
+    buttons_for,
+    render,
+)
 from .resolve import resolve
 
 # ------------------------------------------------------------------------- input
@@ -246,19 +254,18 @@ class Surface:
                 return bar
         return self._page_rendering()
 
+    def _view(self) -> ViewState:
+        """Everything about right now that is not the page itself."""
+        return ViewState(
+            focus=self.focus,
+            pending=frozenset(self.pending),
+            can_go_back=self.depth > 0,
+            can_go_home=self.depth > 0,
+        )
+
     def _page_rendering(self) -> Rendering:
         page = self.page
-        return render(
-            page,
-            self.slots(page),
-            self.registry,
-            ViewState(
-                focus=self.focus,
-                pending=frozenset(self.pending),
-                can_go_back=self.depth > 0,
-                can_go_home=self.depth > 0,
-            ),
-        )
+        return render(page, self.slots(page), self.registry, self._view())
 
     def _bar(self, hud: Hud) -> Rendering | None:
         """The value bar, or None if the property has stopped making sense."""
@@ -269,7 +276,7 @@ class Surface:
         # its own, and a bar that animated in would look like a page change.
         return Rendering(
             frame=value_bar(hud.value, prop.colour),
-            buttons=self._page_rendering().buttons,
+            buttons=buttons_for(self.page, self._view()),
         )
 
     # ------------------------------------------------------------------ input
@@ -494,17 +501,19 @@ class Surface:
         self.pending.add(entity_id)
         return Outcome(calls=(call,))
 
-    def settled(self, entity_id: str) -> None:
+    def settled(self, entity_id: str, follow: bool = True) -> None:
         """Told by the coordinator that an entity's real state has arrived.
 
-        A bar showing that entity follows it. While a knob is turning this changes almost
-        nothing, because what arrives is what was asked for; it matters when the entity
-        disagrees, and when somebody else moves the same lamp from a phone while the bar
-        is up. Holding a pad to look at a value and being shown a stale one is the kind of
-        thing that makes people stop trusting a display.
+        A bar showing that entity follows it, so holding a pad to look at a value never
+        shows a stale one, and somebody moving the same lamp from a phone moves the bar.
+
+        Not while a knob is turning, though, which is what ``follow`` is for. Commands are
+        rationed on the way out, so what arrives mid-turn is where the knob was a moment
+        ago rather than where it is, and following it would drag the bar backwards under
+        the finger. The caller knows whether a turn is in flight; this has no clock.
         """
         self.pending.discard(entity_id)
-        showing = self.hud
+        showing = self.hud if follow else None
         if showing is None or showing.entity_id != entity_id:
             return
         state = self.registry.state_of(entity_id)

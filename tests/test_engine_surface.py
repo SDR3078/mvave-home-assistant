@@ -708,3 +708,16 @@ def test_a_bar_ignores_an_entity_it_is_not_showing() -> None:
     before = view.hud
     view.settled("light.somewhere_else")
     assert view.hud == before
+
+
+def test_a_bar_does_not_follow_backwards_while_the_knob_is_still_turning() -> None:
+    # Commands are rationed on the way out, so what arrives mid-turn is where the knob was
+    # a moment ago. Following it would drag the bar backwards under the finger.
+    view = lit_lamp()
+    view.handle(Press(0, held=True))
+    view.handle(Turn(1, 4))
+    asked = view.hud.value if view.hud else None
+
+    view.registry.attributes["light.lamp"] = {"brightness": 128}  # the older value landing
+    view.settled("light.lamp", follow=False)
+    assert view.hud is not None and view.hud.value == asked

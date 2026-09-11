@@ -55,9 +55,16 @@ HOLD_SECONDS = 0.5
 #: How long the value bar stays after the last click of a knob.
 HUD_SECONDS = 0.9
 
-#: How long a knob's steps are collected before one service call is made. A knob sends
-#: around thirty messages a second and every one of them would otherwise be a call.
-KNOB_DEBOUNCE_SECONDS = 0.25
+#: How often a turning knob is allowed to reach the house, and how long after it stops
+#: before the last word goes out.
+#:
+#: A throttle rather than a plain wait. Waiting until the knob was still meant a lamp did
+#: not move at all while somebody was turning it and then jumped once they stopped, which
+#: is not what a dimmer is for: you turn it until the room looks right, and that needs the
+#: room to change while you turn. Seven or so commands a second is comfortable for Zigbee
+#: and nowhere near the thirty a knob actually sends.
+KNOB_THROTTLE_SECONDS = 0.15
+KNOB_SETTLE_SECONDS = 0.25
 
 #: How long to wait for an entity to report the state it was asked for. Past this the pad
 #: stops moving and goes back to showing whatever is actually true, because a pad that
@@ -111,6 +118,9 @@ class SurfaceRunner:
         self._watched: set[str] = set()
         self._logged: tuple[int, str | None, str | None] | None = None
         self._logged_page: str | None = None
+        #: When a knob last reached the house, so a turn can be rationed rather than
+        #: waited out.
+        self._last_call = 0.0
         self._timers: dict[str, CALLBACK_TYPE] = {}
         self._ticker: asyncio.Task[None] | None = None
         self._writer: asyncio.Task[None] | None = None
@@ -361,12 +371,17 @@ class SurfaceRunner:
                 signature[1] or "nothing",
             )
         self._steps[knob] = self._steps.get(knob, 0) + steps
-        # Neither the call nor the announcement goes out per step. Every step still reaches
-        # the engine, so the bar follows the finger, but a knob sends around thirty
-        # messages a second and firing an event for each would wake every automation
-        # listening thirty times over for one gesture.
-        self._restart("knob", KNOB_DEBOUNCE_SECONDS, self._flush_knobs)
         self._pending_call = outcome
+
+        # Every step reaches the engine, so the bar follows the finger exactly. What is
+        # rationed is what leaves this machine: a knob sends around thirty messages a
+        # second and neither a lamp nor an automation wants thirty of anything out of one
+        # gesture. The first step of a turn goes out at once, then at most one every
+        # throttle interval while it keeps moving, then a last one once it stops.
+        now = time.monotonic()
+        if now - self._last_call >= KNOB_THROTTLE_SECONDS:
+            self._flush_knobs()
+        self._restart("knob", KNOB_SETTLE_SECONDS, self._flush_knobs)
         self._redraw()
 
     @callback
@@ -377,6 +392,7 @@ class SurfaceRunner:
         outcome, self._pending_call = self._pending_call, None
         if outcome is None:
             return
+        self._last_call = time.monotonic()
         # One announcement for the whole gesture, carrying how far it actually went. The
         # engine's own event describes a single step, which is the right thing for it to
         # know and the wrong thing to put on the bus.
@@ -684,7 +700,8 @@ class SurfaceRunner:
         if self.surface is None:
             return
         entity_id = event.data["entity_id"]
-        self.surface.settled(entity_id)
+        # A bar follows its entity, but not while a knob is still turning: see `settled`.
+        self.surface.settled(entity_id, follow="knob" not in self._timers)
         cancel = self._timers.pop(f"confirm:{entity_id}", None)
         if cancel is not None:
             cancel()

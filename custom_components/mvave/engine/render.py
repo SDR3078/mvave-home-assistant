@@ -139,11 +139,16 @@ def render(
         elif entity_id == view.focus:
             rhythms[index] = Motion(BREATHE, other)
 
-    return Rendering(frame=frame, rhythms=rhythms, buttons=_buttons(page, view))
+    return Rendering(frame=frame, rhythms=rhythms, buttons=buttons_for(page, view))
 
 
-def _buttons(page: Page, view: ViewState) -> dict[str, bool]:
-    """Which transport lights are on. Lit means pressing it will do something."""
+def buttons_for(page: Page, view: ViewState) -> dict[str, bool]:
+    """Which transport lights are on. Lit means pressing it will do something.
+
+    Separate from rendering the grid because it depends on the page and on where you are,
+    and on nothing that is in a slot. A value bar needs this and nothing else, and working
+    it out by rendering a whole page cost ten times what drawing the bar did.
+    """
     lit = dict.fromkeys(BUTTONS, False)
     lit[BACK_BUTTON] = view.can_go_back
     lit[HOME_BUTTON] = view.can_go_home
