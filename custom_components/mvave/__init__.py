@@ -79,7 +79,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
     coordinator = MvaveCoordinator(hass, address, name)
     # The surface is the profile engine driving the grid. It builds itself once the device
     # has been armed, because only then is the real note map known.
-    runner = SurfaceRunner(hass, coordinator)
+    runner = SurfaceRunner(hass, entry, coordinator)
     entry.runtime_data = MvaveData(coordinator=coordinator, runner=runner)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -101,5 +101,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
 async def async_unload_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> bool:
     """Unload a config entry, releasing the device."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    await entry.runtime_data.coordinator.async_shutdown()
+    if unloaded:
+        # Only on success. Home Assistant runs the `async_on_unload` callbacks only when
+        # this returns True, so dropping the link on a failed unload would leave the
+        # timers, the subscriptions and the listeners alive against a coordinator that has
+        # set its shutdown flag and can therefore never reconnect.
+        await entry.runtime_data.coordinator.async_shutdown()
     return unloaded

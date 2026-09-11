@@ -38,8 +38,9 @@ from .engine.surface import (
 from .registry import HomeAssistantRegistry, HomeAssistantSink, build_profile
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
 
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant
 
     from .coordinator import MvaveCoordinator
@@ -77,11 +78,18 @@ EVENT_TYPE = "mvave_event"
 class SurfaceRunner:
     """Drives one profile against one device: input in, light out, timing in between."""
 
-    def __init__(self, hass: HomeAssistant, coordinator: MvaveCoordinator) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, coordinator: MvaveCoordinator
+    ) -> None:
         self.hass = hass
+        #: Tasks are created through the entry rather than through hass, so Home Assistant
+        #: cancels them on unload and on shutdown and does not wait for them in
+        #: ``async_block_till_done``. The redraw ticker is the one that matters: it has no
+        #: natural end, and on hass it would hold a shutdown open until a page timed out.
+        self.entry = entry
         self.coordinator = coordinator
         self.surface: Surface | None = None
-        self.sink = HomeAssistantSink(hass, EVENT_TYPE)
+        self.sink = HomeAssistantSink(hass, entry, EVENT_TYPE)
 
         self._notes: dict[int, int] = {}  # reading-order pad -> note it answers to
         self._pads: dict[int, int] = {}  # note -> reading-order pad
@@ -103,12 +111,24 @@ class SurfaceRunner:
         self._logged: tuple[int, str | None, str | None] | None = None
         self._timers: dict[str, CALLBACK_TYPE] = {}
         self._ticker: asyncio.Task[None] | None = None
+        self._writer: asyncio.Task[None] | None = None
+        self._wanted: Frame | None = None
+        self._wanted_buttons: dict[str, bool] | None = None
         self._playing: asyncio.Task[None] | None = None
         self._watching: CALLBACK_TYPE | None = None
         self._started = time.monotonic()
         self._unsubscribe: list[CALLBACK_TYPE] = []
+        #: Held across every write. Both caches below are read, awaited over and then
+        #: written, so two writers in flight at once would each diff against what the
+        #: other has not recorded yet and the grid would end up showing neither.
+        self._writing = asyncio.Lock()
 
     # ------------------------------------------------------------------ life
+    def _task(self, work: Coroutine[Any, Any, None], what: str) -> asyncio.Task[None]:
+        """Start something the config entry owns, and that says what it is in a log."""
+        return self.entry.async_create_background_task(
+            self.hass, work, f"mvave {self.coordinator.address} {what}", eager_start=False
+        )
 
     @callback
     def async_start(self) -> CALLBACK_TYPE:
@@ -127,14 +147,26 @@ class SurfaceRunner:
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
-        for task in (*self._holds.values(), self._ticker, self._playing):
+        for task in (*self._holds.values(), self._ticker, self._playing, self._writer):
             if task is not None:
                 task.cancel()
-        self._holds.clear()
-        self._ticker = self._playing = None
+        self._ticker = self._playing = self._writer = None
+        self._wanted = self._wanted_buttons = None
+        self._forget_presses()
+        # What every loop in here waits on. Anything that slipped through a cancellation
+        # stops on its next turn rather than running on past the config entry.
+        self.surface = None
         if self._watching is not None:
             self._watching()
             self._watching = None
+
+    @callback
+    def _forget_presses(self) -> None:
+        """Drop every half-finished press, because none of them can be completed now."""
+        for task in self._holds.values():
+            task.cancel()
+        self._holds.clear()
+        self._fired.clear()
 
     @callback
     def _on_connection(self) -> None:
@@ -144,6 +176,10 @@ class SurfaceRunner:
             self.surface = None
             self._shown = None
             self._lit.clear()
+            # A finger down when the link dropped never sends its release, so without this
+            # its hold fires into nothing, the key stays marked as fired, and the next tap
+            # of that pad is swallowed as though it were that release.
+            self._forget_presses()
             return
         if self.surface is None:
             if arming.layout is None:
@@ -216,10 +252,8 @@ class SurfaceRunner:
             return
         self._cancel_animation()
         outcome = ask(self.surface)
-        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
-        self._redraw()
-        self._perform(outcome)
-        self._play(outcome)
+        self._arm(outcome)
+        self._settle(outcome)
 
     # ----------------------------------------------------------------- input
 
@@ -241,7 +275,7 @@ class SurfaceRunner:
 
     @callback
     def _down(self, key: str) -> None:
-        self._holds[key] = self.hass.async_create_task(self._hold(key), eager_start=False)
+        self._holds[key] = self._task(self._hold(key), f"hold {key}")
 
     async def _hold(self, key: str) -> None:
         """Fire a hold while the finger is still down rather than when it lets go.
@@ -297,8 +331,8 @@ class SurfaceRunner:
         # gesture is the thing the debounce exists to prevent.
         self._perform(replace(outcome, calls=()))
         self._restart("knob", KNOB_DEBOUNCE_SECONDS, self._flush_knobs)
-        self._restart("hud", HUD_SECONDS, self._drop_hud)
         self._pending_call = outcome
+        self._redraw()
 
     @callback
     def _flush_knobs(self, _now: Any = None) -> None:
@@ -317,9 +351,19 @@ class SurfaceRunner:
         # Whatever was playing is over. Input is never queued behind eye candy: a press
         # during a transition has to land now, not once the pretty part has finished.
         self._cancel_animation()
-        outcome = self._handle(event)
+        self._settle(self._handle(event))
+
+    def _settle(self, outcome: Outcome) -> None:
+        """Carry out an outcome, in the order the grid needs it.
+
+        The redraw comes last, and that matters. It skips the grid while a transition is
+        playing, so if it runs before the animation has been started there is nothing yet
+        for it to skip: it paints the destination, and the curtain then sweeps over a page
+        that has already arrived. Which is precisely what it did until this was noticed.
+        """
         self._perform(outcome)
         self._play(outcome)
+        self._redraw()
 
     @callback
     def _cancel_animation(self) -> None:
@@ -329,10 +373,22 @@ class SurfaceRunner:
             self._playing = None
 
     def _handle(self, event: InputEvent) -> Outcome:
-        """Ask the engine, and set the timers its answer implies."""
+        """Ask the engine, and set the countdowns its answer implies."""
         if self.surface is None:
             return Outcome()
         outcome = self.surface.handle(event)
+        self._arm(outcome)
+        return outcome
+
+    def _arm(self, outcome: Outcome) -> None:
+        """Every countdown an outcome implies, wherever the outcome came from.
+
+        Shared with :meth:`drive` rather than duplicated there. A service call that sets a
+        value bar and does not arm its expiry leaves the grid covered until a human touches
+        the surface, which is what happened when this was written out twice.
+        """
+        if self.surface is None:
+            return
         for call in outcome.calls:
             entity_id = call.data.get("entity_id")
             if isinstance(entity_id, str) and entity_id in self.surface.pending:
@@ -340,8 +396,6 @@ class SurfaceRunner:
         self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
         if self.surface.hud is not None:
             self._restart("hud", HUD_SECONDS, self._drop_hud)
-        self._redraw()
-        return outcome
 
     def _perform(self, outcome: Outcome) -> None:
         """Do the parts of an outcome that touch the world."""
@@ -356,7 +410,7 @@ class SurfaceRunner:
         if not outcome.animation:
             return
         self._cancel_animation()
-        self._playing = self.hass.async_create_task(self._animate(outcome), eager_start=False)
+        self._playing = self._task(self._animate(outcome), "transition")
 
     async def _animate(self, outcome: Outcome) -> None:
         """Play a transition, and change the transport lights on the frame that owns them."""
@@ -387,22 +441,44 @@ class SurfaceRunner:
         rendering = self.surface.rendering()
         self._watch(self.surface)
         if self._playing is None:
-            frame = compose(rendering, time.monotonic() - self._started)
-            # Rendered once and handed to both. A knob turn redraws around thirty times a
-            # second, and each render re-resolves every slot of the page.
-            self.hass.async_create_task(self._send(frame), eager_start=False)
-            self.hass.async_create_task(
-                self._show_buttons(dict(rendering.buttons)), eager_start=False
+            self._paint(
+                compose(rendering, time.monotonic() - self._started), dict(rendering.buttons)
             )
         # A ticker is only worth its wake-ups while something is actually moving.
         if rendering.rhythms and self._ticker is None:
-            self._ticker = self.hass.async_create_task(self._tick(), eager_start=False)
+            self._ticker = self._task(self._tick(), "redraw ticker")
         elif not rendering.rhythms and self._ticker is not None:
             self._ticker.cancel()
             self._ticker = None
 
+    @callback
+    def _paint(self, frame: Frame, buttons: dict[str, bool]) -> None:
+        """Ask for a frame, and let the writer get to it when the link is free.
+
+        Collapsing rather than queueing. A knob turn redraws around thirty times a second,
+        and each redraw used to start its own write; if the link were ever slower than the
+        redraw rate that queue would grow for the length of the gesture and the grid would
+        lag the finger by the whole backlog. Only the newest frame is worth sending, so
+        anything still waiting when a newer one arrives is simply replaced.
+        """
+        self._wanted = frame
+        self._wanted_buttons = buttons
+        if self._writer is None or self._writer.done():
+            self._writer = self._task(self._drain(), "writer")
+
+    async def _drain(self) -> None:
+        """Send whatever is wanted, newest first, until nothing is."""
+        while self._wanted is not None or self._wanted_buttons is not None:
+            frame, self._wanted = self._wanted, None
+            buttons, self._wanted_buttons = self._wanted_buttons, None
+            if frame is not None:
+                await self._send(frame)
+            if buttons is not None:
+                await self._show_buttons(buttons)
+
     async def _tick(self) -> None:
         """Redraw while anything on the grid is breathing or blinking."""
+        mine = asyncio.current_task()
         try:
             while self.surface is not None:
                 rendering = self.surface.rendering()
@@ -412,31 +488,37 @@ class SurfaceRunner:
                     await self._send(compose(rendering, time.monotonic() - self._started))
                 await asyncio.sleep(TICK_SECONDS)
         finally:
-            self._ticker = None
+            # Only if this is still the ticker in charge, for the same reason the animation
+            # checks. One notification can carry several messages, so a ticker can be
+            # cancelled and another started before the first one's cancellation is
+            # delivered, and clearing the slot then orphans a live thirty-a-second loop
+            # that nothing afterwards can reach.
+            if self._ticker is mine:
+                self._ticker = None
 
     async def _send(self, frame: Frame) -> None:
         """Send only the pads that changed. A whole frame fits one packet either way."""
-        if self._shown is None:
-            changes = dict(enumerate(frame))
-        else:
-            changes = changed_pads(self._shown, frame)
-        if not changes:
-            return
-        messages = [
-            bytes((NOTE_ON, self._notes[pad], value))
-            for pad, value in changes.items()
-            if pad in self._notes
-        ]
-        try:
-            await self.coordinator.async_send_many(messages)
-        except (BleakError, EOFError, TimeoutError) as err:
-            # The link dropping mid-frame is ordinary and the reconnect handles it. What
-            # must not happen is swallowing everything: a mistake in the note map would
-            # then look exactly like a dark grid with nothing wrong.
-            LOGGER.debug("%s: frame not sent: %r", self.coordinator.address, err)
-            self._shown = None
-            return
-        self._shown = frame
+        async with self._writing:
+            changes = (
+                dict(enumerate(frame)) if self._shown is None else changed_pads(self._shown, frame)
+            )
+            if not changes:
+                return
+            messages = [
+                bytes((NOTE_ON, self._notes[pad], value))
+                for pad, value in changes.items()
+                if pad in self._notes
+            ]
+            try:
+                await self.coordinator.async_send_many(messages)
+            except (BleakError, EOFError, TimeoutError) as err:
+                # The link dropping mid-frame is ordinary and the reconnect handles it.
+                # What must not happen is swallowing everything: a mistake in the note map
+                # would then look exactly like a dark grid with nothing wrong.
+                LOGGER.debug("%s: frame not sent: %r", self.coordinator.address, err)
+                self._shown = None
+                return
+            self._shown = frame
 
     async def _show_buttons(self, wanted: dict[str, bool] | None = None) -> None:
         """Light the transport buttons that would do something if pressed."""
@@ -444,20 +526,21 @@ class SurfaceRunner:
             return
         if wanted is None:
             wanted = dict(self.surface.rendering().buttons)
-        messages = [
-            bytes((NOTE_ON, self._lights[name], BUTTON_ON if lit else 0))
-            for name, lit in wanted.items()
-            if name in self._lights and self._lit.get(name) != lit
-        ]
-        if not messages:
-            return
-        try:
-            await self.coordinator.async_send_many(messages)
-        except (BleakError, EOFError, TimeoutError) as err:
-            LOGGER.debug("%s: buttons not sent: %r", self.coordinator.address, err)
-            self._lit.clear()
-            return
-        self._lit.update(wanted)
+        async with self._writing:
+            messages = [
+                bytes((NOTE_ON, self._lights[name], BUTTON_ON if lit else 0))
+                for name, lit in wanted.items()
+                if name in self._lights and self._lit.get(name) != lit
+            ]
+            if not messages:
+                return
+            try:
+                await self.coordinator.async_send_many(messages)
+            except (BleakError, EOFError, TimeoutError) as err:
+                LOGGER.debug("%s: buttons not sent: %r", self.coordinator.address, err)
+                self._lit.clear()
+                return
+            self._lit.update(wanted)
 
     # ----------------------------------------------------------------- timers
 

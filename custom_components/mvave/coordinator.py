@@ -159,7 +159,7 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         perfectly good source of MIDI, and dropping the link over it would cost more than
         the LEDs are worth.
         """
-        session = VendorSession(client, self.address)
+        session = VendorSession(client, self.address, stopping=lambda: self._shutdown)
         if not session.available:
             LOGGER.debug(
                 "%s: no vendor channel on this device, so its LEDs cannot be armed",
@@ -272,8 +272,21 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
     # ------------------------------------------------------------- teardown
 
     async def async_shutdown(self) -> None:
-        """Close the link. Safe to call when already disconnected."""
+        """Close the link. Safe to call when already disconnected.
+
+        The listeners are told, exactly as they are when the link drops by itself. Without
+        that, anything watching this coordinator never learns the device has gone: at Home
+        Assistant's own shutdown nothing else fires, so a surface with an animated pad on
+        it would keep redrawing thirty times a second against a dead link.
+        """
         self._shutdown = True
+        try:
+            await self._async_close()
+        finally:
+            self.async_update_listeners()
+
+    async def _async_close(self) -> None:
+        """Drop the link itself."""
         async with self._connect_lock:
             client = self._client
             self._client = None

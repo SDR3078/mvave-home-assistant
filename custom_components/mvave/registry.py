@@ -23,6 +23,7 @@ from .engine.palette import BLUE
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
 #: The page an empty navigation stack shows.
@@ -91,8 +92,9 @@ class HomeAssistantRegistry:
 class HomeAssistantSink:
     """Changing the world. Satisfies ``engine.ports.ActionSink``."""
 
-    def __init__(self, hass: HomeAssistant, event_type: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, event_type: str) -> None:
         self.hass = hass
+        self.entry = entry
         self.event_type = event_type
 
     def call(self, domain: str, service: str, data: Mapping[str, Any]) -> None:
@@ -102,8 +104,12 @@ class HomeAssistantSink:
         state change that follows correct it; waiting for a Zigbee round trip before
         lighting a pad feels broken even when everything is working.
         """
-        self.hass.async_create_task(
+        # Owned by the config entry, so it cannot outlive the device it belongs to and it
+        # says which device it came from if it ever has to be waited for.
+        self.entry.async_create_task(
+            self.hass,
             self.hass.services.async_call(domain, service, dict(data), blocking=False),
+            f"mvave {domain}.{service}",
             eager_start=True,
         )
 

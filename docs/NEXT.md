@@ -78,6 +78,25 @@ implementation plan and this file is the running to-do list.
   while it still read as a limp. One pad per step cannot have that problem, and it removed
   a second one for free, since entering from a middle pad used to take fewer steps than
   from a corner and so had a different duration. 45 ms a pad, settled by eye.
+- **Two agents reviewed the concurrency**, one against Home Assistant's own conventions
+  and one for races. The verdict on the architecture was that running the engine in the
+  event loop is what Home Assistant expects and there is nothing to move: pure in-memory
+  computation is explicitly loop-safe in its docs, its blocking-call detector does not
+  look at CPU at all, and every input and output the surface needs is loop-affine, so a
+  thread would marshal each one back and need locks around state the single loop already
+  serialises for free. They then found eleven real defects in the scheduling *around* it,
+  all now fixed: a redraw running one line before the animation it was meant to defer to,
+  so every page change painted its destination and then swept a curtain over it; a
+  cancelled ticker orphaning a live one that nothing could reach; two device writes
+  diffing against each other's stale cache; a press interrupted by a disconnect swallowing
+  the next tap of that pad; a service call arming one countdown and not the other; tasks
+  created on `hass` rather than on the config entry, so a breathing pad could hold a
+  shutdown open; a shutdown that never told its listeners the link had gone; an unload
+  that dropped the link before knowing it had succeeded; an unload queueing behind a whole
+  preset read, eleven seconds typically and minutes at worst; and a redraw starting its
+  own write rather than replacing the one already waiting. Every one of them needed
+  several things to happen inside a single notification, which the parser makes possible
+  because one packet can carry several messages, and none would have shown up in a test.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze

@@ -31,6 +31,8 @@ from .devices.smc_pad import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from bleak import BleakClient
     from bleak.backends.characteristic import BleakGATTCharacteristic
 
@@ -47,15 +49,34 @@ class VendorError(RuntimeError):
     """The device did not answer, or answered with a bad checksum."""
 
 
+class VendorAbandonedError(Exception):
+    """A long read was given up because the integration is going away."""
+
+
 class VendorSession:
     """Talks to the device's configuration memory for as long as it is open."""
 
-    def __init__(self, client: BleakClient, address: str) -> None:
-        """Wrap an already connected client."""
+    def __init__(
+        self,
+        client: BleakClient,
+        address: str,
+        stopping: Callable[[], bool] | None = None,
+    ) -> None:
+        """Wrap an already connected client.
+
+        ``stopping`` is asked between chunks of a long read, so the integration going away
+        does not have to wait for one to finish.
+        """
         self._client = client
         self._address = address
         self._replies: asyncio.Queue[VendorReply] = asyncio.Queue()
         self._open = False
+        self._stopping = stopping or (lambda: False)
+
+    @property
+    def address(self) -> str:
+        """The device this session belongs to."""
+        return self._address
 
     @property
     def available(self) -> bool:
@@ -133,10 +154,19 @@ class VendorSession:
         return parse_state(block)
 
     async def read_preset(self, slot: int) -> Preset:
-        """Read and decode one preset image."""
+        """Read and decode one preset image.
+
+        Twenty-eight round trips at roughly four hundred milliseconds each, so this is the
+        slowest thing the integration ever does and the one worth being able to abandon.
+        A reload or a delete issued while it is running would otherwise wait the whole way
+        through, and if the device stops answering, three retries of a five second timeout
+        each turns eleven seconds into seven minutes.
+        """
         base = slot * PRESET_SIZE
         image = bytearray()
         while len(image) < PRESET_SIZE:
+            if self._stopping():
+                raise VendorAbandonedError(f"{self.address}: gave up reading the preset")
             chunk = min(READ_CHUNK, PRESET_SIZE - len(image))
             image += await self.read(base + len(image), chunk)
         return decode_preset(bytes(image))
