@@ -148,7 +148,7 @@
       "message": "Could not send to {address}: {error}"
     },
     "no_target_device": {
-      "message": "Pick which M-Vave device to send to, under Targets."
+      "message": "Pick which M-Vave device to send to."
     },
     "unknown_page": {
       "message": "This surface has no page called {page}. It has: {pages}."
@@ -162,6 +162,10 @@
       "name": "Go to page",
       "description": "Send a control surface to one of its pages. The grid animates as if it had been pressed, but without a spiral, because nobody pressed anything.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        },
         "page": {
           "name": "Page",
           "description": "The page to show. For a room page this is the area's id."
@@ -172,6 +176,10 @@
       "name": "Point the knobs at an entity",
       "description": "Choose what the encoders adjust, without anybody holding a pad. Stays until something else takes it or the page changes.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        },
         "entity_id": {
           "name": "Entity",
           "description": "What the knobs should adjust."
@@ -180,12 +188,22 @@
     },
     "home": {
       "name": "Go home",
-      "description": "Clear a control surface's navigation history back to its root page."
+      "description": "Clear a control surface's navigation history back to its root page.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        }
+      }
     },
     "send_raw": {
       "name": "Send raw MIDI",
       "description": "Send MIDI bytes straight to the device. The escape hatch for anything the pages and the knobs do not model.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        },
         "data": {
           "name": "Data",
           "description": "Hex bytes, spaced however you like. Must begin with a status byte, for example 99 24 05 to light pad 1 green."
@@ -196,6 +214,10 @@
       "name": "Press a pad",
       "description": "Press one of the sixteen pads as though a finger had. The pad is a position, not a thing: it does whatever is on that position of the page showing at the time. To act on one particular light, call that light's own action instead.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        },
         "slot": {
           "name": "Pad",
           "description": "Which pad, counted from one, reading order: 1 is the top left and 16 is the bottom right."
@@ -210,6 +232,10 @@
       "name": "What the pads mean",
       "description": "Return every page and what is on each of its sixteen pads, resolved as it stands right now. Nothing is written on this device, and a room page fills itself from whatever is in the room, so this is the only way to find out what a pad will do without walking over and pressing it.",
       "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Which control surface to act on."
+        },
         "page": {
           "name": "Page",
           "description": "Just this one page. Leave it empty for all of them. For a room page this is the area's id."

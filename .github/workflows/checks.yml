@@ -62,4 +62,15 @@ jobs:
           python-version: ${{ env.DEFAULT_PYTHON }}
           cache: pip
       - run: pip install -r requirements-dev.txt
+      - name: Install what our Home Assistant dependencies need
+        # Core does not carry its own integrations' requirements: a running instance
+        # installs those on demand, the first time an integration is set up. Without this,
+        # importing the integration dies three levels down, in `bluetooth` -> `usb` ->
+        # aiousbwatcher, as a ModuleNotFoundError that names nothing we wrote. Computed
+        # from the manifests, so a Home Assistant bump cannot leave a hand-written list
+        # quietly stale.
+        run: |
+          scripts/ha_requirements > /tmp/ha-requirements.txt
+          cat /tmp/ha-requirements.txt
+          pip install -r /tmp/ha-requirements.txt
       - run: pytest tests -q

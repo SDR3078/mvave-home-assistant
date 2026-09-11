@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Print the pip requirements of the Home Assistant integrations this one depends on.
+
+`pytest-homeassistant-custom-component` installs Home Assistant core and nothing else.
+Core does not carry the requirements of its own integrations: those are installed on demand
+by a running instance, the first time an integration is set up. So in a test environment
+`from homeassistant.components import bluetooth` fails on an import three levels down —
+`bluetooth` needs `usb`, and `usb` needs `aiousbwatcher`.
+
+Computed from the manifests rather than written down, because the answer changes with every
+Home Assistant release: the chain below is five integrations deep and none of them are ours.
+A hand-maintained list would be wrong by the next bump and would fail as an unrelated
+ModuleNotFoundError rather than as anything that names the real problem.
+
+Usage:
+
+    scripts/ha_requirements > requirements-ha.txt && pip install -r requirements-ha.txt
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent.parent
+MANIFEST = HERE / "custom_components" / "mvave" / "manifest.json"
+
+
+def main() -> int:
+    """Print one requirement per line, deduplicated and sorted."""
+    try:
+        import homeassistant.components as components
+    except ImportError:
+        print("Home Assistant is not installed in this environment.", file=sys.stderr)
+        return 1
+
+    core = pathlib.Path(components.__file__).parent
+    ours = json.loads(MANIFEST.read_text())
+
+    seen: set[str] = set()
+    found: set[str] = set()
+
+    def walk(name: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        manifest = core / name / "manifest.json"
+        if not manifest.exists():
+            # Not a core integration, or renamed. Not this script's problem to diagnose:
+            # hassfest already checks that every declared dependency exists.
+            return
+        data = json.loads(manifest.read_text())
+        found.update(data.get("requirements", ()))
+        for dependency in data.get("dependencies", ()):
+            walk(dependency)
+
+    for dependency in ours.get("dependencies", ()):
+        walk(dependency)
+
+    # Ours too, for the day this integration declares any of its own.
+    found.update(ours.get("requirements", ()))
+
+    for requirement in sorted(found):
+        print(requirement)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

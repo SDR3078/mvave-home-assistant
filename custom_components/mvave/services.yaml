@@ -1,9 +1,11 @@
 navigate:
-  target:
-    device:
-      filter:
-        - integration: mvave
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
     page:
       required: true
       example: living_room
@@ -11,11 +13,13 @@ navigate:
         text:
 
 focus:
-  target:
-    device:
-      filter:
-        - integration: mvave
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
     entity_id:
       required: true
       example: light.ceiling_lights
@@ -23,17 +27,22 @@ focus:
         entity:
 
 home:
-  target:
-    device:
-      filter:
-        - integration: mvave
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
 
 send_raw:
-  target:
-    device:
-      filter:
-        - integration: mvave
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
     data:
       required: true
       example: "99 24 05"
@@ -41,11 +50,13 @@ send_raw:
         text:
 
 press_slot:
-  target:
-    device:
-      filter:
-        - integration: mvave
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
     slot:
       required: true
       example: 1
@@ -64,11 +75,13 @@ press_slot:
             - hold
 
 get_pages:
-  target:
-    device:
-      filter:
-        - integration: mvave
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: mvave
     page:
       required: false
       example: living_room
