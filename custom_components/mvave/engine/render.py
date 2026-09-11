@@ -15,7 +15,7 @@ from typing import Final
 
 from .frames import Frame, overlay
 from .model import Nothing, Page, Slot
-from .palette import ACTION, ON, STATE_OFF, UNASSIGNED, colour_for
+from .palette import ACTION, ON, STATE_OFF, UNASSIGNED
 from .ports import RegistryView
 from .rhythms import ALERT, BREATHE, Motion
 
@@ -104,11 +104,13 @@ def counterpart(colour: int, slot: Slot | None = None) -> int:
 
 
 def own_colour(slot: Slot | None) -> int:
-    """What a pad shows when what is behind it is on."""
-    if slot is not None and slot.colour is not None:
-        return slot.colour
-    entity_id = slot.entity_id if slot is not None else None
-    return ON if entity_id is None else colour_for(entity_id.split(".", 1)[0])
+    """What a pad shows when what is behind it is on.
+
+    Decided when the page was laid out, not here. A colour can come from the pad's own
+    configuration or from the profile's default for its domain, and resolving that once
+    per page rather than once per render keeps the choice in one place.
+    """
+    return slot.colour if slot is not None and slot.colour is not None else ON
 
 
 def render(

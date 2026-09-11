@@ -298,6 +298,11 @@ class Surface:
             # anybody can act on it.
             return Outcome(animation=refuse(self.rendering().frame, event.pad))
         action = slot.hold if event.held else slot.tap
+        if isinstance(action, Nothing):
+            # A lit pad that does nothing when pressed is indistinguishable from a broken
+            # one. It shudders instead, the same as one nobody can reach, so "nothing
+            # happens" is never something somebody has to work out for themselves.
+            return Outcome(animation=refuse(self.rendering().frame, event.pad))
         outcome = self._perform(action, origin=event.pad, trigger=Trigger.PAD)
         # Fired even when the pad does nothing the engine understands, because "pad 5 was
         # held" is exactly the thing somebody wants to hang an automation on.

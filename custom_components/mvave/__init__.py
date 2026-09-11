@@ -86,6 +86,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
 
     entry.async_on_unload(runner.async_start())
 
+    async def _async_options_changed(hass: HomeAssistant, entry: MvaveConfigEntry) -> None:
+        """Rebuild the surface in place when the options change."""
+        entry.runtime_data.runner.reconfigure()
+
+    entry.async_on_unload(entry.add_update_listener(_async_options_changed))
+
     # Start after the platforms, so entities are subscribed before the first connect.
     entry.async_on_unload(coordinator.async_start())
 

@@ -17,8 +17,9 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
+from .const import CONF_DOMAIN_COLOURS, CONF_PAGE_COLOURS, CONF_PAGES
 from .engine import IDENTITY, EntityState, Page, Profile, Source, SourceKind
-from .engine.palette import BLUE
+from .engine.palette import BLUE, DOMAIN_COLOURS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -123,21 +124,30 @@ def _usable(entry: er.RegistryEntry) -> bool:
     return entry.disabled_by is None and entry.hidden_by is None and entry.entity_category is None
 
 
-def build_profile(hass: HomeAssistant) -> Profile:
-    """A surface built from the house as it stands, with nothing configured.
+def build_profile(hass: HomeAssistant, options: Mapping[str, Any] | None = None) -> Profile:
+    """A surface built from the house as it stands, and from whatever was configured.
 
-    One page per room that has anything in it, plus an index listing them. This is the
-    out-of-the-box promise from the design brief: configuring means overriding, never
-    building from zero, so there has to be something to override before anybody starts.
+    With nothing configured this is one page per room that has anything in it, plus an
+    index listing them. That is the out-of-the-box promise from the design brief:
+    configuring means overriding, never building from zero, so there has to be something
+    to override before anybody starts.
 
     Colours repeat past the fifth room. Only five are reliably distinguishable at a glance
     (``docs/HARDWARE-BLE.md`` section 9.1), so beyond that the pad's fixed position on the
     index is what identifies it, which is also the one channel that survives colour vision
     deficiency.
     """
+    options = options or {}
     registry = HomeAssistantRegistry(hass)
-    areas = sorted(ar.async_get(hass).async_list_areas(), key=lambda area: area.name.lower())
+    chosen: list[str] | None = options.get(CONF_PAGES)
+    page_colours: Mapping[str, int] = options.get(CONF_PAGE_COLOURS, {})
 
+    if chosen is None:
+        # Nobody has chosen, so every room with something in it, alphabetically.
+        areas = sorted(ar.async_get(hass).async_list_areas(), key=lambda area: area.name.lower())
+        chosen = [area.id for area in areas if len(registry.entities_in_area(area.id))]
+
+    registry_areas = ar.async_get(hass)
     pages: dict[str, Page] = {
         ROOT_ID: Page(
             id=ROOT_ID,
@@ -148,14 +158,19 @@ def build_profile(hass: HomeAssistant) -> Profile:
             idle_timeout=0,
         )
     }
-    for area in areas:
-        if len(registry.entities_in_area(area.id)) < MIN_ENTITIES:
+    for area_id in chosen:
+        area = registry_areas.async_get_area(area_id)
+        if area is None or len(registry.entities_in_area(area_id)) < MIN_ENTITIES:
             continue
-        pages[area.id] = Page(
-            id=area.id,
+        pages[area_id] = Page(
+            id=area_id,
             title=area.name,
-            colour=IDENTITY[len(pages) % len(IDENTITY)],
-            source=Source(SourceKind.AREA, area.id),
+            colour=page_colours.get(area_id, IDENTITY[len(pages) % len(IDENTITY)]),
+            source=Source(SourceKind.AREA, area_id),
             parent_id=ROOT_ID,
         )
-    return Profile(pages=pages, root_id=ROOT_ID)
+    return Profile(
+        pages=pages,
+        root_id=ROOT_ID,
+        colours={**DOMAIN_COLOURS, **options.get(CONF_DOMAIN_COLOURS, {})},
+    )

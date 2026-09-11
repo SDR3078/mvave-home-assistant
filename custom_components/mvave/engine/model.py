@@ -212,10 +212,15 @@ class Page:
 
 @dataclass(frozen=True, slots=True)
 class Profile:
-    """Every page, and which one is the root."""
+    """Every page, which one is the root, and what colour anything defaults to."""
 
     pages: Mapping[str, Page]
     root_id: str
+    #: What a pad shows when it is on, by the domain of what is behind it. A default that
+    #: a pad's own configuration overrides. Held here rather than looked up from a constant
+    #: so it can be configured, and resolved once when a page is laid out rather than on
+    #: every render.
+    colours: Mapping[str, int] = field(default_factory=dict)
 
     def page(self, page_id: str) -> Page | None:
         """One page by id, or None if nothing is configured under that name."""

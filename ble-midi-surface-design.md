@@ -57,7 +57,7 @@ This was originally a reserved pad in the bottom-right corner. Moving it off the
 
 ### Defaults by domain
 
-When a slot is auto-filled from a source, the action is derived from the entity's domain:
+When a slot is auto-filled from a source, the action is derived from the entity's domain. **Every pad has a tap.** A thermostat originally had none, on the grounds that a single press has no sensible meaning for it, and the result was a lit pad that did nothing when pressed and was indistinguishable from a broken one. Anything that does still end up with no tap says so by shuddering (§5.2) rather than by sitting there.
 
 | domain | tap | hold |
 |---|---|---|
@@ -67,7 +67,7 @@ When a slot is auto-filled from a source, the action is derived from the entity'
 | `cover` | toggle open/close | focus + peek |
 | `scene` | activate | — |
 | `script` | run | — |
-| `climate` | — | focus + peek |
+| `climate` | toggle | focus + peek |
 
 ---
 

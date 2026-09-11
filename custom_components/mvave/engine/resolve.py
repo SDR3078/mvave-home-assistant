@@ -9,6 +9,7 @@ behind it. Anything explicitly configured wins, and whatever is left over stays 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Final
 
 from .frames import PAD_COUNT
@@ -27,6 +28,7 @@ from .model import (
     SourceKind,
     Toggle,
 )
+from .palette import colour_for
 from .ports import RegistryView
 
 #: The order entities are laid out in when a page fills itself from an area. Lights first
@@ -45,7 +47,9 @@ DOMAIN_ORDER: Final = (
 )
 
 #: Domains that take a plain toggle.
-TOGGLEABLE: Final = frozenset({"light", "switch", "input_boolean", "fan", "siren"})
+TOGGLEABLE: Final = frozenset(
+    {"light", "switch", "input_boolean", "fan", "siren", "climate", "humidifier"}
+)
 
 #: What a tap does, for domains where it is not a toggle and not an activation.
 TAP_SERVICES: Final = {
@@ -71,10 +75,6 @@ def default_actions(entity_id: str) -> tuple[PadAction, PadAction]:
     service = TAP_SERVICES.get(domain)
     if service is not None:
         return Service(service[0], service[1], {"entity_id": entity_id}), hold
-    if domain == "climate":
-        # No sensible single-press meaning. A hold hands it to the knobs, which is the
-        # only thing anyone actually wants from a thermostat on a grid.
-        return NOTHING, hold
     return Toggle(entity_id), hold
 
 
@@ -99,6 +99,12 @@ def source_entities(source: Source, registry: RegistryView) -> list[str]:
     return []
 
 
+def _colour(entity_id: str, profile: Profile) -> int:
+    """What this entity shows when it is on, by its domain, as the profile has it."""
+    domain = entity_id.split(".", 1)[0]
+    return profile.colours.get(domain, colour_for(domain))
+
+
 def _page_slots(page: Page, profile: Profile) -> list[Slot]:
     """One navigate pad per other page, in the profile's own order.
 
@@ -121,14 +127,17 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
     slots: list[Slot | None] = [None] * PAD_COUNT
     for index, config in page.pads.items():
         if 0 <= index < PAD_COUNT:
-            slots[index] = Slot(tap=config.tap, hold=config.hold, colour=config.colour)
+            slot = Slot(tap=config.tap, hold=config.hold, colour=config.colour)
+            if slot.colour is None and slot.entity_id is not None:
+                slot = replace(slot, colour=_colour(slot.entity_id, profile))
+            slots[index] = slot
 
     if page.source.kind is SourceKind.PAGES:
         filling: list[Slot] = _page_slots(page, profile)
     else:
         placed = {slot.entity_id for slot in slots if slot is not None}
         filling = [
-            Slot(*default_actions(entity_id))
+            Slot(*default_actions(entity_id), colour=_colour(entity_id, profile))
             for entity_id in source_entities(page.source, registry)
             if entity_id not in placed
         ]

@@ -109,5 +109,42 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Rooms",
+        "description": "Pick the rooms that get a page, in the order they should appear on the grid's first screen. Everything in a room fills its page on its own, so there is nothing else to set up.",
+        "data": {
+          "pages": "Rooms"
+        }
+      },
+      "colours": {
+        "title": "Colours",
+        "description": "A pad shows its colour when the thing behind it is on, and white when it is off. That is the one rule the grid cannot bend, so white is not on offer here.\n\nThere are five colours because five is how many this device can show that anybody can tell apart from across a room. Past the fifth room they repeat, and position on the first screen tells them apart instead.\n\nRooms: {rooms}",
+        "data": {
+          "domain_light": "Lights",
+          "domain_switch": "Switches",
+          "domain_media_player": "Media players",
+          "domain_cover": "Blinds and covers",
+          "domain_climate": "Thermostats",
+          "domain_scene": "Scenes and scripts"
+        },
+        "data_description": {
+          "domain_scene": "Scenes have no on and off, so they never show white. They are the only safe home for purple, which is hard to tell from white."
+        }
+      }
+    }
+  },
+  "selector": {
+    "colour": {
+      "options": {
+        "blue": "Blue",
+        "green": "Green",
+        "orange": "Orange",
+        "red": "Red",
+        "purple": "Purple"
+      }
+    }
   }
 }

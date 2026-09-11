@@ -144,7 +144,7 @@ def test_a_scene_pad_is_stateless_but_a_lamp_is_not() -> None:
         ("script.a", Activate),
         ("media_player.a", Service),
         ("cover.a", Service),
-        ("climate.a", Nothing),
+        ("climate.a", Toggle),
     ],
 )
 def test_a_pad_does_the_obvious_thing_for_what_is_behind_it(entity_id: str, tap_type: type) -> None:
@@ -167,9 +167,18 @@ def test_holding_anything_a_knob_could_adjust_focuses_it() -> None:
 def test_a_room_page_needs_no_configuration_at_all() -> None:
     registry = FakeRegistry(areas={"living": ("light.lamp", "switch.fan")})
     slots = resolve(page(source=Source(SourceKind.AREA, "living")), registry, EMPTY)
-    assert slots[0] == Slot(*default_actions("light.lamp"))
-    assert slots[1] == Slot(*default_actions("switch.fan"))
+    # Laid out with the actions its domain implies, and the colour its domain defaults to.
+    assert slots[0] == Slot(*default_actions("light.lamp"), colour=ORANGE)
+    assert slots[1] == Slot(*default_actions("switch.fan"), colour=ORANGE)
     assert slots[2] is None
+
+
+def test_a_profile_can_change_what_a_domain_looks_like() -> None:
+    # What the config flow writes: lights are green in this house.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    profile = Profile(pages={}, root_id="home", colours={"light": GREEN})
+    living = page(source=Source(SourceKind.AREA, "living"))
+    assert render(living, resolve(living, registry, profile), registry).frame[0] == GREEN
 
 
 def test_entities_are_laid_out_in_an_order_a_person_would_expect() -> None:

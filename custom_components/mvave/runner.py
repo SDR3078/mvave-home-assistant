@@ -109,6 +109,7 @@ class SurfaceRunner:
         #: when the set does.
         self._watched: set[str] = set()
         self._logged: tuple[int, str | None, str | None] | None = None
+        self._logged_page: str | None = None
         self._timers: dict[str, CALLBACK_TYPE] = {}
         self._ticker: asyncio.Task[None] | None = None
         self._writer: asyncio.Task[None] | None = None
@@ -185,7 +186,9 @@ class SurfaceRunner:
             if arming.layout is None:
                 return
             self._learn(arming.layout)
-            self.surface = Surface(build_profile(self.hass), HomeAssistantRegistry(self.hass))
+            self.surface = Surface(
+                build_profile(self.hass, self.entry.options), HomeAssistantRegistry(self.hass)
+            )
             LOGGER.info(
                 "%s: surface ready with %d pages",
                 self.coordinator.address,
@@ -229,6 +232,36 @@ class SurfaceRunner:
             self._lights,
             self._knobs,
         )
+
+    @callback
+    def reconfigure(self) -> None:
+        """Rebuild the surface from the options, without dropping the link.
+
+        Reloading the config entry would be the ordinary answer and would also work, but
+        it disconnects the device and reconnecting costs twenty seconds. Nothing about the
+        options touches the link, so nothing about the link needs to be disturbed.
+        """
+        if self.surface is None:
+            return
+        was = self.surface
+        surface = Surface(
+            build_profile(self.hass, self.entry.options), HomeAssistantRegistry(self.hass)
+        )
+        # Keep where somebody was standing, as far as it still exists. Changing a colour
+        # and being thrown back to the index is the surface losing your place over
+        # something that had nothing to do with where you were.
+        kept = [page for page in was.stack if surface.profile.page(page) is not None]
+        surface.stack = kept or [surface.profile.root_id]
+        surface.focus = was.focus
+        surface.pending = set(was.pending)
+        self.surface = surface
+        self._logged_page = None
+        self._shown = None
+        self._lit.clear()
+        LOGGER.info(
+            "%s: reconfigured, %d pages", self.coordinator.address, len(self.surface.profile.pages)
+        )
+        self._redraw()
 
     # -------------------------------------------------------------- outside
 
@@ -440,6 +473,7 @@ class SurfaceRunner:
             return
         rendering = self.surface.rendering()
         self._watch(self.surface)
+        self._log_page(rendering.frame)
         if self._playing is None:
             self._paint(
                 compose(rendering, time.monotonic() - self._started), dict(rendering.buttons)
@@ -483,6 +517,27 @@ class SurfaceRunner:
                 await self._send(frame)
             if buttons is not None:
                 await self._show_buttons(buttons)
+
+    @callback
+    def _log_page(self, frame: Frame) -> None:
+        """One line per page arrived at, saying what ended up on which pad.
+
+        The question this answers is "why is that pad not what I expected", which is
+        otherwise three guesses: the entity is not in the area, it was filtered out as a
+        diagnostic, or it is there and its colour is not what was assumed.
+        """
+        page = self.surface.page.id if self.surface else None
+        if page == self._logged_page or self.surface is None:
+            return
+        self._logged_page = page
+        laid_out = [
+            f"{index}:{slot.entity_id or type(slot.tap).__name__.lower()}={frame[index]}"
+            for index, slot in enumerate(self.surface.slots())
+            if slot is not None
+        ]
+        LOGGER.debug(
+            "%s: page %s has %s", self.coordinator.address, page, " ".join(laid_out) or "nothing"
+        )
 
     async def _tick(self) -> None:
         """Redraw while anything on the grid is breathing or blinking."""

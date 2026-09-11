@@ -14,6 +14,7 @@ from engine.model import (
     Activate,
     EntityState,
     EventOnly,
+    Focus,
     Navigate,
     PadConfig,
     Page,
@@ -637,3 +638,53 @@ def test_a_page_with_nowhere_to_grow_from_gets_a_plain_wipe() -> None:
     first = view.navigate_to("kitchen").animation[0]
     assert first[0] == GREEN
     assert first.count(GREEN) == 1
+
+
+def test_a_pad_that_would_do_nothing_shudders_rather_than_looking_broken() -> None:
+    # A lit pad that does nothing when pressed is indistinguishable from a broken one.
+    # This was found by pressing a thermostat, which the design had deliberately given no
+    # tap action, and watching it sit there.
+    profile = Profile(
+        pages={"home": Page("home", "Home", BLUE, pads={0: PadConfig(hold=Focus("light.a"))})},
+        root_id="home",
+    )
+    view = Surface(profile, FakeRegistry({}, {"light.a": "on"}))
+    outcome = view.handle(Press(0))
+    assert outcome.calls == ()
+    assert outcome.animation
+    assert outcome.animation[-1] == view.rendering().frame
+    # Holding it still works, so the shudder is about the tap and nothing else.
+    view.handle(Press(0, held=True))
+    assert view.focus == "light.a"
+
+
+# ------------------------------------------------------------ reconfiguring
+
+
+def test_a_stack_can_be_carried_across_a_rebuild() -> None:
+    # What reconfiguring does. Changing a colour and being thrown back to the index is the
+    # surface losing your place over something that had nothing to do with where you were.
+    was = surface()
+    was.handle(Press(0))
+    assert was.page.id == "living"
+
+    rebuilt = Surface(PROFILE, was.registry)
+    rebuilt.stack = [page for page in was.stack if rebuilt.profile.page(page) is not None]
+    assert rebuilt.page.id == "living"
+
+
+def test_a_page_that_stopped_existing_drops_you_home() -> None:
+    was = surface()
+    was.handle(Press(2))  # office
+    smaller = Profile(
+        pages={
+            "home": Page("home", "Home", BLUE, source=Source(SourceKind.PAGES)),
+            "living": Page("living", "Living", ORANGE, source=Source(SourceKind.AREA, "living")),
+        },
+        root_id="home",
+    )
+    rebuilt = Surface(smaller, was.registry)
+    kept = [page for page in was.stack if rebuilt.profile.page(page) is not None]
+    rebuilt.stack = kept or [smaller.root_id]
+    assert rebuilt.page.id == "home"
+    assert rebuilt.depth == 0
