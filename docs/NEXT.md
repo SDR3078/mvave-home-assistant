@@ -70,6 +70,14 @@ implementation plan and this file is the running to-do list.
   pressed" keeps meaning pad 5 across a preset change while the note underneath moves.
   Checked by building a layout from a real dump and asserting it equals the constant that
   was written from measurements, which tests both at once.
+- **Transitions light one pad at a time**, the owner's idea and a better one than what it
+  replaced. Rings and columns were built first and felt uneven however evenly they were
+  timed, because they cannot help it: a ring around a corner pad is one pad wide, the next
+  is three, then five, then seven, so the amount of light arriving changes at every step.
+  Measuring the frames on the wire proved the timing was even to within a few milliseconds
+  while it still read as a limp. One pad per step cannot have that problem, and it removed
+  a second one for free, since entering from a middle pad used to take fewer steps than
+  from a corner and so had a different duration. 45 ms a pad, settled by eye.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze

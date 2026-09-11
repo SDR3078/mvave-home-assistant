@@ -188,38 +188,44 @@ That separation is what makes five colours enough. Identity colours live on the 
 
 ### 5.3 Transitions
 
-Sixty full-grid frames a second are available, so the budget is generous. Each step below is **350 ms**, which was arrived at by trying 50, 110, 150, 200, 250 and 350 on the hardware; everything faster read as either a stutter or as nothing having happened.
+Sixty full-grid frames a second are available, so the budget is generous.
+
+**One pad lights at a time, never more.** That is the single rule the shapes below exist to satisfy, and it was arrived at the hard way: rings and columns were built first, and both felt uneven no matter how evenly they were timed. They cannot help it. A ring around a corner pad is one pad wide and the next is three, then five, then seven, so the amount of light arriving changes at every step. Measuring the frames on the wire proved the timing was even to within a few milliseconds while it still read as a limp. A single pad per step cannot have that problem, and it removed a second one for free: entering from a middle pad used to take fewer steps than from a corner, so the same gesture had two different durations.
+
+**45 ms a pad**, so a page change is under a second and a half. Below about 40 the travelling edge stops reading as an edge and becomes a blur, which is the floor worth going to. A ring or a column at a time needed 350 ms a step to read at all; a pad at a time reads comfortably at a fraction of that, because there is no longer a jump to take in.
 
 **Entering a page** answers two questions in order: which pad did I press, and what is in here.
 
-1. **Close, in rings from the pressed pad.** Growing squares by Chebyshev distance, one ring per step, in the destination page's colour. The page you are leaving stays lit ahead of the curtain until it is covered, so nothing blanks. Four steps from a corner, three from the middle.
-2. **Open, left to right.** One column per step, four steps, uncovering the destination page, which is already in its real colours as it appears.
-3. The transport buttons change **on the final frame**, as the last column clears.
+1. **Close, winding out from the pressed pad.** A clockwise spiral: the pressed pad, then the ring around it entered from directly above and swept clockwise, then the next ring, until the grid is covered in the destination page's colour. The page you are leaving stays lit ahead of the curtain, so nothing blanks. Sixteen steps, wherever it starts.
+2. **Open, left to right.** A column at a time, each filled from the top, uncovering the destination page, which is already in its real colours as it appears. Sixteen steps.
+3. The transport buttons change **on the final frame**, as the last pad clears.
+
+Entering a page from its own pad on the index means that pad already carries the curtain's colour, so the first frame changes nothing. That is deliberate and is what makes the curtain look like it grew out of the finger rather than appearing on top of it.
 
 **Leaving a page** is the exact mirror, so that going back undoes going in:
 
-1. **Close right to left**, one column per step, over the page being left.
-2. **Shrink in rings** toward the pad that page occupies on the index, so the last thing lit is the pad originally pressed.
+1. **Close right to left**, a column at a time filled from the top, over the page being left.
+2. **Wind back inward** to the pad that page occupies on the index, the spiral run in reverse, so the last pad still covered is the one originally pressed.
 3. The transport buttons go dark **immediately**, on the first frame of the curtain, because the affordance has already been used.
 
 | Transition | Animation |
 |---|---|
-| enter a page by pressing its pad | rings out from that pad, then a left-to-right open |
-| `back` | columns right to left, then rings shrinking into that page's index pad |
+| enter a page by pressing its pad | a clockwise spiral out from that pad, then a left-to-right open |
+| `back` | right to left, then the spiral in reverse into that page's index pad |
 | `home` | as `back`, but shrinking into the index's own root position |
 | navigate by service, automation or presence | the same close and open, with **no origin**: both halves are column wipes, because inventing an origin pad implies a finger that was not there |
-| idle timeout to home | column wipe only, no rings, and no button flash. Nothing happened, so it should not look like it did |
+| idle timeout to home | a sideways wipe only, no spiral, and no button flash. Nothing happened, so it should not look like it did |
 | focus change | no grid animation, only the focused pad starting to breathe |
 
-**Why rings one way and columns the other.** Rings say where the finger was. Columns say here is a page, and left to right is how a grid is read. Advancing a whole ring at a time does put a different number of pads on screen each step, one then three then five then seven from a corner; covering a fixed number of pads instead keeps the area even but leaves the growing square visibly unfinished halfway through each step, which is worse.
+**Why a spiral one way and columns the other.** The spiral says where the finger was. Columns say here is a page, and left to right is how a grid is read.
 
 ### 5.4 Rules
 
 - Animations are frame generators in the engine; the coordinator plays them on a fixed tick and diffs against the last frame, exactly like static frames.
 - **Any pad press aborts the running animation** and jumps to the resolved state. Input is never queued behind eye candy.
 - Anything that is not a grid frame, the transport buttons above all, must be schedulable **against a specific frame** of an animation rather than firing at its start or its end.
-- Primitives: `expand(origin, colour)`, `collapse(target, colour)`, `wipe(colour, direction)`, `breathe(pad)`, `blink(pad)`. No fade and no partial intensity: there is no intensity.
-- Global setting `animations: full | minimal | off`; `minimal` = the column wipe only, no rings.
+- Primitives: `sweep(order, before, after)` and the two orders it is given, a clockwise spiral from a pad and a column sweep sideways. Every transition is one of those; the shapes are the design and the mechanism underneath has nothing in it. Plus `breathe(pad)` and `blink(pad)`. No fade and no partial intensity: there is no intensity.
+- Global setting `animations: full | minimal | off`; `minimal` = the sideways wipe only, no spiral.
 
 ---
 

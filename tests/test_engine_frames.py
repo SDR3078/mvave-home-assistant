@@ -9,16 +9,18 @@ These tests exist so that they stay caught.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 from engine import frames
 from engine.frames import (
-    COLUMNS,
     PAD_COUNT,
     Frame,
+    clockwise_order,
     collapse,
+    column_order,
     expand,
-    ring_distances,
-    rings_from,
+    sweep,
     value_bar,
     wipe,
 )
@@ -38,6 +40,19 @@ def lit_count(frame: Frame, colour: int) -> int:
     return sum(1 for value in frame if value == colour)
 
 
+def biggest_change(start: Frame, sequence: tuple[Frame, ...]) -> int:
+    """The most pads any single frame of an animation changes at once.
+
+    Never more than one, rather than exactly one: entering a page from its own pad on the
+    index means that pad is already the curtain's colour, so the first frame changes
+    nothing. That is what makes the curtain look like it grew out of the finger.
+    """
+    return max(
+        sum(1 for old, new in zip(previous, current, strict=True) if old != new)
+        for previous, current in pairwise((start, *sequence))
+    )
+
+
 # ---------------------------------------------------------------- the grid itself
 
 
@@ -48,106 +63,120 @@ def test_reading_order_runs_left_to_right_then_down() -> None:
     assert (frames.row_of(6), frames.column_of(6)) == (1, 2)
 
 
-def test_a_corner_is_three_rings_from_the_far_side_and_the_middle_is_two() -> None:
-    assert max(ring_distances(TOP_LEFT)) == 3
-    assert max(ring_distances(MIDDLE)) == 2
-    assert rings_from(TOP_LEFT) == 4
-    assert rings_from(MIDDLE) == 3
+# ------------------------------------------------------------------- the orders
 
 
-def test_every_ring_is_a_square() -> None:
-    # The shape that grows out of a pressed pad has to be a square, not a diamond, or it
-    # stops reading as "it started here".
-    distances = ring_distances(TOP_LEFT)
-    within_two = [index for index, distance in enumerate(distances) if distance <= 2]
-    assert within_two == [0, 1, 2, 4, 5, 6, 8, 9, 10]
+@pytest.mark.parametrize("origin", range(PAD_COUNT))
+def test_the_spiral_visits_every_pad_once_and_starts_where_it_was_pressed(origin: int) -> None:
+    order = clockwise_order(origin)
+    assert order[0] == origin
+    assert sorted(order) == list(range(PAD_COUNT))
+
+
+def test_the_spiral_winds_clockwise_from_directly_above() -> None:
+    # From the middle of the grid the first ring is unambiguous: up, then round to the
+    # right. A ring entered at a corner instead reads as a box being drawn.
+    assert clockwise_order(frames.position(1, 1))[:9] == (5, 1, 2, 6, 10, 9, 8, 4, 0)
+
+
+def test_columns_fill_from_the_top_and_can_run_either_way() -> None:
+    assert column_order()[:5] == (0, 4, 8, 12, 1)
+    assert column_order(rightwards=False)[:5] == (3, 7, 11, 15, 2)
+    assert sorted(column_order()) == list(range(PAD_COUNT))
+
+
+def test_a_sweep_changes_one_pad_per_frame() -> None:
+    before, after = (OFF,) * PAD_COUNT, tuple(range(1, PAD_COUNT + 1))
+    sequence = sweep(column_order(), before, after)
+    assert len(sequence) == PAD_COUNT
+    assert biggest_change(before, sequence) == 1
+    assert sequence[-1] == after
 
 
 # ------------------------------------------------------------------- entering
 
 
-def test_expand_closes_in_rings_then_opens_in_columns() -> None:
+@pytest.mark.parametrize("origin", [TOP_LEFT, MIDDLE, BOTTOM_RIGHT])
+def test_nothing_ever_lights_more_than_one_pad_at_a_time(origin: int) -> None:
+    # The property the whole redesign exists for. A ring is one pad wide at a corner and
+    # seven at the far edge, so however evenly it is timed the amount of light arriving
+    # changes every step, and it reads as a limp.
+    assert biggest_change(LEAVING, expand(origin, CURTAIN, LEAVING, ARRIVING)) == 1
+
+
+def test_entering_covers_the_grid_and_then_uncovers_it() -> None:
     sequence = expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)
-    assert len(sequence) == rings_from(TOP_LEFT) + COLUMNS
-
-    # Closing: one pad, then two by two, then three by three, then the whole grid.
-    assert [lit_count(frame, CURTAIN) for frame in sequence[:4]] == [1, 4, 9, 16]
-    # Opening: four pads of the new page at a time.
-    assert [lit_count(frame, CURTAIN) for frame in sequence[4:]] == [12, 8, 4, 0]
+    assert len(sequence) == PAD_COUNT * 2
+    assert sequence[PAD_COUNT - 1] == (CURTAIN,) * PAD_COUNT
+    assert sequence[-1] == ARRIVING
 
 
-def test_expand_leaves_the_old_page_lit_ahead_of_the_curtain() -> None:
+def test_entering_starts_on_the_pad_that_was_pressed() -> None:
+    first = expand(MIDDLE, CURTAIN, LEAVING, ARRIVING)[0]
+    assert first[MIDDLE] == CURTAIN
+    assert lit_count(first, CURTAIN) == 1
+
+
+def test_the_page_being_left_stays_lit_ahead_of_the_curtain() -> None:
     # The first thing this got wrong: everything went dark and *then* the curtain grew, so
     # for the whole first half the grid said nothing at all.
     first = expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)[0]
-    assert first[0] == CURTAIN
     assert first[1:] == LEAVING[1:]
 
 
-def test_expand_shows_the_new_page_in_its_real_colours_as_it_arrives() -> None:
+def test_the_page_being_entered_is_already_itself_behind_the_curtain() -> None:
     # Not a flat block of colour that swaps to the page at the very end.
-    opening = expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)[4]
-    assert [opening[index] for index in (0, 4, 8, 12)] == [ARRIVING[i] for i in (0, 4, 8, 12)]
-    assert opening[1] == CURTAIN
+    opening = expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)[PAD_COUNT]
+    assert opening[0] == ARRIVING[0]
+    assert lit_count(opening, CURTAIN) == PAD_COUNT - 1
 
 
-def test_expand_ends_exactly_on_the_arriving_page() -> None:
-    assert expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)[-1] == ARRIVING
-    assert expand(MIDDLE, CURTAIN, LEAVING, ARRIVING)[-1] == ARRIVING
-
-
-def test_expand_from_the_middle_is_one_step_shorter_than_from_a_corner() -> None:
-    # A property of the shape rather than a bug. Padding the middle case to match would
-    # mean frames that change nothing, which is what made an earlier version feel uneven.
-    assert len(expand(MIDDLE, CURTAIN, LEAVING, ARRIVING)) == 7
-    assert len(expand(TOP_LEFT, CURTAIN, LEAVING, ARRIVING)) == 8
-
-
-@pytest.mark.parametrize("origin", range(PAD_COUNT))
-def test_expand_covers_the_whole_grid_before_it_opens(origin: int) -> None:
-    sequence = expand(origin, CURTAIN, LEAVING, ARRIVING)
-    covered = sequence[rings_from(origin) - 1]
-    assert covered == (CURTAIN,) * PAD_COUNT
+def test_entering_takes_the_same_time_wherever_it_starts() -> None:
+    # It used to be a step shorter from the middle than from a corner, because a corner is
+    # further from the far edge. One pad per step removes that entirely.
+    lengths = {len(expand(origin, CURTAIN, LEAVING, ARRIVING)) for origin in range(PAD_COUNT)}
+    assert lengths == {PAD_COUNT * 2}
 
 
 # -------------------------------------------------------------------- leaving
 
 
-def test_collapse_mirrors_expand() -> None:
+def test_leaving_mirrors_entering() -> None:
     sequence = collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)
-    assert len(sequence) == COLUMNS + rings_from(MIDDLE)
-    # Closing right to left: the rightmost column first.
-    assert [lit_count(frame, CURTAIN) for frame in sequence[:4]] == [4, 8, 12, 16]
-    assert sequence[3] == (CURTAIN,) * PAD_COUNT
+    assert len(sequence) == PAD_COUNT * 2
+    assert sequence[PAD_COUNT - 1] == (CURTAIN,) * PAD_COUNT
+    assert sequence[-1] == LEAVING
 
 
-def test_collapse_shrinks_into_the_pad_that_was_pressed() -> None:
-    # The last thing lit before the index settles is the pad that page occupies on it.
-    sequence = collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)
-    penultimate = sequence[-2]
+def test_leaving_closes_against_the_reading_direction() -> None:
+    first = collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)[0]
+    assert first[frames.position(0, 3)] == CURTAIN
+    assert lit_count(first, CURTAIN) == 1
+
+
+def test_leaving_winds_back_into_the_pad_that_was_pressed() -> None:
+    # The last thing still covered is the pad the page you are returning to occupies.
+    penultimate = collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)[-2]
     assert lit_count(penultimate, CURTAIN) == 1
     assert penultimate[MIDDLE] == CURTAIN
 
 
-def test_collapse_ends_exactly_on_the_arriving_page() -> None:
-    assert collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)[-1] == LEAVING
-
-
-def test_collapse_closes_against_the_reading_direction() -> None:
-    first = collapse(MIDDLE, CURTAIN, ARRIVING, LEAVING)[0]
-    assert [first[index] for index in (3, 7, 11, 15)] == [CURTAIN] * 4
-    assert first[0] == ARRIVING[0]
+@pytest.mark.parametrize("target", [TOP_LEFT, MIDDLE, BOTTOM_RIGHT])
+def test_leaving_also_moves_one_pad_at_a_time(target: int) -> None:
+    assert biggest_change(ARRIVING, collapse(target, CURTAIN, ARRIVING, LEAVING)) == 1
 
 
 # ------------------------------------------------------- navigation with no origin
 
 
-def test_wipe_has_no_rings_at_all() -> None:
+def test_a_page_change_nobody_asked_for_has_no_spiral_at_all() -> None:
     # Navigation from a service call or a presence sensor. Inventing an origin pad would
     # imply a finger that was not there.
     sequence = wipe(CURTAIN, LEAVING, ARRIVING)
-    assert len(sequence) == COLUMNS * 2
-    assert [lit_count(frame, CURTAIN) for frame in sequence] == [4, 8, 12, 16, 12, 8, 4, 0]
+    assert len(sequence) == PAD_COUNT * 2
+    assert sequence[0][0] == CURTAIN
+    assert lit_count(sequence[0], CURTAIN) == 1
+    assert sequence[PAD_COUNT - 1] == (CURTAIN,) * PAD_COUNT
     assert sequence[-1] == ARRIVING
 
 

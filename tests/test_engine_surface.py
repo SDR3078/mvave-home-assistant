@@ -188,8 +188,9 @@ def test_the_idle_timeout_goes_home_without_making_a_fuss() -> None:
     view.handle(Press(0))
     outcome = view.handle(Idle())
     assert view.page.id == "home"
-    # A plain wipe: no rings, because nothing happened and nobody pressed anything.
-    assert len(outcome.animation) == 8
+    # A plain sideways wipe: no spiral, because nothing happened and nobody pressed
+    # anything. One pad per frame, so a whole grid covered and uncovered is thirty-two.
+    assert len(outcome.animation) == 32
     assert outcome.buttons is ButtonTiming.START
 
 

@@ -15,6 +15,7 @@ it is, and the short version is in the docstrings.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Final
 
 from .palette import OFF
@@ -24,10 +25,11 @@ COLUMNS: Final = 4
 ROWS: Final = 4
 PAD_COUNT: Final = COLUMNS * ROWS
 
-#: How long one step of any animation lasts. Arrived at by trying 50, 110, 150, 200, 250
-#: and 350 milliseconds on the hardware: everything faster read either as a stutter or as
-#: nothing having happened at all.
-STEP_SECONDS: Final = 0.35
+#: How long one pad of an animation lasts, so a whole page change is thirty-two of these.
+#: Settled by eye on the hardware, which is the only way any of this was settled: a ring or
+#: a column at a time needed 350 ms a step to read at all, and a single pad at a time reads
+#: comfortably at a fraction of that, because there is no longer a jump to take in.
+STEP_SECONDS: Final = 0.045
 
 #: A frame is immutable so it can be compared, cached and used as a dict key. The
 #: coordinator diffs consecutive frames to decide what to send.
@@ -60,111 +62,110 @@ def column_of(index: int) -> int:
     return index % COLUMNS
 
 
-def ring_distances(origin: int) -> tuple[int, ...]:
-    """How many rings out each pad is from the origin, counted the way a king moves.
+def clockwise_order(origin: int) -> tuple[int, ...]:
+    """Every pad, starting at one and spiralling outward clockwise.
 
-    Chebyshev rather than Euclidean distance, so a ring is a square and the shape that
-    grows out of a pressed pad is a square too. That is what makes the animation legible
-    as "it started here" rather than as an arbitrary spreading blob.
+    The order a curtain covers the grid when somebody pressed a pad: it begins under the
+    finger and winds outward, each ring entered from directly above and swept clockwise.
+
+    One pad at a time, which is the whole point. Advancing a ring at a time puts one pad
+    on the grid, then three, then five, then seven, so the amount of light arriving
+    changes every step however evenly the steps are timed, and it reads as a limp. A
+    single pad per step cannot do that.
     """
     origin_row, origin_column = row_of(origin), column_of(origin)
-    return tuple(
-        max(abs(row_of(index) - origin_row), abs(column_of(index) - origin_column))
-        for index in range(PAD_COUNT)
-    )
+    order: list[int] = [origin]
+    radius = 1
+    while len(order) < PAD_COUNT and radius <= max(ROWS, COLUMNS):
+        for row, column in _ring(origin_row, origin_column, radius):
+            if 0 <= row < ROWS and 0 <= column < COLUMNS:
+                order.append(position(row, column))
+        radius += 1
+    return tuple(order)
 
 
-def rings_from(origin: int) -> int:
-    """How many steps one ring pass takes from this origin.
+def _ring(origin_row: int, origin_column: int, radius: int) -> list[tuple[int, int]]:
+    """One square ring, clockwise, beginning directly above its centre."""
+    top, bottom = origin_row - radius, origin_row + radius
+    left, right = origin_column - radius, origin_column + radius
+    cycle = [(top, column) for column in range(left, right + 1)]
+    cycle += [(row, right) for row in range(top + 1, bottom + 1)]
+    cycle += [(bottom, column) for column in range(right - 1, left - 1, -1)]
+    cycle += [(row, left) for row in range(bottom - 1, top, -1)]
+    # Rotated so it starts at twelve o'clock rather than at a corner, which is what makes
+    # it read as winding outward from the pad rather than as a box being drawn.
+    noon = cycle.index((top, origin_column))
+    return cycle[noon:] + cycle[:noon]
 
-    Four from a corner and three from anywhere nearer the middle, so entering a page from
-    a middle pad is genuinely quicker than from a corner. That is a property of the shape
-    rather than a bug: the alternative is padding the middle case with frames that change
-    nothing, which is exactly what made an earlier version feel uneven.
+
+def column_order(rightwards: bool = True) -> tuple[int, ...]:
+    """Every pad, a column at a time, each column filled from the top.
+
+    The order a curtain travels sideways. Left to right is how a grid is read; the other
+    direction is for leaving, so that going back undoes going in.
     """
-    return max(ring_distances(origin)) + 1
+    columns = range(COLUMNS) if rightwards else range(COLUMNS - 1, -1, -1)
+    return tuple(position(row, column) for column in columns for row in range(ROWS))
+
+
+def sweep(order: Sequence[int], before: Frame, after: Frame) -> tuple[Frame, ...]:
+    """Replace one pad per frame, in the given order, until ``before`` has become ``after``.
+
+    Every animation in this module is one of these. What differs between them is only the
+    order the pads are visited in, which is worth saying out loud: the shapes are the
+    design, and the mechanism underneath has nothing in it.
+    """
+    current = list(before)
+    frames: list[Frame] = []
+    for index in order:
+        current[index] = after[index]
+        frames.append(tuple(current))
+    return tuple(frames)
 
 
 def expand(origin: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
-    """Entering a page: rings out of the pressed pad, then an open from the left.
+    """Entering a page: winding out from the pressed pad, then opening from the left.
 
-    Two questions, answered in order. Growing squares say *which pad did I press*, because
-    the animation starts under the finger. The left-to-right open says *what is in here*,
-    because left to right is how a grid is read.
+    Two questions, answered in order. The spiral says *which pad did I press*, because it
+    begins under the finger. The left-to-right open says *what is in here*, because left
+    to right is how a grid is read.
 
     The page being left stays lit ahead of the curtain rather than blanking first, so
     nothing ever disappears before the animation has said anything. The page being entered
     is already in its real colours behind the curtain, so it arrives *as* the animation
     rather than all at once at the end.
-
-    Rings advance one at a time, which puts a different number of pads on screen each step,
-    one then three then five then seven from a corner. Covering a fixed number of pads
-    instead keeps the area even but leaves the growing square visibly unfinished halfway
-    through every step, which reads worse than the uneven area does.
     """
-    distances = ring_distances(origin)
-    rings = rings_from(origin)
-    closing = tuple(
-        tuple(
-            colour if distance <= step else leaving[index]
-            for index, distance in enumerate(distances)
-        )
-        for step in range(rings)
-    )
-    return closing + uncover(colour, arriving)
+    curtain: Frame = (colour,) * PAD_COUNT
+    return sweep(clockwise_order(origin), leaving, curtain) + uncover(colour, arriving)
 
 
 def collapse(target: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
-    """Leaving a page: a close against the reading direction, then a shrink into one pad.
+    """Leaving a page: closing against the reading direction, then winding back into one pad.
 
-    The exact mirror of :func:`expand`, so that going back undoes going in. The curtain
-    closes right to left, then contracts toward the pad the page you are returning to
-    occupies on the index, which means the last thing lit before that index settles is
-    exactly the pad that was pressed to leave it.
+    The exact mirror of :func:`expand`, so that going back undoes going in. The last pad
+    still covered is the one the page you are returning to occupies on the index, which is
+    the pad that was pressed to get here.
     """
-    distances = ring_distances(target)
-    rings = rings_from(target)
-    closing = tuple(
-        tuple(
-            colour if column_of(index) >= COLUMNS - 1 - step else leaving[index]
-            for index in range(PAD_COUNT)
-        )
-        for step in range(COLUMNS)
-    )
-    shrinking = tuple(
-        tuple(
-            colour if distance <= rings - 2 - step else arriving[index]
-            for index, distance in enumerate(distances)
-        )
-        for step in range(rings)
-    )
-    return closing + shrinking
+    curtain: Frame = (colour,) * PAD_COUNT
+    closing = sweep(column_order(rightwards=False), leaving, curtain)
+    inward = tuple(reversed(clockwise_order(target)))
+    return closing + sweep(inward, curtain, arriving)
 
 
 def wipe(colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
-    """A page change with no origin: both halves are column wipes.
+    """A page change with no origin: both halves travel sideways.
 
     For navigation that came from a service call, an automation or a presence sensor.
     Inventing an origin pad would imply a finger that was not there, and the first thing
     somebody does with a surface that lies about causality is stop trusting it.
     """
-    closing = tuple(
-        tuple(colour if column_of(index) <= step else leaving[index] for index in range(PAD_COUNT))
-        for step in range(COLUMNS)
-    )
-    return closing + uncover(colour, arriving)
+    curtain: Frame = (colour,) * PAD_COUNT
+    return sweep(column_order(), leaving, curtain) + uncover(colour, arriving)
 
 
 def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
-    """Uncover a frame one column at a time, left to right.
-
-    The second half of entering a page, and the whole of leaving a value bar behind. Left
-    to right because that is how a grid is read.
-    """
-    return tuple(
-        tuple(arriving[index] if column_of(index) <= step else colour for index in range(PAD_COUNT))
-        for step in range(COLUMNS)
-    )
+    """Uncover a frame one pad at a time, a column at a time, from the left."""
+    return sweep(column_order(), (colour,) * PAD_COUNT, arriving)
 
 
 def value_bar(fraction: float, colour: int, track: int = OFF) -> Frame:
