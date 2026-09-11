@@ -1,0 +1,44 @@
+mvave-home-assistant
+Copyright (c) 2026 SDR3078
+
+This product includes work by others. Three attributions, and one deliberate
+absence.
+
+--------------------------------------------------------------------------------
+Home Assistant integration blueprint
+https://github.com/ludeeus/integration_blueprint
+MIT License
+
+`scripts/setup` and `scripts/develop`, and `.devcontainer.json`, began as that
+project's own files. Its notice condition binds, which is why this file exists.
+Both scripts have since been corrected: the blueprint's PYTHONPATH is off by one
+directory, and a symlink is used instead.
+
+--------------------------------------------------------------------------------
+ZzpsS/m-vave-codex-bridge
+https://github.com/ZzpsS/m-vave-codex-bridge
+MIT License
+
+The layout of the SMC-PAD's volatile RGB write, reproduced from USB captures by
+its author. Credited again in `devices/smc_pad.py`, where it is used. Verified
+independently against this device over Bluetooth on 2026-09-09.
+
+--------------------------------------------------------------------------------
+jvsobrinho/mvave-blackbox-ble
+https://github.com/jvsobrinho/mvave-blackbox-ble
+Documentation under CC BY-SA 4.0
+
+Established that the AE40 service is a generic vendor tunnel and that the same
+framing is used across M-Vave's range. Facts are not copyrightable and the
+share-alike term attaches to their prose, not to what is true about the
+hardware, so `docs/HARDWARE-BLE.md` is written as original measurement from this
+device and deliberately does not reproduce their tables. That is worth keeping
+to, because copying one would change this repository's licence.
+
+--------------------------------------------------------------------------------
+NOT INCLUDED: trueroad/BLE_MIDI_packet_data_set
+
+The BLE-MIDI packet data the parser is validated against carries no licence at
+all, which means no permission to redistribute it. It is fetched on demand by
+`scripts/fetch_rp052_dataset` into a git-ignored directory and is never
+committed. Do not add it.

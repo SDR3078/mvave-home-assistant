@@ -1,0 +1,25 @@
+# HACS takes an integration's version from the git tag and Home Assistant takes it from
+# the manifest. Nothing checks that they agree, and when they do not the symptom is an
+# update that installs and then reports the old version, which is a confusing thing to
+# debug months later.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  version:
+    name: Manifest matches the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(python -c "import json;print(json.load(open('custom_components/mvave/manifest.json'))['version'])")
+          echo "tag: $tag, manifest: $manifest"
+          [ "$tag" = "$manifest" ] || {
+            echo "::error::the tag says $tag and the manifest says $manifest"
+            exit 1
+          }

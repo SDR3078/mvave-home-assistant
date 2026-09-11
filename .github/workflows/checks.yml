@@ -1,0 +1,62 @@
+# The same three commands the devcontainer runs, so a pull request cannot pass here and
+# fail on somebody's machine. Versions are pinned in requirements-dev.txt.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DEFAULT_PYTHON: "3.13"
+
+jobs:
+  lint:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  pure:
+    name: Protocol tests, Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The transport, the device map and the engine import as top-level packages with
+        # no Home Assistant present, which is what will let them move to PyPI. Running
+        # them across every supported Python is what keeps that true: anything that quietly
+        # depends on the platform, or on a syntax newer than the floor, fails here.
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install pytest
+      - name: Refuse to run if Home Assistant is installed
+        # The point of this job is the absence. If it ever creeps in as a dependency the
+        # tests would still pass and would stop meaning anything.
+        run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('homeassistant') is not None)"
+      - run: pytest tests -q --ignore=tests/homeassistant
+
+  integration:
+    name: Home Assistant tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest tests -q

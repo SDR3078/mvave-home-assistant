@@ -1,0 +1,30 @@
+# What Home Assistant and HACS check before they will accept an integration. Both are
+# published as actions by the projects themselves, so this stays correct as their rules
+# change rather than encoding a snapshot of them here.
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, because both actions check against a moving target: hassfest follows Home
+    # Assistant's own release, and a manifest that was valid in March can stop being so.
+    - cron: "0 4 * * 1"
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration

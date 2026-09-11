@@ -102,6 +102,13 @@ implementation plan and this file is the running to-do list.
   on offer, because white is what "off" means and the readability of a page rests on it.
   Saving rebuilds the surface in place and keeps you where you were standing, rather than
   reloading the entry and spending twenty seconds reconnecting over a colour.
+- **CI, a licence and a notice.** hassfest and HACS validation on every push and weekly,
+  because both check against a moving target. Lint, format and types. The protocol tests
+  across Python 3.11 to 3.14 with nothing but pytest installed, and a step that *fails* if
+  Home Assistant is importable, because the whole point of that job is the absence and a
+  dependency creeping in would leave it passing and meaning nothing. Verified by running
+  it: 274 tests pass on 3.11 with no Home Assistant present. Plus a release check that the
+  manifest version equals the tag, since HACS reads one and Home Assistant reads the other.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -111,10 +118,11 @@ implementation plan and this file is the running to-do list.
 
 ## Build
 
-1. **Repository.** `git init` and a first commit. Decide whether
-   `tests/fixtures/smc_pad_presets.bin`, which holds the owner's own presets, stays in a
-   public repo; three tests depend on it, and `smc_pad_factory_slot0.bin` is the neutral
-   one. Then the CI workflows from PLAN.md section 4.
+1. **Repository.** Decide whether `tests/fixtures/smc_pad_presets.bin`, which holds the
+   owner's own presets, stays in a public repo; three tests depend on it, and
+   `smc_pad_factory_slot0.bin` is the neutral one. That is the last thing standing between
+   here and pushing this somewhere, and it is a cheap rewrite now and an expensive one
+   later. Also still missing: a README.
 2. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
    unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
    MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
