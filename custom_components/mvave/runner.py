@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from bleak import BleakError
@@ -37,6 +38,8 @@ from .engine.surface import (
 from .registry import HomeAssistantRegistry, HomeAssistantSink, build_profile
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant
 
     from .coordinator import MvaveCoordinator
@@ -191,6 +194,33 @@ class SurfaceRunner:
             self._knobs,
         )
 
+    # -------------------------------------------------------------- outside
+
+    def knows(self, page_id: str) -> bool:
+        """Whether this surface has a page by that name."""
+        return self.surface is not None and self.surface.profile.page(page_id) is not None
+
+    def page_names(self) -> str:
+        """Every page this surface has, for an error message worth reading."""
+        return ", ".join(sorted(self.surface.profile.pages)) if self.surface else ""
+
+    def drive(self, ask: Callable[[Surface], Outcome]) -> None:
+        """Tell the surface to do something that nobody pressed.
+
+        The same path a press takes, so a service call animates, announces and lights the
+        transport buttons exactly as a finger would. What differs is only what the engine
+        records as the cause, which is what stops an automation mistaking its own effect
+        for a person.
+        """
+        if self.surface is None:
+            return
+        self._cancel_animation()
+        outcome = ask(self.surface)
+        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+        self._redraw()
+        self._perform(outcome)
+        self._play(outcome)
+
     # ----------------------------------------------------------------- input
 
     @callback
@@ -262,9 +292,12 @@ class SurfaceRunner:
                 signature[1] or "nothing",
             )
         self._steps[knob] = self._steps.get(knob, 0) + steps
+        # The announcement goes out per step and only the call waits. An automation
+        # watching a knob wants to see it move, and thirty light commands out of one
+        # gesture is the thing the debounce exists to prevent.
+        self._perform(replace(outcome, calls=()))
         self._restart("knob", KNOB_DEBOUNCE_SECONDS, self._flush_knobs)
         self._restart("hud", HUD_SECONDS, self._drop_hud)
-        # Keep the calls, drop nothing else: the outcome for a turn carries no animation.
         self._pending_call = outcome
 
     @callback
@@ -273,7 +306,7 @@ class SurfaceRunner:
         self._timers.pop("knob", None)
         self._steps.clear()
         if self._pending_call is not None:
-            self._perform(self._pending_call)
+            self._perform(replace(self._pending_call, emits=()))
             self._pending_call = None
 
     # ---------------------------------------------------------------- output
@@ -315,7 +348,7 @@ class SurfaceRunner:
         for call in outcome.calls:
             self.sink.call(call.domain, call.service, call.data)
         for emit in outcome.emits:
-            self.sink.fire("pad", {"tag": emit.tag, "address": self.coordinator.address})
+            self.sink.fire(str(emit.type), {**emit.data, "address": self.coordinator.address})
 
     @callback
     def _play(self, outcome: Outcome) -> None:

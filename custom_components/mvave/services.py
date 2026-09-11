@@ -23,11 +23,16 @@ from homeassistant.helpers import service
 from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
-    from . import MvaveConfigEntry
-    from .coordinator import MvaveCoordinator
+    from . import MvaveConfigEntry, MvaveData
+    from .runner import SurfaceRunner
 
 SERVICE_SEND_RAW = "send_raw"
+SERVICE_NAVIGATE = "navigate"
+SERVICE_FOCUS = "focus"
+SERVICE_HOME = "home"
 ATTR_DATA = "data"
+ATTR_PAGE = "page"
+ATTR_ENTITY = "entity_id"
 
 # The device arrives through the call's target, which Home Assistant merges into the
 # data. It can be absent, null, a single id or a list of them depending on how the call
@@ -85,7 +90,7 @@ def _parse_midi(text: str) -> bytes:
     return midi
 
 
-def _coordinator_for_device(hass: HomeAssistant, device_id: str) -> MvaveCoordinator:
+def _data_for_device(hass: HomeAssistant, device_id: str) -> MvaveData:
     """Resolve the device a call targets, with translated errors for the usual mistakes."""
     _, entry = service.async_get_device_and_config_entry(hass, DOMAIN, device_id)
     config_entry: MvaveConfigEntry = entry
@@ -96,7 +101,7 @@ async def _async_send_raw(call: ServiceCall) -> None:
     """Send raw MIDI bytes to one or more devices."""
     midi = _parse_midi(call.data[ATTR_DATA])
     for device_id in _target_devices(call):
-        coordinator = _coordinator_for_device(call.hass, device_id)
+        coordinator = _data_for_device(call.hass, device_id).coordinator
         if not coordinator.connected:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -114,7 +119,53 @@ async def _async_send_raw(call: ServiceCall) -> None:
         LOGGER.debug("%s: sent %s", coordinator.address, midi.hex(" ").upper())
 
 
+# The surface has to be drivable from outside or it is only half a control surface. A
+# presence sensor pre-selecting a room, a wall tablet steering the pad, and an automation
+# pushing to a media page when the television comes on are all navigation that nobody
+# pressed, and the engine already distinguishes them from a press so an automation cannot
+# mistake its own effect for a person.
+TARGET_SCHEMA = vol.Schema(
+    {vol.Optional(ATTR_DEVICE_ID): vol.Any(None, cv.string, [cv.string])}, extra=vol.ALLOW_EXTRA
+)
+NAVIGATE_SCHEMA = TARGET_SCHEMA.extend({vol.Required(ATTR_PAGE): cv.string})
+FOCUS_SCHEMA = TARGET_SCHEMA.extend({vol.Required(ATTR_ENTITY): cv.entity_id})
+
+
+def _surfaces(call: ServiceCall) -> list[SurfaceRunner]:
+    """Every surface the call is aimed at, ready to be told something."""
+    return [_data_for_device(call.hass, device_id).runner for device_id in _target_devices(call)]
+
+
+async def _async_navigate(call: ServiceCall) -> None:
+    """Send one or more surfaces to a page."""
+    page = call.data[ATTR_PAGE]
+    for runner in _surfaces(call):
+        if not runner.knows(page):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_page",
+                translation_placeholders={"page": page, "pages": runner.page_names()},
+            )
+        runner.drive(lambda surface, page=page: surface.navigate_to(page))
+
+
+async def _async_focus(call: ServiceCall) -> None:
+    """Point one or more surfaces' knobs at an entity."""
+    entity_id = call.data[ATTR_ENTITY]
+    for runner in _surfaces(call):
+        runner.drive(lambda surface, entity_id=entity_id: surface.focus_on(entity_id))
+
+
+async def _async_home(call: ServiceCall) -> None:
+    """Send one or more surfaces back to their root page."""
+    for runner in _surfaces(call):
+        runner.drive(lambda surface: surface.go_home())
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the integration's services. Called once, from async_setup."""
     hass.services.async_register(DOMAIN, SERVICE_SEND_RAW, _async_send_raw, schema=SEND_RAW_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_NAVIGATE, _async_navigate, schema=NAVIGATE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_FOCUS, _async_focus, schema=FOCUS_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_HOME, _async_home, schema=TARGET_SCHEMA)

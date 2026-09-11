@@ -28,7 +28,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the connectivity sensor."""
-    async_add_entities([MvaveConnectedSensor(entry.runtime_data)])
+    async_add_entities([MvaveConnectedSensor(entry.runtime_data.coordinator)])
 
 
 class MvaveConnectedSensor(MvaveEntity, BinarySensorEntity):

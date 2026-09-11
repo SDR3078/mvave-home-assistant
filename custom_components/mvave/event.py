@@ -55,7 +55,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Create one entity per control, if the device's layout is known."""
-    coordinator = entry.runtime_data
+    coordinator = entry.runtime_data.coordinator
     layout = resolve_layout(coordinator.device_name)
     if layout is None:
         LOGGER.info(

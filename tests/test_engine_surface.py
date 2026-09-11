@@ -28,9 +28,12 @@ from engine.render import BACK_BUTTON, HOME_BUTTON
 from engine.surface import (
     ButtonPress,
     ButtonTiming,
+    Emit,
+    EventType,
     Idle,
     Press,
     Surface,
+    Trigger,
     Turn,
     pad_showing,
 )
@@ -243,7 +246,7 @@ def test_an_event_only_pad_fires_an_event_and_calls_nothing() -> None:
     )
     outcome = Surface(profile, FakeRegistry({}, {})).handle(Press(0))
     assert outcome.calls == ()
-    assert [emit.tag for emit in outcome.emits] == ["coffee"]
+    assert Emit(EventType.TAGGED, {"tag": "coffee"}) in outcome.emits
 
 
 def test_pressing_an_empty_pad_does_nothing_at_all() -> None:
@@ -519,3 +522,102 @@ def test_a_light_that_is_off_starts_at_the_bottom_and_then_climbs() -> None:
     # which is still off as far as the registry is concerned.
     assert view.hud is not None
     assert view.hud.value == pytest.approx(2 / 16)
+
+
+# ----------------------------------------------------------------- announcing
+
+
+def emitted(outcome: object) -> dict[str, dict]:
+    """Every event an outcome announced, by type."""
+    return {str(emit.type): dict(emit.data) for emit in outcome.emits}  # type: ignore[attr-defined]
+
+
+def test_going_into_a_room_announces_leaving_and_arriving_separately() -> None:
+    # One event per transition and never batched, so an automation can trigger on exactly
+    # one thing rather than unpicking a list.
+    view = surface()
+    events = emitted(view.handle(Press(0)))
+    assert events["page_exited"]["page_id"] == "home"
+    assert events["page_entered"]["page_id"] == "living"
+    assert events["page_entered"]["previous"] == "home"
+    assert events["page_entered"]["depth"] == 1
+
+
+def test_a_page_event_carries_enough_to_act_on_without_asking_anything_else() -> None:
+    events = emitted(surface().handle(Press(0)))
+    entered = events["page_entered"]
+    assert entered["page_title"] == "Living"
+    assert entered["page_source"] == "area"
+    assert entered["area_id"] == "living"
+
+
+def test_what_moved_you_is_part_of_the_event() -> None:
+    # A presence sensor pre-selecting a room and a finger pressing a pad are not the same
+    # thing, and an automation that cannot tell them apart will loop.
+    view = surface()
+    assert emitted(view.handle(Press(0)))["page_entered"]["trigger"] == str(Trigger.PAD)
+    assert emitted(view.handle(ButtonPress(BACK_BUTTON)))["page_entered"]["trigger"] == str(
+        Trigger.BUTTON
+    )
+    assert emitted(view.navigate_to("kitchen"))["page_entered"]["trigger"] == str(Trigger.SERVICE)
+    assert emitted(view.handle(Idle()))["page_entered"]["trigger"] == str(Trigger.IDLE)
+
+
+def test_every_press_is_announced_even_when_the_pad_does_nothing() -> None:
+    # "Pad 5 was held" is exactly the thing somebody wants to hang an automation on,
+    # whether or not the engine itself had anything to do with it.
+    view = surface()
+    view.handle(Press(0))
+    # A pad with nothing on it stays silent, though. There is nothing to announce, and an
+    # event for every dead pad would make the useful ones harder to find.
+    assert emitted(view.handle(Press(15))) == {}
+    pressed = emitted(view.handle(Press(1)))
+    assert pressed["pad_pressed"]["pad"] == 1
+    assert pressed["pad_pressed"]["entity_id"] == "switch.fan"
+    held = emitted(view.handle(Press(0, held=True)))
+    assert held["pad_held"]["pad"] == 0
+
+
+def test_focus_announces_both_taking_and_releasing() -> None:
+    view = lit_lamp()
+    assert emitted(view.handle(Press(0, held=True)))["focus_set"]["entity_id"] == "light.lamp"
+    assert emitted(view.handle(Press(0, held=True)))["focus_cleared"]["entity_id"] == "light.lamp"
+
+
+def test_a_knob_turn_says_what_it_changed_and_to_what() -> None:
+    view = lit_lamp()
+    view.handle(Press(0, held=True))
+    turned = emitted(view.handle(Turn(1, 2)))["knob_turned"]
+    assert turned["knob"] == 1
+    assert turned["steps"] == 2
+    assert turned["property"] == "brightness"
+    assert turned["entity_id"] == "light.lamp"
+
+
+def test_the_ways_in_from_outside_move_the_surface() -> None:
+    view = surface()
+    assert view.navigate_to("kitchen").animation
+    assert view.page.id == "kitchen"
+    view.focus_on("light.counter")
+    assert view.focus == "light.counter"
+    assert view.go_home().animation
+    assert view.depth == 0
+
+
+def test_navigating_from_outside_still_grows_from_the_page_s_own_pad() -> None:
+    # Not an invented origin: the page lives on that pad, and it is the one a finger
+    # would have used. What caused the move is in the event's trigger, not in the grid.
+    view = surface()
+    first = view.navigate_to("kitchen").animation[0]
+    assert first[1] == GREEN
+    assert first.count(GREEN) == 1
+
+
+def test_a_page_with_nowhere_to_grow_from_gets_a_plain_wipe() -> None:
+    # From inside the living room the kitchen is not on the grid at all, so there is no
+    # pad that could honestly be the origin.
+    view = surface()
+    view.handle(Press(0))
+    first = view.navigate_to("kitchen").animation[0]
+    assert first[0] == GREEN
+    assert first.count(GREEN) == 1

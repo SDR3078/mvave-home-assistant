@@ -69,16 +69,43 @@
     },
     "no_target_device": {
       "message": "Pick which M-Vave device to send to, under Targets."
+    },
+    "unknown_page": {
+      "message": "This surface has no page called {page}. It has: {pages}."
     }
   },
   "services": {
+    "navigate": {
+      "name": "Go to page",
+      "description": "Send a control surface to one of its pages. The grid animates as if it had been pressed, but without a spiral, because nobody pressed anything.",
+      "fields": {
+        "page": {
+          "name": "Page",
+          "description": "The page to show. For a room page this is the area's id."
+        }
+      }
+    },
+    "focus": {
+      "name": "Point the knobs at an entity",
+      "description": "Choose what the encoders adjust, without anybody holding a pad. Stays until something else takes it or the page changes.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "What the knobs should adjust."
+        }
+      }
+    },
+    "home": {
+      "name": "Go home",
+      "description": "Clear a control surface's navigation history back to its root page."
+    },
     "send_raw": {
       "name": "Send raw MIDI",
-      "description": "Sends MIDI bytes to the controller. The BLE-MIDI framing is added for you; give the message itself, starting with its status byte.",
+      "description": "Send MIDI bytes straight to the device. The escape hatch for anything the pages and the knobs do not model.",
       "fields": {
         "data": {
           "name": "Data",
-          "description": "The MIDI message as hexadecimal, for example 99 24 05 to light note 36 on channel 10 with palette colour 5."
+          "description": "Hex bytes, spaced however you like. Must begin with a status byte, for example 99 24 05 to light pad 1 green."
         }
       }
     }

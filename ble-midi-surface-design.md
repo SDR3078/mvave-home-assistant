@@ -213,7 +213,7 @@ Entering a page from its own pad on the index means that pad already carries the
 | enter a page by pressing its pad | a clockwise spiral out from that pad, then a left-to-right open |
 | `back` | right to left, then the spiral in reverse into that page's index pad |
 | `home` | as `back`, but shrinking into the index's own root position |
-| navigate by service, automation or presence | the same close and open, with **no origin**: both halves are column wipes, because inventing an origin pad implies a finger that was not there |
+| navigate by service, automation or presence | **the same as a press**, growing from the pad the destination occupies on the screen being left. That is not an invented origin: it is where the page lives, and the pad a finger would have used. What caused the move is carried by the event's `trigger` instead, which is where an automation needs it and where the grid cannot say it. A page that is not on the screen at all has nowhere honest to grow from and gets a plain sideways wipe |
 | idle timeout to home | a sideways wipe only, no spiral, and no button flash. Nothing happened, so it should not look like it did |
 | focus change | no grid animation, only the focused pad starting to breathe |
 

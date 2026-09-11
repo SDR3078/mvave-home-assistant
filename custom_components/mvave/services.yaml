@@ -1,3 +1,30 @@
+navigate:
+  target:
+    device:
+      integration: mvave
+  fields:
+    page:
+      required: true
+      example: living_room
+      selector:
+        text:
+
+focus:
+  target:
+    device:
+      integration: mvave
+  fields:
+    entity_id:
+      required: true
+      example: light.ceiling_lights
+      selector:
+        entity:
+
+home:
+  target:
+    device:
+      integration: mvave
+
 send_raw:
   target:
     device:

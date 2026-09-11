@@ -219,7 +219,16 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
             )
         for event in events:
             for listener in self._midi_listeners:
-                listener(event)
+                try:
+                    listener(event)
+                except Exception:
+                    # One listener must not silence the others. They are the event
+                    # entities and the surface, which know nothing about each other, and
+                    # without this a mistake in either stops the pad responding at all
+                    # while the only sign of it is a line in the proxy's log. Broad on
+                    # purpose: there is nothing useful to do with any of them here except
+                    # keep going.
+                    LOGGER.exception("%s: listener failed on %s", self.address, _describe(event))
 
     # -------------------------------------------------------------- sending
 

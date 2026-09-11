@@ -13,7 +13,7 @@ actually happen here are sequences, not single presses.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -31,6 +31,7 @@ from .model import (
     Profile,
     Service,
     Slot,
+    SourceKind,
     Toggle,
 )
 from .ports import RegistryView
@@ -105,11 +106,40 @@ class Call:
     data: Mapping[str, Any] = field(default_factory=dict)
 
 
+class EventType(StrEnum):
+    """What happened, for the bus.
+
+    One per transition and never batched, so an automation can trigger on exactly one
+    thing. The surface fires these whether or not anybody is listening: a control surface
+    that only works through its own pages is half a control surface, and the escape hatch
+    has to be there from the start rather than bolted on once somebody asks.
+    """
+
+    PAGE_ENTERED = "page_entered"
+    PAGE_EXITED = "page_exited"
+    FOCUS_SET = "focus_set"
+    FOCUS_CLEARED = "focus_cleared"
+    PAD_PRESSED = "pad_pressed"
+    PAD_HELD = "pad_held"
+    KNOB_TURNED = "knob_turned"
+    TAGGED = "tagged"
+
+
+class Trigger(StrEnum):
+    """What caused a transition, which is not always a finger."""
+
+    PAD = "pad"
+    BUTTON = "button"
+    SERVICE = "service"
+    IDLE = "idle"
+
+
 @dataclass(frozen=True, slots=True)
 class Emit:
-    """An event to fire, for a page that would rather an automation decided."""
+    """One thing that happened, ready for the bus."""
 
-    tag: str
+    type: EventType
+    data: Mapping[str, Any] = field(default_factory=dict)
 
 
 class ButtonTiming(StrEnum):
@@ -262,7 +292,16 @@ class Surface:
         if slot is None or not self._reachable(slot):
             return NOTHING_HAPPENED
         action = slot.hold if event.held else slot.tap
-        return self._perform(action, origin=event.pad)
+        outcome = self._perform(action, origin=event.pad, trigger=Trigger.PAD)
+        # Fired even when the pad does nothing the engine understands, because "pad 5 was
+        # held" is exactly the thing somebody wants to hang an automation on.
+        return self._also(
+            outcome,
+            Emit(
+                EventType.PAD_HELD if event.held else EventType.PAD_PRESSED,
+                {"pad": event.pad, "entity_id": slot.entity_id},
+            ),
+        )
 
     def _reachable(self, slot: Slot) -> bool:
         """Whether pressing this pad could do anything.
@@ -285,12 +324,14 @@ class Surface:
         # Back and home are the two things on this surface that work the same everywhere,
         # including on the page somebody got lost on, so a page cannot rebind them.
         if event.name == BACK_BUTTON:
-            return self._perform(Home() if event.held else Back(), origin=None)
-        if event.name == HOME_BUTTON:
-            return self._perform(Home(), origin=None)
-        if not assignable(event.name):
+            action: PadAction = Home() if event.held else Back()
+        elif event.name == HOME_BUTTON:
+            action = Home()
+        elif assignable(event.name):
+            action = self.page.buttons.get(event.name, Nothing())
+        else:
             return NOTHING_HAPPENED
-        return self._perform(self.page.buttons.get(event.name, Nothing()), origin=None)
+        return self._perform(action, origin=None, trigger=Trigger.BUTTON)
 
     def _turn(self, event: Turn) -> Outcome:
         """One knob, one property, one value.
@@ -330,7 +371,21 @@ class Surface:
 
         domain, service, data = prop.write(state, value)
         self.hud = Hud(target, prop.key, value)
-        return Outcome(calls=(Call(domain, service, data),))
+        return Outcome(
+            calls=(Call(domain, service, data),),
+            emits=(
+                Emit(
+                    EventType.KNOB_TURNED,
+                    {
+                        "knob": event.knob,
+                        "steps": event.steps,
+                        "entity_id": target,
+                        "property": prop.key,
+                        "value": round(value, 4),
+                    },
+                ),
+            ),
+        )
 
     def peek(self, entity_id: str) -> None:
         """Put an entity's main value on the grid without changing it.
@@ -364,18 +419,26 @@ class Surface:
         """
         if self.depth == 0:
             return NOTHING_HAPPENED
-        return self._go(lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]))
+        leaving = self.stack[-1]
+        return self._go(
+            lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]),
+            trigger=Trigger.IDLE,
+            leaving=leaving,
+            animate=False,
+        )
 
     # ---------------------------------------------------------------- actions
 
-    def _perform(self, action: PadAction, origin: int | None) -> Outcome:
+    def _perform(
+        self, action: PadAction, origin: int | None, trigger: Trigger = Trigger.PAD
+    ) -> Outcome:
         """Everything one action asks for, whether it moves the surface or the house."""
         if isinstance(action, Navigate):
-            return self._navigate(action.page_id, origin)
+            return self._navigate(action.page_id, origin, trigger)
         if isinstance(action, Back):
-            return self._back()
+            return self._back(trigger)
         if isinstance(action, Home):
-            return self._home()
+            return self._home(trigger)
         if isinstance(action, Toggle):
             return self._command(action.entity_id, self._toggle_call(action.entity_id))
         if isinstance(action, Activate):
@@ -387,14 +450,17 @@ class Surface:
             # trusting.
             if self.focus == action.entity_id:
                 self.focus = None
-                return self.clear_hud()
+                return self._also(
+                    self.clear_hud(),
+                    Emit(EventType.FOCUS_CLEARED, {"entity_id": action.entity_id}),
+                )
             self.focus = action.entity_id
             self.peek(action.entity_id)
-            return Outcome()
+            return Outcome(emits=(Emit(EventType.FOCUS_SET, {"entity_id": action.entity_id}),))
         if isinstance(action, Service):
             return Outcome(calls=(Call(action.domain, action.service, dict(action.data)),))
         if isinstance(action, EventOnly):
-            return Outcome(emits=(Emit(action.tag),))
+            return Outcome(emits=(Emit(EventType.TAGGED, {"tag": action.tag}),))
         return NOTHING_HAPPENED
 
     def _toggle_call(self, entity_id: str) -> Call:
@@ -422,34 +488,83 @@ class Surface:
         """Told by the coordinator that an entity's real state has arrived."""
         self.pending.discard(entity_id)
 
+    # --------------------------------------------------------------- outside
+
+    def navigate_to(self, page_id: str) -> Outcome:
+        """Go to a page because something other than a finger said so.
+
+        Symmetric in and out is a requirement rather than a nicety: a presence sensor
+        pre-selecting a room, a wall tablet steering the pad and an automation pushing to a
+        media page when the television comes on all need this, and none of them is a press.
+        """
+        return self._perform(Navigate(page_id), origin=None, trigger=Trigger.SERVICE)
+
+    def focus_on(self, entity_id: str) -> Outcome:
+        """Point the knobs at an entity from outside."""
+        return self._perform(Focus(entity_id), origin=None, trigger=Trigger.SERVICE)
+
+    def go_home(self) -> Outcome:
+        """Clear the navigation history from outside."""
+        return self._perform(Home(), origin=None, trigger=Trigger.SERVICE)
+
     # ------------------------------------------------------------- navigating
 
-    def _navigate(self, page_id: str, origin: int | None) -> Outcome:
+    def _navigate(self, page_id: str, origin: int | None, trigger: Trigger) -> Outcome:
         if self.profile.page(page_id) is None or page_id == self.stack[-1]:
             return NOTHING_HAPPENED
-        return self._go(lambda: self.stack.append(page_id), origin=origin, entering=page_id)
+        if origin is None:
+            # Nobody pressed anything, but the page still lives somewhere on the screen
+            # being left, and growing out of where it lives is not an invented origin. It
+            # is the same pad a finger would have used, so the surface looks the same
+            # whoever asked. What caused it is carried by the event's trigger instead,
+            # which is where an automation needs it and where the grid cannot say it.
+            origin = pad_showing(self.slots(), page_id)
+        return self._go(
+            lambda: self.stack.append(page_id),
+            trigger=trigger,
+            origin=origin,
+            entering=page_id,
+        )
 
-    def _back(self) -> Outcome:
+    def _back(self, trigger: Trigger) -> Outcome:
         if self.depth == 0:
             return NOTHING_HAPPENED
         leaving = self.stack[-1]
-        return self._go(lambda: self.stack.pop(), leaving=leaving)
+        return self._go(lambda: self.stack.pop(), trigger=trigger, leaving=leaving)
 
-    def _home(self) -> Outcome:
+    def _home(self, trigger: Trigger) -> Outcome:
         if self.depth == 0:
             return NOTHING_HAPPENED
         leaving = self.stack[-1]
         return self._go(
-            lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]), leaving=leaving
+            lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]),
+            trigger=trigger,
+            leaving=leaving,
         )
+
+    def _describe(self, page: Page) -> dict[str, Any]:
+        """The fields every page event carries, so an automation can read one and act."""
+        return {
+            "page_id": page.id,
+            "page_title": page.title,
+            "page_source": str(page.source.kind),
+            "area_id": page.source.key if page.source.kind is SourceKind.AREA else None,
+            "parent_page_id": page.parent_id,
+        }
+
+    def _also(self, outcome: Outcome, *emits: Emit) -> Outcome:
+        """The same outcome with more to announce."""
+        return replace(outcome, emits=outcome.emits + emits)
 
     def _go(
         self,
         move: Any,
         *,
+        trigger: Trigger,
         origin: int | None = None,
         entering: str | None = None,
         leaving: str | None = None,
+        animate: bool = True,
     ) -> Outcome:
         """Move, and work out which curtain covers the move.
 
@@ -458,6 +573,7 @@ class Surface:
         behind it. Neither is ever a blank grid.
         """
         before = self.rendering().frame
+        departed = self.page
         move()
         # Focus does not follow you between pages. A lamp singled out in the kitchen has
         # no business still holding the knobs once you are looking at the bedroom, and
@@ -466,24 +582,45 @@ class Surface:
         self.hud = None
         after = self.rendering().frame
 
+        announced = (
+            Emit(
+                EventType.PAGE_EXITED,
+                {**self._describe(departed), "depth": self.depth + 1, "trigger": str(trigger)},
+            ),
+            Emit(
+                EventType.PAGE_ENTERED,
+                {
+                    **self._describe(self.page),
+                    "depth": self.depth,
+                    "trigger": str(trigger),
+                    "previous": departed.id,
+                },
+            ),
+        )
+
         if entering is not None:
             destination = self.profile.page(entering)
             colour = destination.colour if destination else self.page.colour
-            if origin is None:
-                # Nobody pressed anything: a service call, an automation, a presence
-                # sensor. Inventing an origin would imply a finger that was not there.
-                return Outcome(animation=wipe(colour, before, after), buttons=ButtonTiming.END)
-            return Outcome(
-                animation=expand(origin, colour, before, after), buttons=ButtonTiming.END
+            # A wipe only when the page has nowhere to grow from: it is not on the screen
+            # being left at all, so there is no pad that could honestly be the origin.
+            frames = (
+                wipe(colour, before, after)
+                if origin is None
+                else expand(origin, colour, before, after)
             )
+            return Outcome(emits=announced, animation=frames, buttons=ButtonTiming.END)
 
         if leaving is not None:
-            departed = self.profile.page(leaving)
-            colour = departed.colour if departed else self.page.colour
+            page = self.profile.page(leaving)
+            colour = page.colour if page else self.page.colour
             target = pad_showing(self.slots(), leaving)
-            if target is None:
-                return Outcome(animation=wipe(colour, before, after))
-            return Outcome(animation=collapse(target, colour, before, after))
+            frames = (
+                wipe(colour, before, after)
+                if target is None
+                else collapse(target, colour, before, after)
+            )
+            return Outcome(emits=announced, animation=frames)
 
-        # An idle timeout. A plain wipe, in the colour of wherever you have ended up.
-        return Outcome(animation=wipe(self.page.colour, before, after))
+        # An idle timeout. A plain sideways wipe, in the colour of wherever you ended up.
+        animation = wipe(self.page.colour, before, after) if animate else ()
+        return Outcome(emits=announced, animation=animation)

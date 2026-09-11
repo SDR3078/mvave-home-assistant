@@ -5,6 +5,7 @@ Turns a Bluetooth LE MIDI controller into a Home Assistant control surface.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from bleak_retry_connector import close_stale_connections_by_address
@@ -23,7 +24,21 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
     from homeassistant.helpers.typing import ConfigType
 
-type MvaveConfigEntry = ConfigEntry[MvaveCoordinator]
+
+@dataclass(slots=True)
+class MvaveData:
+    """What one configured device carries: its link, and the surface driving it.
+
+    Two things rather than one because a service has to be able to reach either. Telling
+    the surface to go to a page and sending a device a raw MIDI message are both
+    legitimate, and neither belongs to the other.
+    """
+
+    coordinator: MvaveCoordinator
+    runner: SurfaceRunner
+
+
+type MvaveConfigEntry = ConfigEntry[MvaveData]
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.EVENT]
 
@@ -62,13 +77,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
         )
 
     coordinator = MvaveCoordinator(hass, address, name)
-    entry.runtime_data = coordinator
+    # The surface is the profile engine driving the grid. It builds itself once the device
+    # has been armed, because only then is the real note map known.
+    runner = SurfaceRunner(hass, coordinator)
+    entry.runtime_data = MvaveData(coordinator=coordinator, runner=runner)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # The surface is the profile engine driving the grid. It builds itself once the device
-    # has been armed, because only then is the real note map known.
-    entry.async_on_unload(SurfaceRunner(hass, coordinator).async_start())
+    entry.async_on_unload(runner.async_start())
 
     # Start after the platforms, so entities are subscribed before the first connect.
     entry.async_on_unload(coordinator.async_start())
@@ -85,5 +101,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
 async def async_unload_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> bool:
     """Unload a config entry, releasing the device."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    await entry.runtime_data.async_shutdown()
+    await entry.runtime_data.coordinator.async_shutdown()
     return unloaded
