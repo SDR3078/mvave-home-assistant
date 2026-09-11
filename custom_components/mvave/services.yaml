@@ -1,7 +1,8 @@
 navigate:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
   fields:
     page:
       required: true
@@ -12,7 +13,8 @@ navigate:
 focus:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
   fields:
     entity_id:
       required: true
@@ -23,12 +25,14 @@ focus:
 home:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
 
 send_raw:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
   fields:
     data:
       required: true
@@ -39,7 +43,8 @@ send_raw:
 press_slot:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
   fields:
     slot:
       required: true
@@ -61,7 +66,8 @@ press_slot:
 get_pages:
   target:
     device:
-      integration: mvave
+      filter:
+        - integration: mvave
   fields:
     page:
       required: false

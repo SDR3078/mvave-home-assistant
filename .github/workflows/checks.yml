@@ -8,7 +8,10 @@ on:
   pull_request:
 
 env:
-  DEFAULT_PYTHON: "3.13"
+  # Follows pytest-homeassistant-custom-component, which pins itself to one Home
+  # Assistant release and to the Python that release requires. 0.13.317 onwards is
+  # 3.14 only, so a lower version here does not fail a test: it fails `pip install`.
+  DEFAULT_PYTHON: "3.14"
 
 jobs:
   lint:
