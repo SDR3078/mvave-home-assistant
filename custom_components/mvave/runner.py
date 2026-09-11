@@ -467,10 +467,18 @@ class SurfaceRunner:
             self._writer = self._task(self._drain(), "writer")
 
     async def _drain(self) -> None:
-        """Send whatever is wanted, newest first, until nothing is."""
+        """Send whatever is wanted, newest first, until nothing is.
+
+        Dropped rather than sent once a transition has started. A redraw asked for a moment
+        earlier is a settled page, and painting one over a curtain that is halfway across
+        is the same mistake as redrawing during an animation, arriving by a different
+        route: the animation owns the grid while it runs.
+        """
         while self._wanted is not None or self._wanted_buttons is not None:
             frame, self._wanted = self._wanted, None
             buttons, self._wanted_buttons = self._wanted_buttons, None
+            if self._playing is not None:
+                return
             if frame is not None:
                 await self._send(frame)
             if buttons is not None:
