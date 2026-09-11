@@ -139,6 +139,7 @@ CHOOSABLE: Final = {
 }
 BY_VALUE: Final = {value: name for name, value in CHOOSABLE.items()}
 
+
 #: The kinds of thing worth colouring separately. Not every domain: a list of forty would
 #: be worse than useless, and anything not here follows the built-in default.
 COLOURABLE: Final = ("light", "switch", "media_player", "cover", "climate", "scene")
@@ -161,12 +162,17 @@ class MvaveOptionsFlow(OptionsFlow):
     def __init__(self) -> None:
         """Start with nothing chosen."""
         self._pages: list[str] = []
+        self._page_colours: dict[str, int] = {}
+        #: Form field to area. The field is keyed by the room's *name*, because a schema
+        #: key is what Home Assistant shows as the label when there is no translation for
+        #: it, and "Living Room" is a better label than "living_room".
+        self._by_label: dict[str, str] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Pick the rooms, in the order they should appear on the index."""
         if user_input is not None:
             self._pages = list(user_input[CONF_PAGES])
-            return await self.async_step_colours()
+            return await self.async_step_page_colours()
 
         current = self.config_entry.options.get(CONF_PAGES)
         if current is None:
@@ -184,55 +190,62 @@ class MvaveOptionsFlow(OptionsFlow):
             ),
         )
 
-    async def async_step_colours(
+    async def async_step_page_colours(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Give each room a colour, and each kind of thing a colour of its own."""
+        """Give each room its colour. One screen, one job."""
         if user_input is not None:
-            return self.async_create_entry(
-                data={
-                    CONF_PAGES: self._pages,
-                    CONF_PAGE_COLOURS: {
-                        area: CHOOSABLE[user_input[f"page_{area}"]] for area in self._pages
-                    },
-                    CONF_DOMAIN_COLOURS: {
-                        domain: CHOOSABLE[user_input[f"domain_{domain}"]] for domain in COLOURABLE
-                    },
-                }
-            )
+            self._page_colours = {
+                self._by_label[label]: CHOOSABLE[choice] for label, choice in user_input.items()
+            }
+            return await self.async_step_domain_colours()
 
         areas = ar.async_get(self.hass)
-        pages = self.config_entry.options.get(CONF_PAGE_COLOURS, {})
-        domains = self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})
+        chosen = self.config_entry.options.get(CONF_PAGE_COLOURS, {})
+        self._by_label = {}
         fields: dict[Any, Any] = {}
         for index, area_id in enumerate(self._pages):
+            area = areas.async_get_area(area_id)
+            label = area.name if area else area_id
+            if label in self._by_label:
+                # Two rooms with the same name. Rare, and the id is at least unambiguous.
+                label = area_id
+            self._by_label[label] = area_id
             # Rooms past the fifth share a colour with an earlier one, because there are
             # only five. Which is fine: position on the index identifies them, and that is
             # the one channel that survives colour vision deficiency.
             fallback = IDENTITY[(index + 1) % len(IDENTITY)]
-            fields[
-                vol.Required(
-                    f"page_{area_id}",
-                    description={"suggested_value": BY_VALUE.get(pages.get(area_id, fallback))},
-                )
-            ] = _colour_selector()
-        for domain in COLOURABLE:
-            chosen = domains.get(domain, DOMAIN_COLOURS.get(domain, ORANGE))
-            fields[
-                vol.Required(f"domain_{domain}", description={"suggested_value": BY_VALUE[chosen]})
-            ] = _colour_selector()
+            suggested = BY_VALUE.get(chosen.get(area_id, fallback), BY_VALUE[fallback])
+            fields[vol.Required(label, description={"suggested_value": suggested})] = (
+                _colour_selector()
+            )
 
         return self.async_show_form(
-            step_id="colours",
+            step_id="page_colours",
             data_schema=vol.Schema(fields),
-            description_placeholders={
-                "rooms": ", ".join(
-                    (
-                        areas.async_get_area(area_id).name
-                        if areas.async_get_area(area_id)
-                        else area_id
-                    )
-                    for area_id in self._pages
-                )
-            },
+            description_placeholders={"count": str(len(self._pages))},
         )
+
+    async def async_step_domain_colours(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Give each kind of thing its colour, which is the same in every room."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={
+                    CONF_PAGES: self._pages,
+                    CONF_PAGE_COLOURS: self._page_colours,
+                    CONF_DOMAIN_COLOURS: {
+                        domain: CHOOSABLE[user_input[domain]] for domain in COLOURABLE
+                    },
+                }
+            )
+
+        chosen = self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})
+        fields: dict[Any, Any] = {}
+        for domain in COLOURABLE:
+            colour = chosen.get(domain, DOMAIN_COLOURS.get(domain, ORANGE))
+            fields[vol.Required(domain, description={"suggested_value": BY_VALUE[colour]})] = (
+                _colour_selector()
+            )
+        return self.async_show_form(step_id="domain_colours", data_schema=vol.Schema(fields))

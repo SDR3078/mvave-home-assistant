@@ -119,19 +119,20 @@
           "pages": "Rooms"
         }
       },
-      "colours": {
-        "title": "Colours",
-        "description": "A pad shows its colour when the thing behind it is on, and white when it is off. That is the one rule the grid cannot bend, so white is not on offer here.\n\nThere are five colours because five is how many this device can show that anybody can tell apart from across a room. Past the fifth room they repeat, and position on the first screen tells them apart instead.\n\nRooms: {rooms}",
+      "page_colours": {
+        "title": "Room colours",
+        "description": "A colour for each room. It appears on the first screen and again as the curtain that sweeps across when you go in and out.\n\nThere are five because five is how many this device can show that anybody can tell apart from across a room. Past the fifth they repeat, and position on the first screen tells them apart instead."
+      },
+      "domain_colours": {
+        "title": "What things look like",
+        "description": "A colour for each kind of thing, the same in every room.\n\nA pad shows its colour when the thing behind it is on, and white when it is off. That is the one rule the grid cannot bend, so white is not on offer.\n\nPurple is safe only on scenes. Scenes have no on and off, so they never show white, and purple is the one colour that is hard to tell from it.",
         "data": {
-          "domain_light": "Lights",
-          "domain_switch": "Switches",
-          "domain_media_player": "Media players",
-          "domain_cover": "Blinds and covers",
-          "domain_climate": "Thermostats",
-          "domain_scene": "Scenes and scripts"
-        },
-        "data_description": {
-          "domain_scene": "Scenes have no on and off, so they never show white. They are the only safe home for purple, which is hard to tell from white."
+          "light": "Lights",
+          "switch": "Switches",
+          "media_player": "Media players",
+          "cover": "Blinds and covers",
+          "climate": "Thermostats",
+          "scene": "Scenes and scripts"
         }
       }
     }
