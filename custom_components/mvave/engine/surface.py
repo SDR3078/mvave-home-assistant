@@ -262,6 +262,28 @@ class Surface:
         #: long as the finger does.
         self.shifted = False
 
+    def carry_into(self, fresh: Surface) -> None:
+        """Hand everything that outlives a rebuild to the surface replacing this one.
+
+        Here rather than in the caller because it is this class's own state, and a list of
+        fields copied somewhere else is a list somebody will add to this class without
+        adding to. Reconfiguring throws the surface away and builds another from the new
+        profile; what a person should not lose in that is where they were standing, what
+        the knobs were on, and where they had left a knob — none of which had anything to
+        do with the colour that was changed.
+
+        What is deliberately *not* carried is everything with a finger or a clock in it: a
+        held shift, a bar that is up, a legend. Those last exactly as long as the gesture
+        that opened them, and a rebuild ends the gesture.
+        """
+        # As far as it still exists. A page can be deleted by the same edit that caused
+        # the rebuild, and standing on it afterwards is not a place.
+        kept = [page for page in self.stack if fresh.profile.page(page) is not None]
+        fresh.stack = kept or [fresh.profile.root_id]
+        fresh.focus = self.focus
+        fresh.pending = set(self.pending)
+        fresh.last_asked = dict(self.last_asked)
+
     # ------------------------------------------------------------------ where
 
     @property

@@ -901,8 +901,53 @@ def test_a_stack_can_be_carried_across_a_rebuild() -> None:
     assert was.page.id == "living"
 
     rebuilt = Surface(PROFILE, was.registry)
-    rebuilt.stack = [page for page in was.stack if rebuilt.profile.page(page) is not None]
+    was.carry_into(rebuilt)
     assert rebuilt.page.id == "living"
+
+
+def test_a_rebuild_keeps_what_belongs_to_the_house_and_drops_what_belongs_to_a_finger() -> None:
+    # The line this draws is what the whole method is for. Where somebody is standing, what
+    # the knobs are on and where a knob was left are facts about the house, and an edit to
+    # a colour is not a reason to lose any of them. A held shift, a bar that is up and a
+    # legend are facts about a gesture, and the rebuild has ended the gesture.
+    #
+    # Asserted together because the failure mode is not getting one of them wrong, it is
+    # adding state to Surface and never thinking about this at all.
+    was = lit_lamp()
+    was.handle(Press(0, held=True))
+    was.handle(Turn(BRIGHTNESS, 2))
+    was.pending.add("light.lamp")
+    was.shifted = True
+    was.legend = True
+
+    rebuilt = Surface(PROFILE, was.registry)
+    was.carry_into(rebuilt)
+
+    assert rebuilt.stack == was.stack
+    assert rebuilt.focus == "light.lamp"
+    assert rebuilt.pending == {"light.lamp"}
+    assert rebuilt.last_asked == was.last_asked != {}
+
+    assert rebuilt.shifted is False
+    assert rebuilt.legend is False
+    assert rebuilt.hud is None
+
+
+def test_what_a_rebuild_carries_is_copied_rather_than_shared() -> None:
+    # Otherwise the surface that was thrown away is still holding the live objects, and a
+    # late callback arriving on it — a knob's confirmation, say — writes into the one that
+    # replaced it.
+    was = lit_lamp()
+    was.pending.add("light.lamp")
+    was.last_asked["light.lamp", "brightness"] = 0.5
+
+    rebuilt = Surface(PROFILE, was.registry)
+    was.carry_into(rebuilt)
+    was.pending.clear()
+    was.last_asked.clear()
+
+    assert rebuilt.pending == {"light.lamp"}
+    assert rebuilt.last_asked == {("light.lamp", "brightness"): 0.5}
 
 
 def test_a_page_that_stopped_existing_drops_you_home() -> None:
@@ -916,8 +961,7 @@ def test_a_page_that_stopped_existing_drops_you_home() -> None:
         root_id="home",
     )
     rebuilt = Surface(smaller, was.registry)
-    kept = [page for page in was.stack if rebuilt.profile.page(page) is not None]
-    rebuilt.stack = kept or [smaller.root_id]
+    was.carry_into(rebuilt)
     assert rebuilt.page.id == "home"
     assert rebuilt.depth == 0
 

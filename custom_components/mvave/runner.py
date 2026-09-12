@@ -447,16 +447,10 @@ class SurfaceRunner:
             profile or build_profile(self.hass, self.entry),
             HomeAssistantRegistry(self.hass),
         )
-        # Keep where somebody was standing, as far as it still exists. Changing a colour
-        # and being thrown back to the index is the surface losing your place over
-        # something that had nothing to do with where you were.
-        kept = [page for page in was.stack if surface.profile.page(page) is not None]
-        surface.stack = kept or [surface.profile.root_id]
-        surface.focus = was.focus
-        surface.pending = set(was.pending)
-        # Where a knob was left is a fact about the entity, not about the configuration
-        # that was just changed.
-        surface.last_asked = dict(was.last_asked)
+        # Changing a colour and being thrown back to the index is the surface losing your
+        # place over something that had nothing to do with where you were. What survives is
+        # the surface's own business, so it decides.
+        was.carry_into(surface)
         self.surface = surface
         self._logged_page = None
         self._shown = None
