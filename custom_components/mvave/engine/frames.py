@@ -248,6 +248,20 @@ def knob_legend(colours: Sequence[int | None]) -> Frame:
     return tuple(frame)
 
 
+def switcher_row(colours: Sequence[int]) -> Frame:
+    """The top row offering pages while a modifier is held, and nothing else lit.
+
+    The rest of the grid goes dark on purpose. A switcher laid over a page that was still
+    showing its own entities would be half one thing and half another, with no way to tell
+    which pad belonged to which; dark says plainly that the surface is in a mode, and a
+    dark pad already means "nothing here" everywhere else.
+    """
+    frame = list(blank())
+    for column, colour in enumerate(colours[:COLUMNS]):
+        frame[position(0, column)] = colour
+    return tuple(frame)
+
+
 def knob_pad(knob: int) -> int:
     """Where an encoder sits on the grid, by its printed number, one based.
 

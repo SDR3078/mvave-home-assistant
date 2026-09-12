@@ -30,10 +30,12 @@ from engine.properties import KNOB_COUNT
 from engine.render import BACK_BUTTON, HOME_BUTTON
 from engine.surface import (
     ButtonPress,
+    ButtonRelease,
     ButtonTiming,
     Emit,
     EventType,
     Idle,
+    Outcome,
     Press,
     Surface,
     Trigger,
@@ -186,13 +188,77 @@ def test_an_animation_always_ends_on_the_page_it_was_going_to() -> None:
     assert view.handle(ButtonPress(BACK_BUTTON)).animation[-1] == view.rendering().frame
 
 
-def test_holding_back_goes_all_the_way_home() -> None:
+def test_holding_back_opens_the_room_switcher_rather_than_going_home() -> None:
+    # It used to go home, which the stop button already does. Two buttons for one thing is
+    # a wasted gesture on a surface with five, and this is the one the switcher needs.
     view = surface()
     view.handle(Press(0))
-    view.handle(Press(0))  # a lamp; the stack does not move
     assert view.depth == 1
     view.handle(ButtonPress(BACK_BUTTON, held=True))
-    assert view.page.id == "home"
+    assert view.shifted is True
+    assert view.page.id == "living"  # it has not gone anywhere
+    assert view.depth == 1
+
+
+def test_letting_the_back_button_go_closes_the_switcher() -> None:
+    view = surface()
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(ButtonRelease(BACK_BUTTON))
+    assert view.shifted is False
+
+
+def test_the_switcher_offers_the_rooms_across_the_top_and_nothing_else() -> None:
+    view = surface()
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    frame = view.rendering().frame
+    # Three rooms in the profile, each in its own colour, and the rest of the grid dark so
+    # that it plainly is not a page.
+    assert frame[:3] == (ORANGE, GREEN, PURPLE)
+    assert set(frame[3:]) == {UNASSIGNED}
+
+
+def test_the_switcher_goes_straight_to_a_room_without_passing_home() -> None:
+    view = surface()
+    view.handle(Press(1))  # into the kitchen
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    outcome = view.handle(Press(2))  # the third room across the top
+    assert view.page.id == "office"
+    assert view.shifted is False
+    assert outcome.animation  # it arrives with a curtain like any other move
+
+
+def test_the_switcher_pad_you_are_already_on_says_so() -> None:
+    # Lit and doing nothing is never allowed to be silent on this surface.
+    view = surface()
+    view.handle(Press(0))  # into the living room, which is the first room
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    outcome = view.handle(Press(0))
+    assert outcome.animation  # a shudder, not a move
+    assert view.page.id == "living"
+
+
+def test_a_dark_pad_of_the_switcher_does_nothing_at_all() -> None:
+    view = surface()
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    outcome = view.handle(Press(9))  # well below the top row
+    assert outcome == Outcome()
+    assert view.shifted is True  # and the mode is still open
+
+
+def test_letting_go_without_pressing_anything_is_a_no_op() -> None:
+    view = surface()
+    view.handle(Press(0))
+    before = view.page.id
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(ButtonRelease(BACK_BUTTON))
+    assert view.page.id == before
+    assert view.rendering().frame == view._page_rendering().frame
+
+
+def test_the_stop_button_is_still_the_way_home() -> None:
+    view = surface()
+    view.handle(Press(0))
+    assert view.handle(ButtonPress(HOME_BUTTON)).animation
     assert view.depth == 0
 
 

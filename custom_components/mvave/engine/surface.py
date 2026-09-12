@@ -18,12 +18,14 @@ from enum import StrEnum
 from typing import Any
 
 from .frames import (
+    COLUMNS,
     Frame,
     collapse,
     expand,
     knob_legend,
     knobs_in_reading_order,
     refuse,
+    switcher_row,
     value_bar,
     wipe,
 )
@@ -77,6 +79,17 @@ class ButtonPress:
 
 
 @dataclass(frozen=True, slots=True)
+class ButtonRelease:
+    """A transport button let go of, after its hold had already fired.
+
+    Only buttons get this, and only held ones. A hold on a *pad* is a thing that happened
+    and is over; a hold on a button is a mode, and a mode has to be able to end.
+    """
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class Turn:
     """One encoder, and how many steps it moved. Clockwise is positive.
 
@@ -94,7 +107,7 @@ class Idle:
 
 
 #: Anything that can reach the surface from outside.
-InputEvent = Press | ButtonPress | Turn | Idle
+InputEvent = Press | ButtonPress | ButtonRelease | Turn | Idle
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +249,10 @@ class Surface:
         #: an answer to a question somebody asked, in the moment they asked it, which is the
         #: same rule that keeps an unreachable pad from spending a colour of its own.
         self.legend = False
+        #: The back button is being held, so the top row is offering the rooms instead of
+        #: whatever the page had there. A mode rather than a state: it lasts exactly as
+        #: long as the finger does.
+        self.shifted = False
 
     # ------------------------------------------------------------------ where
 
@@ -263,6 +280,8 @@ class Surface:
         is not enough to show a level *and* a room at once, and a bar squeezed into a row
         would be both unreadable and permanently in the way.
         """
+        if self.shifted:
+            return self._switcher()
         if self.legend:
             return self._legend()
         if self.hud is not None:
@@ -288,6 +307,26 @@ class Surface:
     def showing(self) -> bool:
         """Whether anything transient is covering the page and owes it a countdown."""
         return self.legend or self.hud is not None
+
+    def switcher(self) -> tuple[Page, ...]:
+        """The pages the top row offers while the back button is held.
+
+        Top-level pages in the profile's own order, which is the order the index shows them
+        in, so a room is in the same place whichever way you reach it. Four fit across, and
+        a household with more reaches the rest through the index — which is the honest
+        limit of a row four pads wide rather than a decision.
+        """
+        rooms = tuple(
+            page for page in self.profile.pages.values() if page.id != self.profile.root_id
+        )
+        return rooms[:COLUMNS]
+
+    def _switcher(self) -> Rendering:
+        """The rooms across the top, in their own colours, and nothing else lit."""
+        return Rendering(
+            frame=switcher_row([page.colour for page in self.switcher()]),
+            buttons=buttons_for(self.page, self._view()),
+        )
 
     def _legend(self) -> Rendering:
         """Which encoders are live, each in the colour of what it adjusts.
@@ -329,11 +368,15 @@ class Surface:
             return self._press(event)
         if isinstance(event, ButtonPress):
             return self._button(event)
+        if isinstance(event, ButtonRelease):
+            return self._released(event)
         if isinstance(event, Turn):
             return self._turn(event)
         return self._idle()
 
     def _press(self, event: Press, trigger: Trigger = Trigger.PAD) -> Outcome:
+        if self.shifted:
+            return self._switch(event.pad, trigger)
         slots = self.slots()
         if not 0 <= event.pad < len(slots):
             return NOTHING_HAPPENED
@@ -367,6 +410,21 @@ class Surface:
             ),
         )
 
+    def _switch(self, pad: int, trigger: Trigger) -> Outcome:
+        """A press while the back button is held: go to whichever room is on that pad."""
+        rooms = self.switcher()
+        if not 0 <= pad < len(rooms):
+            # A dark pad. The rest of the grid is not offering anything while the shift is
+            # held, and a dark pad means "nothing here" everywhere else too.
+            return NOTHING_HAPPENED
+        if rooms[pad].id == self.stack[-1]:
+            # Lit, and pressing it would do nothing, which on this surface is never allowed
+            # to be silent: you are already there.
+            return Outcome(animation=refuse(self.rendering().frame, pad))
+        # The shift is cleared inside the move, after it has read what is on the grid, so
+        # the curtain grows out of the switcher rather than out of a page nobody can see.
+        return self._navigate(rooms[pad].id, origin=pad, trigger=trigger)
+
     def _reachable(self, slot: Slot) -> bool:
         """Whether pressing this pad could do anything.
 
@@ -387,7 +445,13 @@ class Surface:
         # Back and home are the two things on this surface that work the same everywhere,
         # including on the page somebody got lost on, so a page cannot rebind them.
         if event.name == BACK_BUTTON:
-            action: PadAction = Home() if event.held else Back()
+            if event.held:
+                # Holding back used to go home, which the stop button already does. A
+                # surface with five buttons cannot afford to spend two on one thing, and
+                # this is the gesture the switcher needs.
+                self.shifted = True
+                return NOTHING_HAPPENED
+            action: PadAction = Back()
         elif event.name == HOME_BUTTON:
             action = Home()
         elif assignable(event.name):
@@ -395,6 +459,12 @@ class Surface:
         else:
             return NOTHING_HAPPENED
         return self._perform(action, origin=None, trigger=Trigger.BUTTON)
+
+    def _released(self, event: ButtonRelease) -> Outcome:
+        """A held button let go of. Ends whatever mode it was holding open."""
+        if event.name == BACK_BUTTON:
+            self.shifted = False
+        return NOTHING_HAPPENED
 
     def _turn(self, event: Turn) -> Outcome:
         """One knob, one property, one value.
@@ -751,6 +821,7 @@ class Surface:
         self.focus = None
         self.hud = None
         self.legend = False
+        self.shifted = False
         after = self.rendering().frame
 
         announced = (

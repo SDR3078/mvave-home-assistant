@@ -94,7 +94,11 @@ A page with no user config and `source: area` is fully usable out of the box. **
 
 - Any pad may `navigate` to any page — the structure is a graph, not a tree.
 - `back` pops the stack. `home` clears to the root page.
-- **Shift gesture**: hold the `left` button → row 1 temporarily becomes a switcher for top-level pages (the "tab bar"). Release without pressing = no-op.
+- **Shift gesture**: hold the `left` button → row 1 becomes a switcher for the rooms, each in its own colour, **and the rest of the grid goes dark**. Press one to go straight there; release without pressing and nothing has happened. Built 2026-09-12.
+  - The rest of the grid goes dark because a switcher laid over a page still showing its own entities is half one thing and half another, with no way to tell which pad belongs to which. Dark says plainly that the surface is in a mode, and a dark pad already means "nothing here" everywhere else.
+  - **Holding `left` no longer goes home.** It used to, and `stop` does the same thing, so one of the five buttons was spending its hold on a duplicate. That hold is what this gesture needs.
+  - Four rooms fit across. A household with more reaches the rest through the index, which is the honest limit of a row four pads wide rather than a decision.
+  - The pad you are already standing on stays lit and **shudders** if pressed, because lit-and-does-nothing is never allowed to be silent here (§5.2).
 - **Idle timeout**: per page, default 30 s, `0` on pages that should persist (media). On expiry, return to home with the slow fade (§5).
 - Navigation is drivable externally — see services in §4.
 

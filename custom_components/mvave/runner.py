@@ -29,6 +29,7 @@ from .engine import BUTTONS, PAD_COUNT, STEP_SECONDS, TICK_SECONDS, Frame, chang
 from .engine.model import Profile, SourceKind
 from .engine.surface import (
     ButtonPress,
+    ButtonRelease,
     ButtonTiming,
     EventType,
     Idle,
@@ -526,6 +527,11 @@ class SurfaceRunner:
             task.cancel()
         if key in self._fired:
             self._fired.discard(key)
+            kind, _, name = key.partition(":")
+            if kind == "button" and name in BUTTONS:
+                # A held pad is a thing that happened and is over. A held *button* is a
+                # mode — the switcher hangs off one — and a mode has to be able to end.
+                self._dispatch(ButtonRelease(name))
             # The finger has lifted, so whatever the hold put up can start counting down.
             # It does not count down while the finger is still there: having the grid clear
             # under your own hand is the surface deciding you have finished looking.

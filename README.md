@@ -26,8 +26,11 @@ You get a **grid of pages**. One page per room, plus an index listing them.
   the knobs at it.
 - **Turn a knob** and a value bar covers the whole grid for a second — sixteen pads filling
   from the bottom — then snaps back to the page.
-- The **left** transport button is back, held is home. **Stop** is home. A button is lit
-  only when pressing it would do something.
+- The **left** transport button is back. **Stop** is home. A button is lit only when
+  pressing it would do something.
+- **Hold left** and the top row becomes your rooms, each in its own colour, with the rest
+  of the grid dark — press one to go straight there without passing home. Let go without
+  pressing and nothing happened.
 - Leave it alone inside a room for thirty seconds and it returns to the index quietly —
   no animation, no flash, because nothing happened and it must not look like it did.
 

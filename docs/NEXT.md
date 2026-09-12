@@ -169,6 +169,12 @@ implementation plan and this file is the running to-do list.
   meant a different thing on every kind of device, which is exactly what the design
   forbids. Properties now pack from the top left, so the first encoder always does the
   main thing.
+- **The shift gesture**, which was the last engine item. Hold the back button and the top
+  row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
+  plainly is not a page; press one to go straight there. Holding back used to go home,
+  which the stop button already does, so a five-button surface was spending one of its
+  holds on a duplicate. The pad for the room you are already on stays lit and shudders if
+  pressed, because lit-and-does-nothing is never allowed to be silent.
 - **The profile follows the house.** Which rooms become pages was worked out once, at
   connect, so a room added, renamed or deleted afterwards needed a restart. All three
   registries are watched now — an entity *given* an area is not an area event, and a
@@ -195,10 +201,6 @@ implementation plan and this file is the running to-do list.
    to peek at its value, the transient bar, and the clamps. **Proven on the hardware** with
    `scripts/surface_demo.py`, which drives the real pad from the real engine against a
    pretend house, and which found four defects that the tests had not. What is left:
-   - **The shift gesture**: holding the left button turning row one into a page switcher.
-     Blocked on one decision rather than on work: holding left is currently *home*, which
-     the stop button already does, so the gesture is free the moment somebody says that
-     duplicate can go.
    - **One provisional colour to judge on the grid**: what a scene or script pad looks
      like, currently purple. Every other colour in the language was chosen by looking at
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
