@@ -24,6 +24,7 @@ from engine.model import (
     Source,
     SourceKind,
     Toggle,
+    Watch,
 )
 from engine.palette import BLUE, GREEN, ORANGE, PURPLE, UNASSIGNED, WHITE, property_colour
 from engine.properties import KNOB_COUNT
@@ -789,6 +790,35 @@ def test_a_pad_that_would_do_nothing_shudders_rather_than_looking_broken() -> No
     # Holding it still works, so the shudder is about the tap and nothing else.
     view.handle(Press(0, held=True))
     assert view.focus == "light.a"
+
+
+def test_a_readout_pad_shows_its_state_and_shudders_when_pressed() -> None:
+    # A pad is allowed to tell you something nothing can change. It keeps the whole
+    # language — its colour when the door is open, white when it is shut — and answers a
+    # press the only honest way it can. Silence would be indistinguishable from a flat
+    # battery, a dropped link, or a finger that missed.
+    profile = Profile(
+        pages={
+            "home": Page(
+                "home",
+                "Home",
+                BLUE,
+                pads={0: PadConfig(tap=Watch("binary_sensor.back_door"), colour=GREEN)},
+            )
+        },
+        root_id="home",
+    )
+    view = Surface(profile, FakeRegistry({}, {"binary_sensor.back_door": "on"}))
+    assert view.rendering().frame[0] == GREEN
+
+    outcome = view.handle(Press(0))
+    assert outcome.calls == ()  # it cannot act, and does not pretend to
+    assert outcome.animation  # but it says so
+    assert outcome.animation[-1] == view.rendering().frame  # and puts the grid back
+
+    # Holding it is no different: there is nothing behind it for a knob to adjust.
+    assert view.handle(Press(0, held=True)).calls == ()
+    assert view.focus is None
 
 
 # ------------------------------------------------------------ reconfiguring

@@ -75,18 +75,42 @@ class EventOnly:
 
 
 @dataclass(frozen=True, slots=True)
+class Watch:
+    """Show an entity's state, and do nothing when pressed.
+
+    A pad is allowed to be a readout: "is the back door open", "is anybody home" — things
+    worth a glance that nothing can act on. It carries the entity so the pad can show it,
+    and refuses under the finger, which is the plain truth about it: this one is telling
+    you rather than offering you.
+
+    Auto-fill never produces one, because a guess should only ever guess at controls, and
+    a room full of sensors would spend every pad on something nobody can press. Pinning
+    does, because pinning one entity to one pad is a statement rather than a guess.
+    """
+
+    entity_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class Nothing:
     """This pad does nothing. Distinct from a pad with nothing assigned to it."""
 
 
 #: Anything a pad or a button can be bound to. A plain assignment rather than a ``type``
 #: statement, because this package has to import on Python 3.11.
-PadAction = Navigate | Back | Home | Toggle | Focus | Activate | Service | EventOnly | Nothing
+PadAction = (
+    Navigate | Back | Home | Toggle | Focus | Activate | Service | EventOnly | Watch | Nothing
+)
 
 NOTHING: Final = Nothing()
 
 #: The actions that name an entity, and so tell a pad whose state to show.
-ENTITY_ACTIONS: Final = (Toggle, Focus, Activate)
+ENTITY_ACTIONS: Final = (Toggle, Focus, Activate, Watch)
+
+#: Actions a press cannot carry out. Both shudder under the finger rather than going
+#: silent: a lit pad that does nothing is indistinguishable from a broken one, and a press
+#: is a question this surface always answers.
+INERT_ACTIONS: Final = (Nothing, Watch)
 
 
 def entity_of(action: PadAction) -> str | None:
@@ -111,6 +135,12 @@ ACTIVE_STATES: Final[Mapping[str, frozenset[str]]] = {
     "alarm_control_panel": frozenset(
         {"armed_home", "armed_away", "armed_night", "armed_vacation", "triggered"}
     ),
+    # A tracker's state is the name of wherever it is, so "not on" is not a state it has.
+    # Anything other than home is somewhere else — at work, in a named zone, or simply
+    # away — and the pad is answering one question: is this one here.
+    "device_tracker": frozenset({"home"}),
+    "person": frozenset({"home"}),
+    "sun": frozenset({"above_horizon"}),
 }
 
 #: Domains with no lasting state of their own. Pressing one starts something; there is

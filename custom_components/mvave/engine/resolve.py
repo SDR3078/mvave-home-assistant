@@ -27,6 +27,7 @@ from .model import (
     Source,
     SourceKind,
     Toggle,
+    Watch,
 )
 from .palette import colour_for
 from .ports import RegistryView
@@ -51,12 +52,40 @@ TOGGLEABLE: Final = frozenset(
     {"light", "switch", "input_boolean", "fan", "siren", "climate", "humidifier"}
 )
 
+#: Domains with no lasting state, where a tap starts something.
+ACTIVATABLE: Final = frozenset({"scene", "script", "button", "input_button"})
+
 #: What a tap does, for domains where it is not a toggle and not an activation.
 TAP_SERVICES: Final = {
     "media_player": ("media_player", "media_play_pause"),
     "cover": ("cover", "toggle"),
     "lock": ("lock", "open"),
 }
+
+#: Everything a pad can actually do something with.
+#:
+#: The list exists because the alternative is a lit pad that does nothing, which this
+#: surface refuses to have. A room is full of things that are not controls — a temperature,
+#: a door contact, somebody's phone — and asking for "everything in the kitchen" returns
+#: all of them. Before this, anything unrecognised was given a plain toggle, so a device
+#: tracker on a pad called ``homeassistant.toggle`` on a device tracker and sat there lit,
+#: which is exactly how it was found: pinned by hand, pressed, and nothing happened.
+CONTROLLABLE: Final = TOGGLEABLE | ACTIVATABLE | frozenset(TAP_SERVICES)
+
+#: Domains a pad can show but never act on.
+#:
+#: Everything here has a lasting state that reads as on or off. Nothing numeric can be on
+#: this list, because a pad cannot say 21.5 degrees — it has five colours, white and dark,
+#: and a temperature is none of them.
+WATCHABLE: Final = frozenset(
+    {"binary_sensor", "device_tracker", "person", "sun", "calendar", "schedule"}
+)
+
+#: What a person may pin to a pad: everything a press can reach, and everything a glance
+#: can. Deliberately wider than what auto-fill will offer, and that gap is the whole rule:
+#: **auto-fill is a guess, pinning is a statement.** A guess should only guess at controls.
+#: A statement may be a readout, because somebody chose this pad and this entity on purpose.
+PINNABLE: Final = CONTROLLABLE | WATCHABLE
 
 
 def default_actions(entity_id: str) -> tuple[PadAction, PadAction]:
@@ -70,12 +99,20 @@ def default_actions(entity_id: str) -> tuple[PadAction, PadAction]:
 
     if domain in TOGGLEABLE:
         return Toggle(entity_id), hold
-    if domain in ("scene", "script", "button", "input_button"):
+    if domain in ACTIVATABLE:
         return Activate(entity_id), hold
     service = TAP_SERVICES.get(domain)
     if service is not None:
         return Service(service[0], service[1], {"entity_id": entity_id}), hold
-    return Toggle(entity_id), hold
+    if domain in WATCHABLE:
+        # A readout. It shows its state like everything else and shudders when pressed,
+        # so it needs no new colour and no new rule: the shudder already means "I cannot
+        # act on this", and for a door sensor that is simply true.
+        return Watch(entity_id), NOTHING
+    # Nothing rather than a toggle. Something outside CONTROLLABLE has no press that means
+    # anything, and guessing one gives a pad that lights up and then ignores you — the
+    # failure this surface will not have. Nothing makes it shudder instead, which says so.
+    return NOTHING, hold
 
 
 def _ordered(entity_ids: Sequence[str]) -> list[str]:
@@ -94,12 +131,23 @@ def _ordered(entity_ids: Sequence[str]) -> list[str]:
 
 
 def source_entities(source: Source, registry: RegistryView) -> list[str]:
-    """Every entity a source offers, in the order it wants them laid out."""
+    """Every entity a source offers that a pad could do something with.
+
+    A room holds far more than controls, and the ones that are not controls would otherwise
+    take pads and then ignore every press. Filtered here rather than left to the renderer,
+    because a pad spent on a temperature reading is a pad the room's actual lights did not
+    get.
+    """
     if source.kind is SourceKind.AREA and source.key:
-        return _ordered(registry.entities_in_area(source.key))
+        return _ordered(_controllable(registry.entities_in_area(source.key)))
     if source.kind is SourceKind.LABEL and source.key:
-        return _ordered(registry.entities_with_label(source.key))
+        return _ordered(_controllable(registry.entities_with_label(source.key)))
     return []
+
+
+def _controllable(entity_ids: Sequence[str]) -> list[str]:
+    """Only the ones a press could mean something to."""
+    return [entity_id for entity_id in entity_ids if entity_id.split(".", 1)[0] in CONTROLLABLE]
 
 
 def entity_colour(entity_id: str, profile: Profile) -> int:

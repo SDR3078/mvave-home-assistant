@@ -13,6 +13,7 @@ from collections.abc import Mapping, Sequence
 import pytest
 from engine.frames import PAD_COUNT
 from engine.model import (
+    INERT_ACTIONS,
     NOTHING,
     Activate,
     EntityState,
@@ -28,6 +29,7 @@ from engine.model import (
     Source,
     SourceKind,
     Toggle,
+    Watch,
 )
 from engine.palette import BLUE, GREEN, ON, ORANGE, PURPLE, STATE_OFF, UNASSIGNED
 from engine.render import (
@@ -36,6 +38,7 @@ from engine.render import (
     Rendering,
     ViewState,
     changed_pads,
+    colour_of,
     compose,
     render,
 )
@@ -159,6 +162,72 @@ def test_holding_anything_a_knob_could_adjust_focuses_it() -> None:
     # And holding something a knob cannot adjust does nothing rather than something odd.
     _, hold = default_actions("scene.a")
     assert isinstance(hold, Nothing)
+
+
+@pytest.mark.parametrize(
+    "entity_id", ["sensor.kitchen_temperature", "weather.home", "number.setpoint"]
+)
+def test_a_pad_never_pretends_it_can_control_something_it_cannot(entity_id: str) -> None:
+    # This used to fall through to a plain toggle, so pinning a device tracker to a pad gave
+    # a lit pad that called ``homeassistant.toggle`` on a phone and did nothing. Found by
+    # doing exactly that and pressing it. Nothing is the honest answer for anything the grid
+    # can neither act on nor show: 21.5 degrees is not a colour, and a pad that sat white
+    # forever would be lying about it. Dark, and a shudder under the finger.
+    tap, hold = default_actions(entity_id)
+    assert isinstance(tap, Nothing)
+    assert isinstance(hold, Nothing)
+
+    slot = Slot(tap=tap, hold=hold)
+    assert slot.entity_id is None
+    assert colour_of(slot, FakeRegistry()) == UNASSIGNED
+
+
+@pytest.mark.parametrize(
+    ("entity_id", "on", "off"),
+    [
+        ("binary_sensor.front_door", "on", "off"),
+        ("device_tracker.someones_phone", "home", "not_home"),
+        ("person.anne", "home", "Work"),
+        ("sun.sun", "above_horizon", "below_horizon"),
+    ],
+)
+def test_a_pad_may_be_a_readout(entity_id: str, on: str, off: str) -> None:
+    # A pad is allowed to tell you something it cannot change: is the back door open, is
+    # anybody in. It needs no new colour and no new rule — state in colour, white when not,
+    # and the shudder it already has, which for a door sensor is simply true.
+    tap, hold = default_actions(entity_id)
+    assert tap == Watch(entity_id)
+    assert isinstance(hold, Nothing)
+
+    slot = Slot(tap=tap, hold=hold, colour=GREEN)
+    assert slot.entity_id == entity_id
+    assert colour_of(slot, FakeRegistry(states={entity_id: on})) == GREEN
+    # A tracker's "off" is the name of wherever else it is, not the word off.
+    assert colour_of(slot, FakeRegistry(states={entity_id: off})) == STATE_OFF
+
+
+def test_pressing_a_readout_shudders_rather_than_going_silent() -> None:
+    # Silence is not a signal, it is the absence of one, and reading "nothing happened" as
+    # "nothing was supposed to happen" needs knowledge a guest does not have. A press is a
+    # question; this surface answers questions.
+    assert isinstance(Watch("binary_sensor.front_door"), INERT_ACTIONS)
+
+
+def test_a_room_offers_only_what_a_pad_could_control() -> None:
+    # A real room holds a temperature, a door contact and somebody's phone alongside the
+    # lamps, and a grid is sixteen pads. Spending one on a reading costs a lamp its place.
+    registry = FakeRegistry(
+        areas={
+            "living": (
+                "sensor.living_temperature",
+                "light.lamp",
+                "device_tracker.someones_phone",
+                "switch.fan",
+            )
+        }
+    )
+    slots = resolve(page(source=Source(SourceKind.AREA, "living")), registry, EMPTY)
+    assert [slot.entity_id for slot in slots if slot] == ["light.lamp", "switch.fan"]
 
 
 # ---------------------------------------------------------------------- resolving

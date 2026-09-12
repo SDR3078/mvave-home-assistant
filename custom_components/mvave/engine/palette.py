@@ -72,6 +72,17 @@ DOMAIN_COLOURS: Final[Mapping[str, int]] = {
     "script": PURPLE,
     "button": PURPLE,
     "input_button": PURPLE,
+    # Readouts, all one colour. "This one is telling me rather than offering me" is then
+    # one thing to learn instead of six, and it costs nothing from a budget that has
+    # nothing left to spend. Green because green already means an opening and its
+    # position, and a readout is overwhelmingly about exactly that: a door, a window,
+    # whether anybody is in.
+    "binary_sensor": GREEN,
+    "device_tracker": GREEN,
+    "person": GREEN,
+    "sun": GREEN,
+    "calendar": GREEN,
+    "schedule": GREEN,
 }
 
 #: For anything not listed, and for a pad with no entity behind it at all.

@@ -49,9 +49,27 @@ This is the whole language, and it is short because the hardware is unforgiving 
 | **Dark** | nothing is assigned here. Pressing it does nothing |
 | **Breathing slowly** | the knobs are pointed at this one |
 | **Blinking fast** | commanded, not yet confirmed. It stops as soon as the entity reports back |
-| **Three quick blinks under your finger** | it refused: either nobody can reach that entity, or this pad genuinely does nothing |
+| **Three quick blinks under your finger** | it refused: either nobody can reach that entity, or this pad cannot be acted on |
 
 "Is anything still on in the kitchen?" becomes "is any pad not white", which is one glance.
+
+### Pads that tell you rather than offer you
+
+A pad can be a **readout**: a door sensor, a motion sensor, whether somebody is home,
+whether the sun is up. It shows its colour when the door is open or the person is in,
+white when not — the same language as everything else — and it **shudders if you press
+it**, which is the truth about it.
+
+Readouts are green by default, all of them, so "green is something I watch" is one thing
+to learn rather than six. Configurable like every other colour.
+
+Two rules keep them out of your way:
+
+- **Auto-fill is a guess; pinning is a statement.** A room page fills itself only with
+  things you can *control*, because a real kitchen holds a temperature, a damp sensor and
+  two phones, and a grid holds sixteen pads. A readout only ever appears where you put one.
+- **Anything the grid cannot show is never offered.** 21.5 °C has no on and no off, so a
+  temperature can't be pinned at all — a pad sitting white forever would be lying.
 
 ## The knobs
 

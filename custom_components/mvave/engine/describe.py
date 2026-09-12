@@ -34,6 +34,7 @@ from .model import (
     Slot,
     SourceKind,
     Toggle,
+    Watch,
 )
 from .palette import name_for
 from .ports import RegistryView
@@ -52,6 +53,7 @@ ACTION_NAMES: Final[Mapping[type, str]] = {
     Activate: "activate",
     Service: "service",
     EventOnly: "event",
+    Watch: "watch",
     Nothing: "nothing",
 }
 
