@@ -206,7 +206,12 @@ implementation plan and this file is the running to-do list.
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
      anything that is off and shudders when pressed, which was the owner's idea and buys
      back a fifth of the vocabulary.
-3. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+3. **A brand icon**, which is the only real HACS failure left. `validate/brands.py` looks
+   for `custom_components/mvave/brand/icon.png` in the repository tree and returns early
+   if it is there, so this does **not** need the pull request against
+   `home-assistant/brands` first — that is only the fallback it checks second. Home
+   Assistant's brands repository wants 256x256 and 512x512 PNGs with transparency.
+4. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 
 ## Decided against
