@@ -82,7 +82,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> boo
             },
         )
 
-    coordinator = MvaveCoordinator(hass, address, name)
+    coordinator = MvaveCoordinator(hass, entry, address, name)
     # The surface is the profile engine driving the grid. It builds itself once the device
     # has been armed, because only then is the real note map known.
     runner = SurfaceRunner(hass, entry, coordinator)

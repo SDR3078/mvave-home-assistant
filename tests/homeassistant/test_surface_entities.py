@@ -16,6 +16,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import CALLBACK_TYPE
 
 from custom_components.mvave.button import MvaveBackButton, MvaveHomeButton
@@ -23,7 +25,7 @@ from custom_components.mvave.engine.model import Page, Profile, Source, SourceKi
 from custom_components.mvave.engine.palette import BLUE, GREEN, ORANGE
 from custom_components.mvave.runner import SurfaceView, page_labels
 from custom_components.mvave.select import MvavePageSelect
-from custom_components.mvave.sensor import MvaveFocusSensor
+from custom_components.mvave.sensor import MvaveBatterySensor, MvaveFocusSensor
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -54,7 +56,12 @@ class StubCoordinator:
 
     def __init__(self, connected: bool = True) -> None:
         self.address = ADDRESS
+        # What the device says about itself once something has connected and asked. None
+        # before that, which is what every entity is built with.
         self.device_name = "SMC-PAD"
+        self.manufacturer = "M-Vave"
+        self.model = "SMC-PAD"
+        self.battery: int | None = 82
         self.connected = connected
 
     def async_add_listener(self, listener: CALLBACK_TYPE) -> CALLBACK_TYPE:
@@ -217,3 +224,31 @@ def test_every_surface_entity_belongs_to_the_one_device() -> None:
     assert len(identifiers) == 1
     # Unique ids are per feature, not per device, or three of these would be one entity.
     assert len({entity.unique_id for entity in entities}) == len(entities)
+
+
+# ------------------------------------------------------------------ the device
+
+
+def test_the_device_card_carries_what_the_pad_says_about_itself() -> None:
+    # None of this is on the advertisement: passive scanning never asks for the scan
+    # response where a name would be, so before anything connects Home Assistant has a MAC
+    # address and nothing else — which is what it was showing.
+    info = MvaveFocusSensor(StubRunner()).device_info
+    assert info is not None
+    assert info["name"] == "SMC-PAD"
+    assert info["manufacturer"] == "M-Vave"
+    assert info["model"] == "SMC-PAD"
+
+
+def test_the_battery_reports_what_the_device_last_said() -> None:
+    battery = MvaveBatterySensor(StubCoordinator())
+    assert battery.native_value == 82
+    assert battery.device_class == SensorDeviceClass.BATTERY
+    assert battery.native_unit_of_measurement == PERCENTAGE
+
+
+def test_the_battery_says_nothing_rather_than_zero_before_it_has_been_asked() -> None:
+    # Nothing has connected yet. Zero would be a claim, and an alarming one.
+    coordinator = StubCoordinator()
+    coordinator.battery = None
+    assert MvaveBatterySensor(coordinator).native_value is None

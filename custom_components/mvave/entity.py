@@ -31,7 +31,13 @@ class MvaveEntity(Entity):
             # Lets Home Assistant merge this with the same physical device as seen by
             # another integration, such as the ESPHome proxy that relays it.
             connections={(dr.CONNECTION_BLUETOOTH, address)},
+            # All three are read off the device on the first connect and are None before
+            # that. Entities exist before anything has connected, so this is the optimistic
+            # half; `async_describe_device` is what corrects the registry once the device
+            # has actually said who it is.
             name=coordinator.device_name,
+            manufacturer=coordinator.manufacturer,
+            model=coordinator.model,
         )
 
     @property

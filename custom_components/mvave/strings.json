@@ -123,6 +123,9 @@
       }
     },
     "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
       "focus": {
         "name": "Focus"
       }

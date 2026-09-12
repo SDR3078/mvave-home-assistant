@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, override
 
 from bleak import BleakClient, BleakError
@@ -23,17 +24,31 @@ from homeassistant.components.bluetooth.active_update_coordinator import (
     ActiveBluetoothDataUpdateCoordinator,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.event import async_track_time_interval
 
 from .arming import async_arm
-from .const import LOGGER, MIDI_CHAR_UUID
+from .const import (
+    BATTERY_UUID,
+    DEVICE_NAME_UUID,
+    DOMAIN,
+    LOGGER,
+    MANUFACTURER_UUID,
+    MIDI_CHAR_UUID,
+    MODEL_UUID,
+    USELESS_MODEL_NAMES,
+)
 from .transport import MidiEvent, ParserState, frame_many, frame_midi, parse_ble_midi
 from .vendor import VendorSession
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+    from datetime import datetime
 
     from bleak.backends.characteristic import BleakGATTCharacteristic
     from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from .arming import ArmResult
@@ -42,6 +57,20 @@ if TYPE_CHECKING:
 # lazily, so `Callable` may stay in the TYPE_CHECKING block. A plain alias would be
 # evaluated at import time and raise NameError.
 type MidiListener = Callable[[MidiEvent], None]
+
+#: How often to ask the pad what its charge is while the link is up.
+#:
+#: It declares notifications on the standard Battery characteristic and does not send any:
+#: measured over a quarter of an hour with none arriving, which matches everything else
+#: about this device — "nothing is sent unprompted" (``docs/HARDWARE-BLE.md`` section 1).
+#: The notification subscription stays anyway, because it costs nothing and a device that
+#: does volunteer one should be heard.
+#:
+#: Without this the reading would be whatever it was at the last connect, and the link is
+#: designed to stay up for days. It is not a fast-moving number — 77-86% one day and 46%
+#: three days later, so roughly half a point an hour — and half an hour is finer than it
+#: can actually move.
+BATTERY_INTERVAL = timedelta(minutes=30)
 
 
 def _describe(event: MidiEvent) -> str:
@@ -59,7 +88,7 @@ def _describe(event: MidiEvent) -> str:
 class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
     """Hold a connection to one BLE MIDI device and publish what it sends."""
 
-    def __init__(self, hass: HomeAssistant, address: str, name: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, address: str, name: str) -> None:
         """Initialise the coordinator for one device address."""
         super().__init__(
             hass,
@@ -73,6 +102,7 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
             poll_method=self._async_connect,
             connectable=True,
         )
+        self.entry = entry
         self.device_name = name
         self._client: BleakClient | None = None
         self._connect_lock = asyncio.Lock()
@@ -81,6 +111,12 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         self._midi_listeners: list[MidiListener] = []
         #: What the last connect found and did, or None if it never got that far.
         self.arming: ArmResult | None = None
+        #: What the device says about itself, once somebody has connected and asked. None
+        #: until then, which is most of the first minute after a restart.
+        self.manufacturer: str | None = None
+        self.model: str | None = None
+        self.battery: int | None = None
+        self._battery_timer: CALLBACK_TYPE | None = None
 
     # ------------------------------------------------------------------ state
 
@@ -145,11 +181,130 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
                 await client.disconnect()
                 raise
             self._client = client
+            await self._async_introduce(client)
             LOGGER.info(
                 "%s: connected to %s (MTU %s)", self.address, self.device_name, client.mtu_size
             )
             await self._async_arm(client)
 
+        self.async_update_listeners()
+
+    async def _async_introduce(self, client: BleakClient) -> None:
+        """Ask the device who it is and how much charge it has left.
+
+        None of this is on the advertisement. Passive scanning never requests the scan
+        response, which is where a friendly name would be, so until something connects the
+        only thing Home Assistant has to call this device is its MAC — which is exactly
+        what it was showing.
+
+        Deliberately not fatal, the same as arming. A device that will not answer its
+        Device Information service is still a perfectly good source of MIDI, and dropping
+        the link over a cosmetic read would cost more than the name is worth.
+        """
+        self.device_name = await self._async_text(client, DEVICE_NAME_UUID) or self.device_name
+        self.manufacturer = await self._async_text(client, MANUFACTURER_UUID)
+        model = await self._async_text(client, MODEL_UUID)
+        # "ble device" is the chip vendor's default, not a product. The name the device
+        # advertises under is the one on the box.
+        self.model = (
+            model if model and model.lower() not in USELESS_MODEL_NAMES else self.device_name
+        )
+
+        await self._async_read_battery(client)
+        try:
+            await client.start_notify(BATTERY_UUID, self._on_battery)
+        except (BleakError, EOFError, TimeoutError) as err:
+            # Reading it once is most of the value; a pad that will not notify simply
+            # reports whatever it had at the last connect.
+            LOGGER.debug("%s: no battery notifications: %r", self.address, err)
+        LOGGER.debug(
+            "%s: introduced itself as %r by %r, model %r, battery %s",
+            self.address,
+            self.device_name,
+            self.manufacturer,
+            self.model,
+            f"{self.battery}%" if self.battery is not None else "not reported",
+        )
+        self._stop_asking_about_the_battery()
+        self._battery_timer = async_track_time_interval(
+            self.hass, self._async_poll_battery, BATTERY_INTERVAL
+        )
+        self._describe_device()
+
+    async def _async_poll_battery(self, _now: datetime) -> None:
+        """Ask again. See BATTERY_INTERVAL: it will not tell us on its own."""
+        client = self._client
+        if client is None or not client.is_connected:
+            return
+        before = self.battery
+        await self._async_read_battery(client)
+        if self.battery != before:
+            LOGGER.debug("%s: battery now %s%%", self.address, self.battery)
+            self.async_update_listeners()
+
+    @callback
+    def _stop_asking_about_the_battery(self) -> None:
+        """Cancel the poll. Safe to call when there is nothing to cancel."""
+        if self._battery_timer is not None:
+            self._battery_timer()
+            self._battery_timer = None
+
+    @callback
+    def _describe_device(self) -> None:
+        """Put what the device said about itself where Home Assistant will show it.
+
+        The entities carry this in their ``DeviceInfo`` too, but they were created before
+        anything had connected, when a MAC address was all there was. The registry keeps
+        what it was told first, so it has to be told again.
+
+        Only the *default* name is touched. Whatever the owner renamed the device to lives
+        separately as ``name_by_user`` and outranks this, so a rename is never undone.
+        """
+        changes: dict[str, str] = {}
+        if self.device_name and self.device_name != self.address:
+            changes["name"] = self.device_name
+        if self.manufacturer:
+            changes["manufacturer"] = self.manufacturer
+        if self.model:
+            changes["model"] = self.model
+        if not changes:
+            return
+
+        devices = dr.async_get(self.hass)
+        device = devices.async_get_device(identifiers={(DOMAIN, format_mac(self.address))})
+        if device is not None:
+            devices.async_update_device(device.id, **changes)  # type: ignore[arg-type]
+
+        # And the entry, which is what the integration's own page is headed with. It was
+        # created from an advertisement that carried no name at all.
+        if "name" in changes and self.entry.title == self.address:
+            self.hass.config_entries.async_update_entry(self.entry, title=changes["name"])
+
+    async def _async_text(self, client: BleakClient, uuid: str) -> str | None:
+        """One standard string characteristic, or None if the device will not say."""
+        try:
+            raw = await client.read_gatt_char(uuid)
+        except (BleakError, EOFError, TimeoutError) as err:
+            LOGGER.debug("%s: could not read %s: %r", self.address, uuid, err)
+            return None
+        return bytes(raw).decode("utf-8", "replace").strip("\x00").strip() or None
+
+    async def _async_read_battery(self, client: BleakClient) -> None:
+        """Whatever charge the device reports, as a percentage."""
+        try:
+            raw = await client.read_gatt_char(BATTERY_UUID)
+        except (BleakError, EOFError, TimeoutError) as err:
+            LOGGER.debug("%s: could not read the battery: %r", self.address, err)
+            return
+        if raw:
+            self.battery = raw[0]
+
+    def _on_battery(self, _characteristic: BleakGATTCharacteristic, data: bytearray) -> None:
+        """The device volunteering a new charge level."""
+        if not data:
+            return
+        self.battery = data[0]
+        LOGGER.debug("%s: battery %d%%", self.address, self.battery)
         self.async_update_listeners()
 
     async def _async_arm(self, client: BleakClient) -> None:
@@ -182,6 +337,7 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         if self._client is None:
             return
         self._client = None
+        self._stop_asking_about_the_battery()
         LOGGER.info("%s: disconnected", self.address)
 
         # Without this the integration would never reconnect. The Bluetooth manager
@@ -280,6 +436,10 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         it would keep redrawing thirty times a second against a dead link.
         """
         self._shutdown = True
+        # Before closing rather than after: a timer that fires between the two would find
+        # the client gone, which is harmless, but a timer that outlives the coordinator
+        # entirely is a wake-up Home Assistant keeps honouring after the entry is unloaded.
+        self._stop_asking_about_the_battery()
         try:
             await self._async_close()
         finally:
