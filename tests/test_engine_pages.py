@@ -405,3 +405,36 @@ def test_a_pad_with_no_two_states_never_moves_at_all() -> None:
     slots = resolve(living, registry, EMPTY)
     view = ViewState(focus="scene.evening", pending=frozenset({"scene.evening"}))
     assert render(living, slots, registry, view).rhythms == {}
+
+
+# ------------------------------------------------- is this the same house as before
+
+
+def test_two_profiles_of_the_same_house_are_equal() -> None:
+    # The coordinator rebuilds the profile whenever the area, entity or device registry
+    # moves, and rebuilds the *surface* only when the answer differs. That rests entirely
+    # on this: if a profile compared by identity, every registry event would throw away
+    # whatever animation was in flight, and they arrive in dozens.
+    def built() -> Profile:
+        return Profile(
+            pages={
+                "home": page("home", source=Source(SourceKind.PAGES)),
+                "kitchen": page("kitchen", colour=GREEN, source=Source(SourceKind.AREA, "kitchen")),
+            },
+            root_id="home",
+            colours={"light": ORANGE},
+        )
+
+    assert built() == built()
+
+
+def test_a_renamed_room_is_a_different_house() -> None:
+    before = Profile(pages={"kitchen": page("kitchen", title="Kitchen")}, root_id="kitchen")
+    after = Profile(pages={"kitchen": page("kitchen", title="Scullery")}, root_id="kitchen")
+    assert before != after
+
+
+def test_a_room_that_went_away_is_a_different_house() -> None:
+    both = Profile(pages={"a": page("a"), "b": page("b")}, root_id="a")
+    one = Profile(pages={"a": page("a")}, root_id="a")
+    assert both != one

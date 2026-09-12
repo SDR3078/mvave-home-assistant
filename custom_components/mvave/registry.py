@@ -29,6 +29,18 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+#: Everything whose movement can change which rooms become pages.
+#:
+#: All three, and it takes all three. An area appearing or being renamed is the obvious
+#: one. An entity given an area is not an area event at all, and it is what turns an empty
+#: room into one worth a page. And a whole device moved into a room carries its entities
+#: with it without any of them being touched.
+REGISTRY_EVENTS = (
+    ar.EVENT_AREA_REGISTRY_UPDATED,
+    er.EVENT_ENTITY_REGISTRY_UPDATED,
+    dr.EVENT_DEVICE_REGISTRY_UPDATED,
+)
+
 #: The page an empty navigation stack shows.
 ROOT_ID = "home"
 

@@ -38,7 +38,12 @@ from .engine.surface import (
     Surface,
     Turn,
 )
-from .registry import HomeAssistantRegistry, HomeAssistantSink, build_profile
+from .registry import (
+    REGISTRY_EVENTS,
+    HomeAssistantRegistry,
+    HomeAssistantSink,
+    build_profile,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -83,6 +88,14 @@ BUTTON_ON = 5
 
 #: What the engine's events are called on the bus.
 EVENT_TYPE = "mvave_event"
+
+#: How long to let the registries settle before asking whether the house is different.
+#:
+#: They move in bursts: one integration setting up rewrites dozens of entries, and a
+#: restart rewrites all of them. Rebuilding on each would throw away whatever animation was
+#: in flight, dozens of times, for an answer that is the same every time until the burst
+#: ends.
+REGISTRY_SETTLE_SECONDS = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +296,8 @@ class SurfaceRunner:
         """Begin. Returns the callback that stops everything again."""
         self._unsubscribe.append(self.coordinator.async_add_midi_listener(self._on_midi))
         self._unsubscribe.append(self.coordinator.async_add_listener(self._on_connection))
+        for event in REGISTRY_EVENTS:
+            self._unsubscribe.append(self.hass.bus.async_listen(event, self._house_changed))
         self._on_connection()
         return self.async_stop
 
@@ -383,7 +398,41 @@ class SurfaceRunner:
         )
 
     @callback
-    def reconfigure(self) -> None:
+    def _house_changed(self, _event: Any) -> None:
+        """Something moved in the area, entity or device registry.
+
+        Nothing is done yet. They move in bursts — one integration setting up rewrites
+        dozens of entries — and the only question worth asking is whether the *answer*
+        changed, which is worth asking once the burst is over rather than forty times
+        during it.
+        """
+        self._restart("registry", REGISTRY_SETTLE_SECONDS, self._rebuild_if_the_house_moved)
+
+    @callback
+    def _rebuild_if_the_house_moved(self, _now: Any = None) -> None:
+        """Rebuild, but only if the house is actually laid out differently now.
+
+        Which rooms become pages is worked out once, at connect. So a room added, renamed
+        or deleted after that did not reach the grid until somebody restarted Home
+        Assistant — a page pointing at an area that no longer exists being the worst of
+        those. What is *in* a room has always been live, because a page resolves its slots
+        against the registry on every single render; it is only the set of pages that was
+        frozen.
+
+        Compared rather than assumed, because these events are frequent and rebuilding
+        throws away the animation in flight.
+        """
+        self._timers.pop("registry", None)
+        if self.surface is None:
+            return
+        rebuilt = build_profile(self.hass, self.entry.options)
+        if rebuilt == self.surface.profile:
+            return
+        LOGGER.info("%s: the house changed, rebuilding the surface", self.coordinator.address)
+        self.reconfigure(rebuilt)
+
+    @callback
+    def reconfigure(self, profile: Profile | None = None) -> None:
         """Rebuild the surface from the options, without dropping the link.
 
         Reloading the config entry would be the ordinary answer and would also work, but
@@ -394,7 +443,8 @@ class SurfaceRunner:
             return
         was = self.surface
         surface = Surface(
-            build_profile(self.hass, self.entry.options), HomeAssistantRegistry(self.hass)
+            profile or build_profile(self.hass, self.entry.options),
+            HomeAssistantRegistry(self.hass),
         )
         # Keep where somebody was standing, as far as it still exists. Changing a colour
         # and being thrown back to the index is the surface losing your place over
