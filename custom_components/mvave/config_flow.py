@@ -4,34 +4,50 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Final
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 import voluptuous as vol
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
     async_request_active_scan,
 )
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    ConfigSubentry,
+    ConfigSubentryFlow,
+    OptionsFlow,
+    SubentryFlowResult,
+)
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.core import callback
-from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import (
     AreaSelector,
-    AreaSelectorConfig,
+    EntitySelector,
+    EntitySelectorConfig,
+    LabelSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
 )
 
 from .const import (
+    CONF_AREA,
+    CONF_COLOUR,
     CONF_DOMAIN_COLOURS,
-    CONF_PAGE_COLOURS,
-    CONF_PAGES,
+    CONF_LABEL,
+    CONF_PADS,
     DOMAIN,
     MIDI_SERVICE_UUID,
+    SUBENTRY_PAGE,
 )
+from .engine.frames import PAD_COUNT
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
-from .registry import build_profile
+from .engine.resolve import PINNABLE
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -41,6 +57,15 @@ class MvaveConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle discovery and manual addition of a BLE MIDI device."""
 
     VERSION = 1
+    MINOR_VERSION = 2
+
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        """Pages are added one at a time, each with its own row in the interface."""
+        return {SUBENTRY_PAGE: PageSubentryFlow}
 
     @staticmethod
     @callback
@@ -145,6 +170,22 @@ BY_VALUE: Final = {value: name for name, value in CHOOSABLE.items()}
 COLOURABLE: Final = ("light", "switch", "media_player", "cover", "climate", "scene")
 
 
+def _pad_field(pad: int) -> str:
+    """What one pad's form field is called. One based, as a person counts them."""
+    return f"pad_{pad}"
+
+
+def _pad_selector() -> EntitySelector:
+    """What a pad may be pointed at.
+
+    Everything a press can reach, and everything a glance can: a pad may be a readout, and
+    "is the back door open" is worth one. What is missing is anything the grid physically
+    cannot show — a temperature has no on and no off, and a pad that sat white forever
+    would be lying about it.
+    """
+    return EntitySelector(EntitySelectorConfig(domain=sorted(PINNABLE)))
+
+
 def _colour_selector() -> SelectSelector:
     """A choice of the five colours, by name."""
     return SelectSelector(
@@ -157,87 +198,22 @@ def _colour_selector() -> SelectSelector:
 
 
 class MvaveOptionsFlow(OptionsFlow):
-    """Choose which rooms appear, what colour they are, and what things look like."""
+    """What each kind of thing looks like, which is the same on every page.
 
-    def __init__(self) -> None:
-        """Start with nothing chosen."""
-        self._pages: list[str] = []
-        self._page_colours: dict[str, int] = {}
-        #: Form field to area. The field is keyed by the room's *name*, because a schema
-        #: key is what Home Assistant shows as the label when there is no translation for
-        #: it, and "Living Room" is a better label than "living_room".
-        self._by_label: dict[str, str] = {}
+    Pages used to be here too — a screen for which rooms appeared and a screen for their
+    colours. They are subentries now, because a page is a thing somebody makes rather than
+    a setting somebody changes, and an options flow can only ever describe one of each.
+    What is left is the one thing that genuinely is a single setting.
+    """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Pick the rooms, in the order they should appear on the index."""
-        if user_input is not None:
-            self._pages = list(user_input[CONF_PAGES])
-            return await self.async_step_page_colours()
-
-        current = self.config_entry.options.get(CONF_PAGES)
-        if current is None:
-            # Everything with something in it, which is what the surface does on its own
-            # when nobody has configured anything.
-            current = [page.id for page in build_profile(self.hass).pages.values()]
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_PAGES, default=current): AreaSelector(
-                        AreaSelectorConfig(multiple=True)
-                    )
-                }
-            ),
-        )
-
-    async def async_step_page_colours(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Give each room its colour. One screen, one job."""
-        if user_input is not None:
-            self._page_colours = {
-                self._by_label[label]: CHOOSABLE[choice] for label, choice in user_input.items()
-            }
-            return await self.async_step_domain_colours()
-
-        areas = ar.async_get(self.hass)
-        chosen = self.config_entry.options.get(CONF_PAGE_COLOURS, {})
-        self._by_label = {}
-        fields: dict[Any, Any] = {}
-        for index, area_id in enumerate(self._pages):
-            area = areas.async_get_area(area_id)
-            label = area.name if area else area_id
-            if label in self._by_label:
-                # Two rooms with the same name. Rare, and the id is at least unambiguous.
-                label = area_id
-            self._by_label[label] = area_id
-            # Rooms past the fifth share a colour with an earlier one, because there are
-            # only five. Which is fine: position on the index identifies them, and that is
-            # the one channel that survives colour vision deficiency.
-            fallback = IDENTITY[(index + 1) % len(IDENTITY)]
-            suggested = BY_VALUE.get(chosen.get(area_id, fallback), BY_VALUE[fallback])
-            fields[vol.Required(label, description={"suggested_value": suggested})] = (
-                _colour_selector()
-            )
-
-        return self.async_show_form(
-            step_id="page_colours",
-            data_schema=vol.Schema(fields),
-            description_placeholders={"count": str(len(self._pages))},
-        )
-
-    async def async_step_domain_colours(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Give each kind of thing its colour, which is the same in every room."""
+        """Give each kind of thing its colour, which is the same on every page."""
         if user_input is not None:
             return self.async_create_entry(
                 data={
-                    CONF_PAGES: self._pages,
-                    CONF_PAGE_COLOURS: self._page_colours,
                     CONF_DOMAIN_COLOURS: {
                         domain: CHOOSABLE[user_input[domain]] for domain in COLOURABLE
-                    },
+                    }
                 }
             )
 
@@ -248,4 +224,110 @@ class MvaveOptionsFlow(OptionsFlow):
             fields[vol.Required(domain, description={"suggested_value": BY_VALUE[colour]})] = (
                 _colour_selector()
             )
-        return self.async_show_form(step_id="domain_colours", data_schema=vol.Schema(fields))
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields))
+
+
+class PageSubentryFlow(ConfigSubentryFlow):
+    """Adding and editing one page.
+
+    A subentry rather than a screen in the options, because a page is a thing somebody
+    *makes* — added, renamed, deleted, several of them — and options are for settings that
+    exist once. It also gives every page an id of its own, so a page survives the room it
+    draws from being renamed or deleted, or never having had one.
+    """
+
+    def __init__(self) -> None:
+        """Start with a page nobody has described yet."""
+        self._page: dict[str, Any] = {}
+        self._title = ""
+        self._existing: ConfigSubentry | None = None
+
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Add a page."""
+        return await self._async_page_form(user_input, existing=None)
+
+    async def async_step_pads(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Pin whatever should sit in a particular place.
+
+        Every pad is optional. A pad left empty fills itself from the page's room or label
+        as before, so pinning one thing does not mean pinning sixteen — and on a page with
+        no room at all, these are the whole page.
+        """
+        if user_input is not None:
+            pads = {
+                str(pad): user_input[_pad_field(pad)]
+                for pad in range(1, PAD_COUNT + 1)
+                if user_input.get(_pad_field(pad))
+            }
+            data = {**self._page, CONF_PADS: pads}
+            if self._existing is None:
+                return self.async_create_entry(title=self._title, data=data)
+            return self.async_update_and_abort(
+                self._get_entry(), self._existing, title=self._title, data=data
+            )
+
+        was: Mapping[str, str] = (
+            (self._existing.data.get(CONF_PADS) or {}) if self._existing else {}
+        )
+        fields: dict[Any, Any] = {
+            vol.Optional(
+                _pad_field(pad), description={"suggested_value": was.get(str(pad))}
+            ): _pad_selector()
+            for pad in range(1, PAD_COUNT + 1)
+        }
+        return self.async_show_form(step_id="pads", data_schema=vol.Schema(fields))
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Change a page that already exists."""
+        self._existing = self._get_reconfigure_subentry()
+        return await self._async_page_form(user_input, existing=self._existing)
+
+    async def _async_page_form(
+        self, user_input: dict[str, Any] | None, existing: ConfigSubentry | None
+    ) -> SubentryFlowResult:
+        """One form for both, because adding and editing a page ask the same questions."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            area = user_input.get(CONF_AREA)
+            label = user_input.get(CONF_LABEL)
+            if area and label:
+                # A page fills itself from one place. Two would need an order to merge
+                # them in, and nothing about either says which should win.
+                errors["base"] = "one_source"
+            else:
+                self._page = {
+                    CONF_COLOUR: CHOOSABLE[user_input[CONF_COLOUR]],
+                    CONF_AREA: area,
+                    CONF_LABEL: label,
+                }
+                self._title = user_input[CONF_NAME]
+                return await self.async_step_pads()
+
+        was = dict(existing.data) if existing else {}
+        # A colour nobody has reached yet, so adding several rooms in a row does not need
+        # anybody to remember which ones are taken.
+        taken = {
+            page.data.get(CONF_COLOUR)
+            for page in self._get_entry().subentries.values()
+            if page is not existing
+        }
+        spare = next((colour for colour in IDENTITY if colour not in taken), IDENTITY[0])
+        suggested = BY_VALUE.get(was.get(CONF_COLOUR, spare), BY_VALUE[spare])
+
+        fields: dict[Any, Any] = {
+            vol.Required(CONF_NAME, default=existing.title if existing else vol.UNDEFINED): str,
+            vol.Required(CONF_COLOUR, default=suggested): _colour_selector(),
+            vol.Optional(
+                CONF_AREA, description={"suggested_value": was.get(CONF_AREA)}
+            ): AreaSelector(),
+            vol.Optional(
+                CONF_LABEL, description={"suggested_value": was.get(CONF_LABEL)}
+            ): LabelSelector(),
+        }
+        return self.async_show_form(
+            step_id="reconfigure" if existing else "user",
+            data_schema=vol.Schema(fields),
+            errors=errors,
+        )

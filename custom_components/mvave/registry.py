@@ -19,9 +19,19 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import CONF_DOMAIN_COLOURS, CONF_PAGE_COLOURS, CONF_PAGES, DOMAIN
-from .engine import IDENTITY, EntityState, Page, Profile, Source, SourceKind
+from .const import (
+    CONF_AREA,
+    CONF_COLOUR,
+    CONF_DOMAIN_COLOURS,
+    CONF_LABEL,
+    CONF_PADS,
+    DOMAIN,
+    SUBENTRY_PAGE,
+)
+from .engine import IDENTITY, EntityState, PadConfig, Page, Profile, Source, SourceKind
+from .engine.frames import PAD_COUNT
 from .engine.palette import BLUE, DOMAIN_COLOURS
+from .engine.resolve import default_actions
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -167,7 +177,43 @@ def _usable(entry: er.RegistryEntry) -> bool:
     return entry.disabled_by is None and entry.hidden_by is None and entry.entity_category is None
 
 
-def build_profile(hass: HomeAssistant, options: Mapping[str, Any] | None = None) -> Profile:
+def _source_of(data: Mapping[str, Any]) -> Source:
+    """Where a page fills its unclaimed pads from, if anywhere.
+
+    A room, or a label, or nothing. Nothing is not a failure to configure: it is a page
+    made of exactly the pads its owner pinned, which is what a page is for once it has
+    stopped being a room.
+    """
+    if area := data.get(CONF_AREA):
+        return Source(SourceKind.AREA, area)
+    if label := data.get(CONF_LABEL):
+        return Source(SourceKind.LABEL, label)
+    return Source(SourceKind.EXPLICIT)
+
+
+def _pads_of(data: Mapping[str, Any]) -> dict[int, PadConfig]:
+    """Entities somebody pinned to particular pads.
+
+    What a pad does is still derived from what is behind it — a lamp toggles, a scene runs,
+    a hold points the knobs at anything a knob can adjust — so pinning chooses the *place*
+    and nothing else. Any pad left unpinned fills itself from the page's source as before,
+    and a page with no source at all is exactly these and nothing more.
+
+    One based on the way in, because that is how a person counts pads and how every other
+    interface here numbers them; zero based from here on, because that is how a frame is
+    indexed.
+    """
+    pinned: dict[int, PadConfig] = {}
+    for pad, entity_id in (data.get(CONF_PADS) or {}).items():
+        if not entity_id:
+            continue
+        index = int(pad) - 1
+        if 0 <= index < PAD_COUNT:
+            pinned[index] = PadConfig(*default_actions(entity_id))
+    return pinned
+
+
+def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Profile:
     """A surface built from the house as it stands, and from whatever was configured.
 
     With nothing configured this is one page per room that has anything in it, plus an
@@ -175,22 +221,18 @@ def build_profile(hass: HomeAssistant, options: Mapping[str, Any] | None = None)
     configuring means overriding, never building from zero, so there has to be something
     to override before anybody starts.
 
-    Colours repeat past the fifth room. Only five are reliably distinguishable at a glance
+    Once somebody has made a page, the pages are theirs and nothing is invented. A page is
+    a subentry: it has a name, a colour, and optionally a room or a label to fill itself
+    from — and a page with neither is sixteen pads its owner pins by hand, which is the
+    whole reason a page is not the same thing as a room.
+
+    Colours repeat past the fifth page. Only five are reliably distinguishable at a glance
     (``docs/HARDWARE-BLE.md`` section 9.1), so beyond that the pad's fixed position on the
     index is what identifies it, which is also the one channel that survives colour vision
     deficiency.
     """
-    options = options or {}
     registry = HomeAssistantRegistry(hass)
-    chosen: list[str] | None = options.get(CONF_PAGES)
-    page_colours: Mapping[str, int] = options.get(CONF_PAGE_COLOURS, {})
-
-    if chosen is None:
-        # Nobody has chosen, so every room with something in it, alphabetically.
-        areas = sorted(ar.async_get(hass).async_list_areas(), key=lambda area: area.name.lower())
-        chosen = [area.id for area in areas if len(registry.entities_in_area(area.id))]
-
-    registry_areas = ar.async_get(hass)
+    options: Mapping[str, Any] = entry.options if entry else {}
     pages: dict[str, Page] = {
         ROOT_ID: Page(
             id=ROOT_ID,
@@ -201,17 +243,37 @@ def build_profile(hass: HomeAssistant, options: Mapping[str, Any] | None = None)
             idle_timeout=0,
         )
     }
-    for area_id in chosen:
-        area = registry_areas.async_get_area(area_id)
-        if area is None or len(registry.entities_in_area(area_id)) < MIN_ENTITIES:
-            continue
-        pages[area_id] = Page(
-            id=area_id,
-            title=area.name,
-            colour=page_colours.get(area_id, IDENTITY[len(pages) % len(IDENTITY)]),
-            source=Source(SourceKind.AREA, area_id),
-            parent_id=ROOT_ID,
-        )
+
+    made = list(entry.subentries.values()) if entry else []
+    if made:
+        for index, page in enumerate(made):
+            if page.subentry_type != SUBENTRY_PAGE:
+                continue
+            pages[page.subentry_id] = Page(
+                id=page.subentry_id,
+                title=page.title,
+                colour=page.data.get(CONF_COLOUR) or IDENTITY[index % len(IDENTITY)],
+                source=_source_of(page.data),
+                pads=_pads_of(page.data),
+                parent_id=ROOT_ID,
+            )
+    else:
+        # Nobody has made a page yet, so every room with something in it, alphabetically.
+        # These are named after their area, which is the one case where a page id and an
+        # area id are the same string — and it stops mattering the moment anybody edits
+        # one, because editing makes a subentry with an id of its own.
+        areas = sorted(ar.async_get(hass).async_list_areas(), key=lambda area: area.name.lower())
+        for area in areas:
+            if len(registry.entities_in_area(area.id)) < MIN_ENTITIES:
+                continue
+            pages[area.id] = Page(
+                id=area.id,
+                title=area.name,
+                colour=IDENTITY[len(pages) % len(IDENTITY)],
+                source=Source(SourceKind.AREA, area.id),
+                parent_id=ROOT_ID,
+            )
+
     return Profile(
         pages=pages,
         root_id=ROOT_ID,

@@ -352,7 +352,7 @@ class SurfaceRunner:
                 return
             self._learn(arming.layout)
             self.surface = Surface(
-                build_profile(self.hass, self.entry.options), HomeAssistantRegistry(self.hass)
+                build_profile(self.hass, self.entry), HomeAssistantRegistry(self.hass)
             )
             LOGGER.info(
                 "%s: surface ready with %d pages",
@@ -426,7 +426,7 @@ class SurfaceRunner:
         self._timers.pop("registry", None)
         if self.surface is None:
             return
-        rebuilt = build_profile(self.hass, self.entry.options)
+        rebuilt = build_profile(self.hass, self.entry)
         if rebuilt == self.surface.profile:
             return
         LOGGER.info("%s: the house changed, rebuilding the surface", self.coordinator.address)
@@ -444,7 +444,7 @@ class SurfaceRunner:
             return
         was = self.surface
         surface = Surface(
-            profile or build_profile(self.hass, self.entry.options),
+            profile or build_profile(self.hass, self.entry),
             HomeAssistantRegistry(self.hass),
         )
         # Keep where somebody was standing, as far as it still exists. Changing a colour

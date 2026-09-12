@@ -28,9 +28,29 @@ USELESS_MODEL_NAMES: Final = frozenset({"", "ble device", "unknown"})
 
 CONF_ADDRESS: Final = "address"
 
-#: Which areas become pages, in the order they will appear on the index.
+#: One page. A subentry rather than an option, because a page is a thing somebody adds
+#: rather than a setting somebody changes, and Home Assistant has a mechanism for exactly
+#: that: its own row under the integration, with add, configure and delete.
+#:
+#: It is also what makes a page's identity its own. A subentry's id is a ULID, so a page
+#: outlives the room it draws from being renamed, or deleted, or never having existed.
+SUBENTRY_PAGE = "page"
+
+#: What a page carries.
+CONF_COLOUR = "colour"
+#: The area a page fills itself from, if it fills itself from one.
+CONF_AREA = "area"
+#: The label a page fills itself from, which is how a page spans rooms.
+CONF_LABEL = "label"
+#: Entities pinned to particular pads, keyed by the pad number **as a person counts them**:
+#: "1" is the top left and "16" the bottom right. The engine counts from zero, and that
+#: translation happens once, here at the edge.
+CONF_PADS = "pads"
+
+#: Which areas become pages, in the order they will appear on the index. Superseded by
+#: page subentries; kept so the one-time migration can still read what was there.
 CONF_PAGES = "pages"
-#: An area's identity colour, keyed by its id.
+#: An area's identity colour, keyed by its id. Superseded in the same way.
 CONF_PAGE_COLOURS = "page_colours"
 #: What a kind of thing looks like when it is on, keyed by domain.
 CONF_DOMAIN_COLOURS = "domain_colours"

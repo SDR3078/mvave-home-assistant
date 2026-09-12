@@ -249,17 +249,6 @@
   "options": {
     "step": {
       "init": {
-        "title": "Rooms",
-        "description": "Pick the rooms that get a page, in the order they should appear on the grid's first screen. Everything in a room fills its page on its own, so there is nothing else to set up.",
-        "data": {
-          "pages": "Rooms"
-        }
-      },
-      "page_colours": {
-        "title": "Room colours",
-        "description": "A colour for each room. It appears on the first screen and again as the curtain that sweeps across when you go in and out.\n\nThere are five because five is how many this device can show that anybody can tell apart from across a room. Past the fifth they repeat, and position on the first screen tells them apart instead."
-      },
-      "domain_colours": {
         "title": "What things look like",
         "description": "A colour for each kind of thing, the same in every room.\n\nA pad shows its colour when the thing behind it is on, and white when it is off. That is the one rule the grid cannot bend, so white is not on offer.\n\nPurple is safe only on scenes. Scenes have no on and off, so they never show white, and purple is the one colour that is hard to tell from it.",
         "data": {
@@ -281,6 +270,65 @@
         "orange": "Orange",
         "red": "Red",
         "purple": "Purple"
+      }
+    }
+  },
+  "config_subentries": {
+    "page": {
+      "entry_type": "Page",
+      "initiate_flow": {
+        "user": "Add a page"
+      },
+      "step": {
+        "user": {
+          "title": "Add a page",
+          "description": "A page is one screen of sixteen pads. Give it a room and it fills itself from what is in that room; give it a label and it fills itself from whatever carries that label, across rooms; give it neither and it is yours to fill pad by pad.\n\nThe colour names it on the first screen, and it is the curtain that sweeps across when you go in and out.",
+          "data": {
+            "name": "Name",
+            "colour": "Colour",
+            "area": "Fill from a room",
+            "label": "Fill from a label"
+          }
+        },
+        "reconfigure": {
+          "title": "Change this page",
+          "description": "A page is one screen of sixteen pads. Give it a room and it fills itself from what is in that room; give it a label and it fills itself from whatever carries that label, across rooms; give it neither and it is yours to fill pad by pad.\n\nThe colour names it on the first screen, and it is the curtain that sweeps across when you go in and out.",
+          "data": {
+            "name": "Name",
+            "colour": "Colour",
+            "area": "Fill from a room",
+            "label": "Fill from a label"
+          }
+        },
+        "pads": {
+          "title": "Pin things to pads",
+          "description": "Sixteen pads, counted the way you read them:\n\n```\n 1   2   3   4\n 5   6   7   8\n 9  10  11  12\n13  14  15  16\n```\n\nEvery one is optional. A pad you leave empty fills itself from the page's room or label, so pinning one thing does not mean pinning sixteen. On a page with no room at all, these are the whole page.\n\nWhat a pad *does* still comes from what is behind it — a lamp toggles, a scene runs, and holding anything a knob can adjust points the knobs at it.\n\nA pad may also be a **readout**. Pin a door sensor or a person and it shows you rather than offering you: its colour when the door is open or the person is in, white when not, and a shudder if you press it. What is never offered is anything the grid cannot show — a temperature has no on and no off, and a pad that sat white forever would be lying about it.",
+          "data": {
+            "pad_1": "Pad 1",
+            "pad_2": "Pad 2",
+            "pad_3": "Pad 3",
+            "pad_4": "Pad 4",
+            "pad_5": "Pad 5",
+            "pad_6": "Pad 6",
+            "pad_7": "Pad 7",
+            "pad_8": "Pad 8",
+            "pad_9": "Pad 9",
+            "pad_10": "Pad 10",
+            "pad_11": "Pad 11",
+            "pad_12": "Pad 12",
+            "pad_13": "Pad 13",
+            "pad_14": "Pad 14",
+            "pad_15": "Pad 15",
+            "pad_16": "Pad 16"
+          }
+        }
+      },
+      "error": {
+        "one_source": "A page fills itself from one place. Choose a room or a label, not both."
+      },
+      "abort": {
+        "reconfigure_successful": "Page saved.",
+        "entry_not_loaded": "The surface is not running, so its pages cannot be changed yet."
       }
     }
   }

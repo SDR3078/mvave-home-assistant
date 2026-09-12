@@ -9,8 +9,8 @@ No cloud, no polling, no MIDI software in between. Home Assistant connects to th
 Bluetooth, reads the device's own configuration out of its memory, and drives the LEDs
 directly.
 
-> **Status: works, not yet released.** Everything below is running on real hardware. The
-> interfaces are settled; per-pad configuration is not built yet. See
+> **Status: works, not yet released.** Everything below is running on real hardware, and
+> everything it claims was judged on the physical grid rather than reasoned about. See
 > [`docs/NEXT.md`](docs/NEXT.md) for what is left.
 
 ---
@@ -127,16 +127,32 @@ view of it.
 
 ### Configuring
 
-**Settings → Devices & services → M-Vave → Configure**, three screens:
+Nothing, if the default is what you want. Otherwise **Settings → Devices & services →
+M-Vave**.
 
-1. **Rooms** — which areas get a page, in the order they appear on the index.
-2. **Room colours** — one colour each. Also the colour of the curtain that sweeps in and out.
-3. **What things look like** — a colour per kind of thing, the same in every room.
+**Pages are things you add**, each its own row under the integration with its own *Configure*
+and *Delete* — the same shape Home Assistant gives a bulb on a hub, because that is what a
+page is. **Add page** asks for four things:
 
-Saving rebuilds the surface in place and keeps you on the page you were standing on. It does
-not reconnect, which would cost twenty seconds.
+| | |
+|---|---|
+| **Name** | what it is called on the index |
+| **Colour** | names it on the index, and is the curtain that sweeps in and out |
+| **Fill from a room** | it fills itself from that area, and keeps up as the area changes |
+| **Fill from a label** | it fills itself from whatever carries that label, across rooms |
 
-White is never offered, because white is what "off" means.
+Give it neither and the page is yours to fill pad by pad. The next screen does that: sixteen
+optional fields, with the grid drawn above them. A pad you pin is fixed; every pad you leave
+empty still fills itself from the room. So pinning one thing does not mean pinning sixteen.
+
+A page's identity is its own — a ULID, not the room's name — so it survives the area being
+renamed, or deleted, or never having existed.
+
+**Configure** on the integration itself is one screen: what each kind of thing looks like,
+the same on every page. White is never offered, because white is what "off" means.
+
+Saving anything rebuilds the surface in place and keeps you on the page you were standing on.
+It does not reconnect, which would cost twenty seconds.
 
 ---
 
@@ -224,7 +240,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 336 tests
+pytest tests       # 392 tests
 ruff check . && ruff format --check . && mypy
 ```
 

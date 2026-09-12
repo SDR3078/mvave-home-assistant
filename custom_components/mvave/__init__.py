@@ -6,17 +6,29 @@ Turns a Bluetooth LE MIDI controller into a Home Assistant control surface.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from bleak_retry_connector import close_stale_connections_by_address
 from homeassistant.components import bluetooth
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_ADDRESS, CONF_NAME, EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, LOGGER
+from .const import (
+    CONF_AREA,
+    CONF_COLOUR,
+    CONF_LABEL,
+    CONF_PAGE_COLOURS,
+    CONF_PAGES,
+    DOMAIN,
+    LOGGER,
+    SUBENTRY_PAGE,
+)
 from .coordinator import MvaveCoordinator
+from .engine import IDENTITY
 from .runner import SurfaceRunner
 from .services import async_setup_services
 
@@ -58,6 +70,52 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     that is not set up explains itself, instead of the service simply not existing.
     """
     async_setup_services(hass)
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> bool:
+    """Turn the rooms somebody picked into pages they own.
+
+    Pages were once two lists in the options: which areas got one, and what colour each
+    was. They are subentries now — a page is a thing you add, with a name and an id of its
+    own, and it need not be a room at all. Nothing about the surface changes; what changes
+    is that a page can now outlive the room it came from.
+
+    Order is preserved, because the order rooms were picked in is the order they sit on
+    the index, and somebody has learned where they are.
+    """
+    if entry.minor_version >= 2:
+        return True
+
+    areas = ar.async_get(hass)
+    chosen: list[str] = entry.data.get(CONF_PAGES) or entry.options.get(CONF_PAGES) or []
+    colours: dict[str, int] = entry.options.get(CONF_PAGE_COLOURS, {})
+    for index, area_id in enumerate(chosen):
+        area = areas.async_get_area(area_id)
+        hass.config_entries.async_add_subentry(
+            entry,
+            ConfigSubentry(
+                subentry_type=SUBENTRY_PAGE,
+                title=area.name if area else area_id,
+                unique_id=None,
+                data=MappingProxyType(
+                    {
+                        CONF_COLOUR: colours.get(area_id, IDENTITY[index % len(IDENTITY)]),
+                        CONF_AREA: area_id,
+                        CONF_LABEL: None,
+                    }
+                ),
+            ),
+        )
+
+    # Whatever is left is a genuine setting and stays where it was.
+    options = {
+        key: value
+        for key, value in entry.options.items()
+        if key not in (CONF_PAGES, CONF_PAGE_COLOURS)
+    }
+    hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    LOGGER.info("%s: migrated %d room(s) into pages", entry.title, len(chosen))
     return True
 
 
