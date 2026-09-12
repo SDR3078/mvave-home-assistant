@@ -321,7 +321,7 @@ Two numbers, so: **fill = setpoint**, one contrasting pad = **current temperatur
 ### 6.5 Behavior
 
 - Update the HUD on **every** tick (optimistic), but **debounce the service call ~250 ms** after the last tick. Turning a knob must never fire 40 `light.turn_on` calls.
-- Min/max reached: one quick full-bar flash.
+- Min/max reached: ~~one quick full-bar flash~~ — **cut 2026-09-12, nothing replaces it.** A full-bar flash is a whole-surface luminance change, and it would fire again for every click somebody kept turning at the limit. Those two properties together are what made the knob refusal read as the device failing (§6.0), and they are what the photosensitivity thresholds are written about. The signal is also already there and free: a bar at either end is sixteen pads lit or sixteen dark, which is as unambiguous as this grid gets.
 - If the target is off (light off, player muted), the first tick **turns it on at the lowest step** rather than adjusting an invisible value.
 - The HUD interrupts page animations; any pad press cancels the HUD and executes immediately.
 - The HUD **snaps on in one frame** and never animates in. How the grid arrived is a channel of its own: snap means HUD, rings mean you navigated, a bare column wipe means something else moved you.

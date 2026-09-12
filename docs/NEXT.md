@@ -154,6 +154,26 @@ implementation plan and this file is the running to-do list.
   the same file imported as `engine.model` and as `custom_components.mvave.engine.model`
   is two classes, so every `is` comparison between them is False and a page built through
   one and resolved through the other comes back empty.
+- **The surface says which encoders are live**, which was the last open question from
+  the first day and the one the hardware cannot answer for itself: eight identical knobs,
+  no rings, no markings. Turning one that can do nothing draws a map of all eight, in the
+  arrangement they physically have, each live one in the colour of what it adjusts. It
+  took three tries and two UX agents to land on a map rather than a refusal, and the
+  reasons are in the design brief §6.0 — the short version is that a whole grid blinking
+  dark is not a louder version of a pad shuddering but a different signal, one that
+  already means "nothing is driving this device" and that the photosensitivity thresholds
+  are written about. Three defects surfaced underneath it: capabilities were never
+  checked, so a bulb that only switches reported a live brightness knob; the properties
+  were handed out up the device's wiring rather than down the reading order, putting the
+  most wanted one on the least obvious encoder; and the eighth encoder was a spare that
+  meant a different thing on every kind of device, which is exactly what the design
+  forbids. Properties now pack from the top left, so the first encoder always does the
+  main thing.
+- **The profile follows the house.** Which rooms become pages was worked out once, at
+  connect, so a room added, renamed or deleted afterwards needed a restart. All three
+  registries are watched now — an entity *given* an area is not an area event, and a
+  device moved into a room carries its entities without any of them being touched —
+  debounced two seconds and rebuilt only when the answer actually differs.
 - **`scripts/led_console.py`** holds the link open and takes one instruction at a time from
   a file, which is what made designing by eye possible: reconnecting between questions cost
   twenty seconds each. It renders frames, rhythms, bars and the page animations, can freeze
@@ -163,11 +183,10 @@ implementation plan and this file is the running to-do list.
 
 ## Build
 
-1. **Repository.** A README, and then this can be pushed somewhere.
-2. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
+1. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
    unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
    MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
-3. **Engine** (brief, milestone 4), building the language now specified in
+2. **Engine** (brief, milestone 4), building the language now specified in
    `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
    transitions, the two rhythms, the page model, the two protocols the platform reaches in
    through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
@@ -177,22 +196,28 @@ implementation plan and this file is the running to-do list.
    `scripts/surface_demo.py`, which drives the real pad from the real engine against a
    pretend house, and which found four defects that the tests had not. What is left:
    - **The shift gesture**: holding the left button turning row one into a page switcher.
-   - **The min and max flash.** The design asks for one quick full-bar flash on reaching
-     either end. The bar being full or empty is most of that signal already, and adding it
-     needs an outcome to be able to set its own pace.
-   - **Telling somebody which knobs are live.** With no rings and no labels there is
-     nothing that says knob one adjusts the lamp you are holding and knob six does not.
-     The design's answer is that the assignment never changes so it is learned once, which
-     is a lot to ask on the first day. Open.
-   - **Rebuilding the profile when areas change.** It is built once, on the first connect
-     after a restart, so a room added later needs a reload.
+     Blocked on one decision rather than on work: holding left is currently *home*, which
+     the stop button already does, so the gesture is free the moment somebody says that
+     duplicate can go.
    - **One provisional colour to judge on the grid**: what a scene or script pad looks
      like, currently purple. Every other colour in the language was chosen by looking at
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
      anything that is off and shudders when pressed, which was the owner's idea and buys
      back a fifth of the vocabulary.
-4. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+3. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
+
+## Decided against
+
+- **The min and max flash.** The design asked for one quick full-bar flash on reaching
+  either end of a knob's travel. Not building it, on evidence gathered while solving the
+  dead-knob problem on 2026-09-12. A full-bar flash is a whole-surface luminance change,
+  and it would fire *repeatedly* for as long as somebody kept turning at the limit — the
+  two properties that together made the knob refusal read as the device failing, and the
+  ones the photosensitivity thresholds are written about (WCAG 2.3.1, Section 508 §408.3;
+  see `frames.CURTAIN_HOLD` and the design brief §6.0). The signal is also already there
+  and free: a bar at either end is sixteen pads lit or sixteen dark, which is as
+  unambiguous as this grid gets. Nothing needs adding.
 
 ## Also open
 
