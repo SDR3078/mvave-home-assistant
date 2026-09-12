@@ -271,7 +271,12 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
             return
 
         devices = dr.async_get(self.hass)
-        device = devices.async_get_device(identifiers={(DOMAIN, format_mac(self.address))})
+        # Scoped to this entry on purpose. An identifier is only unique *within* a config
+        # entry — this pad is very likely also known to the ESPHome proxy that relays it —
+        # so the unscoped lookup has to guess between them, which is why it is deprecated.
+        device = devices.async_get_device_by_identifier(
+            (DOMAIN, format_mac(self.address)), self.entry.entry_id
+        )
         if device is not None:
             devices.async_update_device(device.id, **changes)  # type: ignore[arg-type]
 
