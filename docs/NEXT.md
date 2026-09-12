@@ -255,8 +255,27 @@ implementation plan and this file is the running to-do list.
   this mean" and is deliberately pull-only. A wall tablet mirroring the grid as it
   changes wants a subscription instead, which is what `weather` does alongside its own
   action. Nothing needs it yet.
-- **Per-pad overrides in configuration.** The engine has taken `PadConfig` since it was
-  written; there is no screen for it. Probably config subentries.
+- **A knob's memory holds what was asked for, not what is known.** `Surface.last_asked`
+  records the value this surface sent, and is read only when an entity is on and will not
+  name a property — a light in colour mode reports no colour temperature at all. But
+  `settled()` corrects the *bar* from the entity and does not correct the memory:
+
+  ```python
+  value = prop.read(state)
+  if value is not None:
+      self.hud = replace(showing, value=value)   # the bar; last_asked is left alone
+  ```
+
+  So set a colour temperature with the knob, have somebody set a different one from the
+  app, then put the light into colour mode: the knob resumes from what was asked rather
+  than from what it actually became. It is not lying — the field is named for what it
+  holds — but "the last value known for this property, from any source" is the better
+  concept, and `settled` already has that value in hand. One line.
+
+  Narrow, though: it would catch an external change made **while the bar is up**. Catching
+  one while the bar is down means watching every state change for every focused entity,
+  which is real machinery for a rarer case. Worth deciding which of the two is being built
+  before writing the line. Raised 2026-09-12, when the question was asked at the grid.
 - **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
   applies when an entity is first registered and never again, which is correct — Home
   Assistant does not overrule a choice somebody may have made — but it means this only
