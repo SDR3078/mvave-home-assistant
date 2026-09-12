@@ -580,6 +580,75 @@ def test_turning_a_knob_on_something_switched_off_starts_it_at_the_bottom() -> N
     assert view.hud is not None and view.hud.value == 1 / 16
 
 
+def in_colour_mode() -> Surface:
+    """A lamp that is on, showing a colour, and so reporting no colour temperature at all.
+
+    Not a contrivance: it is what Home Assistant does. ``light/__init__.py`` derives
+    ``hs_color`` from a colour temperature but sets ``color_temp_kelvin`` to None whenever
+    the light is in any other mode, and never derives it, because most colours have no
+    meaningful temperature. So this is every coloured bulb whose hue has been touched.
+    """
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    registry.attributes = {
+        "light.lamp": {
+            "color_mode": "hs",
+            "brightness": 128,
+            "hs_color": (200, 80),
+            "color_temp_kelvin": None,
+        }
+    }
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.handle(Press(0, held=True))
+    return view
+
+
+def test_a_knob_on_a_value_the_entity_will_not_report_does_not_go_to_the_bottom() -> None:
+    # Found at the grid — "i feel that the color_temp is resetting" — and it was. This fell
+    # into the branch above and started at a sixteenth, because one branch was answering
+    # for both "off" and "on but quiet". They are not the same situation: off has no
+    # visible value, while this one has a visible light that simply will not name this
+    # property. Starting at the bottom of the range threw it to deep orange every time.
+    view = in_colour_mode()
+    view.handle(Turn(COLOUR_TEMP, 1))
+    assert view.hud is not None
+    assert view.hud.value == 0.5 + 1 / 16  # the middle is the one value that claims nothing
+
+
+def test_a_knob_resumes_where_it_was_last_left_rather_than_in_the_middle() -> None:
+    # The middle is only for a property nobody has ever set. Once this surface has asked
+    # for a value, that is where the knob is, and it stays there after the bar that was
+    # holding it has gone — which is the case that was actually felt at the grid, since a
+    # bar lasts about a second and a second is not how long anybody waits between clicks.
+    view = in_colour_mode()
+    view.handle(Turn(COLOUR_TEMP, 4))
+    asked = view.hud.value  # type: ignore[union-attr]
+
+    view.clear_hud()
+    view.handle(Turn(COLOUR_TEMP, 1))
+
+    assert view.hud is not None
+    assert view.hud.value == asked + 1 / 16
+
+
+def test_the_entity_still_wins_over_what_the_knob_remembers() -> None:
+    # The memory exists for one case only: on, and will not say. It must never override
+    # what the house actually reports, or a value changed anywhere else would be silently
+    # undone by the next click.
+    view = in_colour_mode()
+    view.handle(Turn(COLOUR_TEMP, 4))
+    view.clear_hud()
+
+    # Somebody set it elsewhere, so now the light is in colour-temperature mode and says so.
+    view.registry.attributes["light.lamp"] = {  # type: ignore[attr-defined]
+        "color_mode": "color_temp",
+        "brightness": 128,
+        "color_temp_kelvin": 2000,  # the bottom of the default span
+    }
+    view.handle(Turn(COLOUR_TEMP, 1))
+    assert view.hud is not None and view.hud.value == 1 / 16
+
+
 def test_holding_a_pad_peeks_at_its_value_without_changing_it() -> None:
     view = lit_lamp()
     outcome = view.handle(Press(0, held=True))

@@ -454,6 +454,9 @@ class SurfaceRunner:
         surface.stack = kept or [surface.profile.root_id]
         surface.focus = was.focus
         surface.pending = set(was.pending)
+        # Where a knob was left is a fact about the entity, not about the configuration
+        # that was just changed.
+        surface.last_asked = dict(was.last_asked)
         self.surface = surface
         self._logged_page = None
         self._shown = None

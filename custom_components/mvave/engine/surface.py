@@ -245,6 +245,13 @@ class Surface:
         #: it away again once the knob has been still long enough; the engine has no
         #: clock and so cannot decide when that is.
         self.hud: Hud | None = None
+        #: The last value this surface asked for, per entity and property.
+        #:
+        #: Consulted only when an entity is on and will not say what a value is, so it can
+        #: never override what the house reports. It is the value bar's memory outliving
+        #: the bar, and it suits encoders with no rings: the knob has no position of its
+        #: own, so the surface is the only thing that can hold one.
+        self.last_asked: dict[tuple[str, str], float] = {}
         #: Showing which of the eight encoders do anything to what has focus, instead of a
         #: value. Put up by turning a knob that can do nothing, and by nothing else: it is
         #: an answer to a question somebody asked, in the moment they asked it, which is the
@@ -505,19 +512,33 @@ class Surface:
             # so re-reading it every step means a fast turn barely moves and then jumps
             # backwards when the answer finally arrives.
             value = showing.value + prop.step * event.steps
-        elif state.is_active and (current := prop.read(state)) is not None:
-            value = current + prop.step * event.steps
-        else:
+        elif not state.is_active:
             # Adjusting something that is off means adjusting a value nobody can see. The
             # first click turns it on at the bottom of its range instead, so the next one
             # has somewhere visible to go.
             value = prop.step
+        elif (current := prop.read(state)) is not None:
+            value = current + prop.step * event.steps
+        else:
+            # On, and yet it will not say. Home Assistant reports no colour temperature at
+            # all for a light in colour mode and never derives one, because most colours
+            # have no meaningful temperature — so this is not an edge, it is every coloured
+            # bulb whose hue has been touched.
+            #
+            # This used to fall into the branch above and start at the bottom of the range,
+            # which read at the grid as the knob resetting, because that is what it was:
+            # one branch answering for both "off" and "on but quiet", which are not the
+            # same situation. Resume where this surface last left it instead, and start in
+            # the middle only if it has never been set — the one value that is not a claim
+            # about anything.
+            value = self.last_asked.get((target, prop.key), 0.5) + prop.step * event.steps
         value = max(0.0, min(1.0, value))
 
         domain, service, data = prop.write(state, value)
         # A live knob is past the question the legend answers: show the value instead.
         self.legend = False
         self.hud = Hud(target, prop.key, value)
+        self.last_asked[target, prop.key] = value
         return Outcome(
             calls=(Call(domain, service, data),),
             emits=(
