@@ -206,6 +206,34 @@ implementation plan and this file is the running to-do list.
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
      anything that is off and shudders when pressed, which was the owner's idea and buys
      back a fifth of the vocabulary.
+   - **The colour-temperature knob resets to the bottom of its range**, found on the
+     hardware on 2026-09-12 and reproduced against the engine: a light that is on and in
+     `hs` mode sends 2281 K on the next click instead of continuing from where it was,
+     while the same light in `color_temp` mode correctly sends 4281 K from 4000 K.
+
+     The cause is an asymmetry in Home Assistant, confirmed in
+     `components/light/__init__.py`. In colour-temperature mode it **derives** `hs_color`
+     from the temperature, so hue and saturation always read back. In colour mode it sets
+     `color_temp_kelvin` to `None` and never derives it. So touching knob 5 or 6 puts the
+     light into `hs` mode and makes colour temperature unreadable, and `_read_colour_temp`
+     returns None. `Surface._turn` then falls into its last branch — written for a light
+     that is **off**, where starting at the bottom is right — and sends `prop.step`.
+     One branch is being asked to cover two different situations.
+
+     The fix is to split it. Off stays as it is. On but unreadable should resume from the
+     last value the surface itself wrote for that entity and property, and start in the
+     middle only if it was never set. That is the value bar's memory outliving the bar,
+     and it suits encoders with no rings: the knob has no position, so the surface is the
+     only thing that can hold one.
+
+     **Ruled out: deriving a colour temperature from the current colour.** It is about
+     twenty-five lines of CIE arithmetic and stays pure, but Home Assistant declines to do
+     it on purpose, because most colours have no meaningful correlated temperature.
+     Inventing a number the platform refuses to state is how a knob starts lying.
+
+     Still open: whether that memory should survive a page change and the idle timeout, or
+     reset with them. Affects any bulb that does both colour and white, so most of them —
+     not a demo artefact.
 3. **A brand icon**, which is the only real HACS failure left. `validate/brands.py` looks
    for `custom_components/mvave/brand/icon.png` in the repository tree and returns early
    if it is there, so this does **not** need the pull request against
