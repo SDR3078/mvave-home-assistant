@@ -52,16 +52,35 @@ This is the whole language, and it is short because the hardware is unforgiving 
 
 ## The knobs
 
-Eight relative encoders, no rings, no markings. The assignment is **fixed everywhere**, so
-muscle memory works: knob one is brightness on every page, whatever you are looking at.
+Eight relative encoders, no rings, no markings, no labels. They sit two across and four up,
+numbered from the bottom left — so encoder 7 is the top left one.
 
-| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|---|---|---|---|---|---|---|---|
-| brightness | colour temp | hue | saturation | volume | cover position | setpoint | whatever that entity's main value is |
+Whatever you are holding, its controls fill them **from the top left, with no gaps** — so
+the first encoder always adjusts the main thing:
 
-A knob pointed at something without that property is **inert** rather than falling back to
-something else. A page may redirect a knob to a different *entity* ("volume here always
-means the kitchen speaker"), never to a different property.
+| | |
+|---|---|
+| **7** the main value | **8** colour temp |
+| **5** hue | **6** saturation |
+| **3** — | **4** — |
+| **1** — | **2** — |
+
+A lamp is the only thing in a house with more than one control, so on everything else —
+a blind, a fan, a speaker, a thermostat — encoder 7 is the only live one. One thing to
+learn instead of eight.
+
+**Turn an encoder that does nothing and the grid draws that map**, each live one in the
+colour of what it adjusts and the dead ones in white:
+
+**orange** the level · **blue** colour temp · **green** hue · **red** saturation
+
+Those are the same colours the value bar uses, so the map is a promise about the bar you
+will get. It is the only thing on the device that can tell you which encoders are live —
+there are no rings and no markings — and it is why a fan, where seven of the eight do
+nothing, is usable at all.
+
+A page may redirect a knob to a different *entity* ("volume here always means the kitchen
+speaker").
 
 Turning a knob moves the light **while you turn**, throttled to about seven commands a
 second. For comparison, Home Assistant's own brightness slider sends nothing at all until

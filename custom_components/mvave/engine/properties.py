@@ -16,7 +16,15 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from .model import EntityState
-from .palette import BAR_COLOURS, GREEN, WHITE
+from .palette import property_colour
+
+#: How many encoders there are. Eight, and they do not move.
+KNOB_COUNT: Final = 8
+
+
+def _anything(state: EntityState) -> bool:
+    """Every entity of the right domain can do this."""
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +42,71 @@ class Property:
     #: How far one click moves it. A sixteenth is one pad of the bar; a thermostat wants
     #: finer than that, because half a degree is what people expect from a click.
     step: float = 1 / 16
-    colour: int = WHITE
+    #: Whether this particular entity can actually do it. The domain is not enough: a bulb
+    #: that only switches on and off is still a light, and a knob that claims it can dim
+    #: one is lying. Without this the surface sends a brightness to something that has
+    #: none, and cannot answer "which knobs are live" with anything true.
+    supports: Callable[[EntityState], bool] = _anything
+
+    @property
+    def colour(self) -> int:
+        """The colour that names this property, wherever it is drawn.
+
+        Looked up rather than stored, so the knob map and this property's own value bar
+        cannot be given different colours by anybody editing one of them.
+        """
+        return property_colour(self.key)
+
+
+# ------------------------------------------------------------------- capabilities
+
+#: How Home Assistant itself decides what a light can do, from
+#: ``homeassistant.components.light``: every colour mode except ``onoff`` and ``unknown``
+#: carries a brightness, colour needs one of the five modes that carry a hue, and colour
+#: temperature is a mode of its own. Held here as plain strings rather than imported,
+#: because nothing in this package may touch the platform.
+BRIGHTNESS_MODES: Final = frozenset(
+    {"brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww", "white"}
+)
+COLOUR_MODES: Final = frozenset({"hs", "xy", "rgb", "rgbw", "rgbww"})
+
+#: Feature bits, each from its own domain's ``EntityFeature`` flag. Same reasoning: the
+#: numbers are part of Home Assistant's published interface, the imports are not available.
+VOLUME_SET: Final = 4  # MediaPlayerEntityFeature.VOLUME_SET
+SET_POSITION: Final = 4  # CoverEntityFeature.SET_POSITION
+TARGET_TEMPERATURE: Final = 1  # ClimateEntityFeature.TARGET_TEMPERATURE
+SET_SPEED: Final = 1  # FanEntityFeature.SET_SPEED
+
+
+def _colour_modes(state: EntityState) -> frozenset[str]:
+    """What a light says it can be, normalised to plain strings.
+
+    Home Assistant puts enum members in the attribute, and a test puts strings there. Both
+    have to work, and comparing them by value is the only thing that does.
+    """
+    modes = state.attributes.get("supported_color_modes")
+    if not isinstance(modes, (list, tuple, set, frozenset)):
+        return frozenset()
+    return frozenset(str(mode) for mode in modes)
+
+
+def _feature(state: EntityState, bit: int) -> bool:
+    """Whether an entity declares one of its domain's feature bits."""
+    features = state.attributes.get("supported_features")
+    # A flag enum is an int, so this covers both.
+    return isinstance(features, int) and bool(features & bit)
+
+
+def _dimmable(state: EntityState) -> bool:
+    return not BRIGHTNESS_MODES.isdisjoint(_colour_modes(state))
+
+
+def _colourable(state: EntityState) -> bool:
+    return not COLOUR_MODES.isdisjoint(_colour_modes(state))
+
+
+def _tunable(state: EntityState) -> bool:
+    return "color_temp" in _colour_modes(state)
 
 
 def _span(
@@ -186,36 +258,36 @@ PROPERTIES: Final[Mapping[str, Property]] = {
         frozenset({"light"}),
         _read_brightness,
         _write_brightness,
-        colour=BAR_COLOURS["brightness"],
+        supports=_dimmable,
     ),
     "color_temp": Property(
         "color_temp",
         frozenset({"light"}),
         _read_colour_temp,
         _write_colour_temp,
-        colour=BAR_COLOURS["color_temp"],
+        supports=_tunable,
     ),
-    "hue": Property("hue", frozenset({"light"}), _read_hue, _write_hue, colour=GREEN),
+    "hue": Property("hue", frozenset({"light"}), _read_hue, _write_hue, supports=_colourable),
     "saturation": Property(
         "saturation",
         frozenset({"light"}),
         _read_saturation,
         _write_saturation,
-        colour=BAR_COLOURS["saturation"],
+        supports=_colourable,
     ),
     "volume": Property(
         "volume",
         frozenset({"media_player"}),
         _read_volume,
         _write_volume,
-        colour=BAR_COLOURS["volume"],
+        supports=lambda state: _feature(state, VOLUME_SET),
     ),
     "position": Property(
         "position",
         frozenset({"cover"}),
         _read_position,
         _write_position,
-        colour=BAR_COLOURS["position"],
+        supports=lambda state: _feature(state, SET_POSITION),
     ),
     "temperature": Property(
         "temperature",
@@ -223,60 +295,66 @@ PROPERTIES: Final[Mapping[str, Property]] = {
         _read_temperature,
         _write_temperature,
         step=TEMPERATURE_STEP,
-        colour=BAR_COLOURS["temperature"],
+        supports=lambda state: _feature(state, TARGET_TEMPERATURE),
     ),
     "percentage": Property(
         "percentage",
         frozenset({"fan"}),
         _read_percentage,
         _write_percentage,
-        colour=BAR_COLOURS["brightness"],
+        supports=lambda state: _feature(state, SET_SPEED),
     ),
 }
 
-#: The fixed assignment. Muscle memory lives here, so it does not change per page: knob one
-#: is brightness everywhere, whatever the page. A page may redirect a knob to a different
-#: *entity*, never to a different property.
-KNOB_PROPERTIES: Final[Mapping[int, str]] = {
-    1: "brightness",
-    2: "color_temp",
-    3: "hue",
-    4: "saturation",
-    5: "volume",
-    6: "position",
-    7: "temperature",
-    # Knob eight is deliberately unassigned: it takes whatever the entity's own main
-    # property is, so it works on anything without having to be configured.
-}
-
-#: What "the value" means for an entity when no particular property was asked for. Used by
-#: knob eight, and by holding a pad to peek at what is behind it.
-PRIMARY: Final[Mapping[str, str]] = {
-    "light": "brightness",
-    "media_player": "volume",
-    "cover": "position",
-    "climate": "temperature",
-    "fan": "percentage",
-}
+#: What the encoders adjust, most reached-for first. A ranking, not a list: brightness is
+#: at the front because it is what people want from a lamp nine times in ten.
+RANKED_PROPERTIES: Final = (
+    "brightness",
+    "color_temp",
+    "hue",
+    "saturation",
+    "volume",
+    "position",
+    "temperature",
+    "percentage",
+)
 
 
-def property_for(knob: int, state: EntityState) -> Property | None:
-    """Which property a knob adjusts on this entity, if it adjusts one at all.
+def packed(state: EntityState) -> list[Property]:
+    """Everything this entity can actually be adjusted by, most reached-for first.
 
-    A knob pointed at something without that property is inert. That is better than
-    falling back to something else, which would mean the same knob doing different things
-    depending on what happened to be focused.
+    The encoders are handed these in order, from the top left, with no gaps. So the first
+    encoder always adjusts the main thing — brightness on a lamp, volume on a speaker,
+    position on a blind, the setpoint on a thermostat, speed on a fan — and anything else
+    the entity has follows beside it.
+
+    This replaced a fixed global assignment, where each encoder owned one property for
+    ever. That sounded like the thing muscle memory wants and was not: four of the five
+    kinds of thing in a house have exactly one adjustable value, so a fixed table put that
+    one value on four *different* encoders and left seven of the eight dead in every case.
+    What somebody actually learns from this is one fact instead of seven, and it is the
+    useful one. A lamp, the only thing here with more than one control, is unaffected:
+    its four still land on the same four encoders they always did.
+
+    Two ways for an entity not to offer something, and both matter. The domain can be
+    wrong — a lamp has no volume. Or the domain can be right and the *entity* still cannot:
+    a bulb that only switches is a light with no brightness, and a colour bulb with no
+    white LEDs is a light with no colour temperature.
     """
-    key = KNOB_PROPERTIES.get(knob) or PRIMARY.get(state.domain)
-    if key is None:
-        return None
-    candidate = PROPERTIES.get(key)
-    if candidate is None or state.domain not in candidate.domains:
-        return None
-    return candidate
+    return [
+        candidate
+        for key in RANKED_PROPERTIES
+        if (candidate := PROPERTIES.get(key)) is not None
+        and state.domain in candidate.domains
+        and candidate.supports(state)
+    ]
 
 
 def primary_for(state: EntityState) -> Property | None:
-    """The one value worth showing for an entity, for a peek."""
-    key = PRIMARY.get(state.domain)
-    return PROPERTIES.get(key) if key else None
+    """The one value worth showing for an entity, for a peek.
+
+    Which is simply the first thing it offers: the ranking already puts the main one at the
+    front, and the first encoder is the one that gets it.
+    """
+    offered = packed(state)
+    return offered[0] if offered else None

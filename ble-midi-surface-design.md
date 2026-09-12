@@ -259,20 +259,26 @@ Entering a page from its own pad on the index means that pad already carries the
 
 **Encoders are relative and have no rings.** All feedback is on the grid. Knobs never change *meaning*, only *target*.
 
-Global knob assignment (fixed, muscle memory lives here):
+Global knob assignment (fixed, muscle memory lives here). The encoders are two across and four up, **numbered from the bottom left** — the same convention the pads use, where PAD1 is bottom left:
 
-| knob | property |
+| | |
 |---|---|
-| 1 | brightness |
-| 2 | color temp |
-| 3 | hue |
-| 4 | saturation |
-| 5 | volume |
-| 6 | cover position |
-| 7 | climate setpoint |
-| 8 | free / per-page |
+| **7** brightness | **8** color temp |
+| **5** hue | **6** saturation |
+| **3** volume | **4** cover position |
+| **1** climate setpoint | **2** free / per-page |
+
+Rewritten 2026-09-12. The list is a **ranking** — brightness first because it is what people want from a lamp nine times in ten — and it is handed out **down the reading order of the block**, not up the device's numbering. Assigning it up the wiring put the most wanted property on the least obvious encoder, and nobody could see that until the map below was on the grid and the owner said the shape looked wrong. The assignment is derived from the geometry in code, so the two cannot drift apart.
 
 If the focus lacks a property, that knob is inert. Per-page `knobs` config overrides the target for specific knobs (e.g. volume always hits the room's media player regardless of focus) — this is the one place per-page config beats the global rule.
+
+### 6.0 The knob map
+
+**Turning an encoder that does nothing draws the eight encoders on the grid**, in the arrangement above: live ones in the colour of whatever is focused, dead ones white, the rest of the grid dark. It holds as long as a value bar does and snaps back the same way.
+
+This is the answer to "which knobs are live", which was open from the first day and which the hardware cannot answer for itself: eight identical encoders, no rings, no markings. The fixed assignment means it only has to be learned once, which is a fine answer on the thousandth day and no answer at all on the first — and on a fan, where only the free encoder does anything, seven of the eight are dead with no way to tell.
+
+**It is deliberately not a refusal**, and that is the one place this surface departs from "anything that does nothing shudders" (§5.2). A pad shudders under the finger that pressed it and the other fifteen keep reporting, so the signal has a referent and costs almost nothing. An encoder has no pad, so the only surface available is the whole grid — and a whole grid blinking dark is not a louder version of that signal but a different one. It already means "nothing is driving this device"; it is what the photosensitivity thresholds (WCAG 2.3.1, Section 508 §408.3) are written about, three blinks being three flashes in one second across the entire surface; and it was read on the hardware exactly as it reads everywhere else, as the thing failing. "Not that one" is also the wrong answer to somebody who is searching. The map names the ones that work, once, instead of saying no seven times.
 
 ### 6.1 HUD
 
@@ -292,15 +298,17 @@ Since there is no persistent readout, the grid becomes a transient one.
 
 Constant across every page. **One flat colour per property, not a gradient**: every ramp in the original design needed many graded steps along one hue, and the palette has neither brightness nor controllable saturation. What survives is one fixed colour naming which property you are holding, and the length of the bar carrying the value.
 
-| Property | Bar colour | Note |
+| Property | Colour | Note |
 |---|---|---|
-| brightness | white | |
-| colour temp | orange | |
-| saturation | green | |
-| hue | **cut** | see below |
-| volume | green | pads above a configurable "loud" threshold switch to red-pink, an extra colour appearing rather than a shade changing |
-| cover position | blue | fills **top-down**, the one exception, because it is a blind |
-| climate | see §6.4 | |
+| brightness | orange | and so is every other "main value": volume, blind position, setpoint, fan speed. **Orange is the level** |
+| colour temp | blue | |
+| hue | green | |
+| saturation | red-pink | |
+| volume | orange | pads above a configurable "loud" threshold switch to red-pink, an extra colour appearing rather than a shade changing |
+| cover position | orange | fills **top-down**, the one exception, because it is a blind |
+| climate | orange | see §6.4 |
+
+Rewritten 2026-09-12. **One table serves the bar and the knob map (§6.0) alike**, which is the point: a colour on the map is a promise about the bar you get if you turn that encoder, so the colour becomes the property's *name* rather than a decoration, and the map teaches the bar. The previous set could not do that job. Brightness drew a *white* bar, and white already means "this encoder does nothing" on the map, so the commonest control and the absence of a control would have been the same colour. Hue and saturation were both green, which never mattered while only one bar showed at a time and matters completely once all four are on the grid together. Purple is deliberately unused: it is the one colour reported as too close to white on the physical grid, and a map is mostly white.
 
 **Hue is cut entirely.** It wanted the grid to show the actual colour being chosen, sweeping across all 16 pads. Usable hue repeats every 13 or 14 palette steps with only five unambiguous entries, so 16 pads would show two or three repeats of a handful of colours, reading as "these pads are grouped" rather than as a continuous dial. The one property where seeing the result was the whole point is the one the palette cannot show. Hue gets an ordinary bar or a pad-per-preset instead.
 

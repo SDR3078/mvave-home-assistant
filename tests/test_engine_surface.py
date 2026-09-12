@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
+from engine.frames import CURTAIN_HOLD, PAD_COUNT, knob_pad, knobs_in_reading_order
 from engine.model import (
     Activate,
     EntityState,
@@ -24,7 +25,8 @@ from engine.model import (
     SourceKind,
     Toggle,
 )
-from engine.palette import BLUE, GREEN, ORANGE, PURPLE, UNASSIGNED, WHITE
+from engine.palette import BLUE, GREEN, ORANGE, PURPLE, UNASSIGNED, WHITE, property_colour
+from engine.properties import KNOB_COUNT
 from engine.render import BACK_BUTTON, HOME_BUTTON
 from engine.surface import (
     ButtonPress,
@@ -38,6 +40,19 @@ from engine.surface import (
     Turn,
     pad_showing,
 )
+
+#: What an ordinary entity of each domain says it can do. A fake without these is a bulb
+#: that only switches, a blind that cannot be set to a position and a speaker with no
+#: volume control — all real things, and all terrible defaults, because then every knob
+#: test is really a test of the refusal. Values are Home Assistant's own: the colour modes
+#: by name, and the feature bits from each domain's EntityFeature flag.
+CAPABILITIES: dict[str, dict[str, object]] = {
+    "light": {"supported_color_modes": ["hs", "color_temp"]},
+    "media_player": {"supported_features": 4},  # VOLUME_SET
+    "cover": {"supported_features": 4},  # SET_POSITION
+    "climate": {"supported_features": 1},  # TARGET_TEMPERATURE
+    "fan": {"supported_features": 1},  # SET_SPEED
+}
 
 
 class FakeRegistry:
@@ -58,7 +73,10 @@ class FakeRegistry:
         state = self.states.get(entity_id)
         if state is None:
             return None
-        return EntityState(entity_id, state, self.attributes.get(entity_id, {}))
+        domain = entity_id.split(".", 1)[0]
+        # What the test said wins; the capabilities only fill in what it did not mention.
+        attributes = {**CAPABILITIES.get(domain, {}), **self.attributes.get(entity_id, {})}
+        return EntityState(entity_id, state, attributes)
 
 
 PROFILE = Profile(
@@ -70,6 +88,23 @@ PROFILE = Profile(
     },
     root_id="home",
 )
+
+
+#: The encoders in the order they are handed out: top left first, then across and down.
+#: What each one adjusts depends on what is focused, so a test names the position it means
+#: rather than a number, and stays true if the block is ever laid out differently.
+ORDER = knobs_in_reading_order()
+
+#: A colour lamp is the only thing in this house with more than one control, and its four
+#: land on the first four encoders in this order.
+BRIGHTNESS, COLOUR_TEMP, HUE, SATURATION = ORDER[:4]
+
+#: Past a lamp's fourth control there is nothing left to hand out, so this one is dead on
+#: any light — which is what makes it the encoder to turn when a test wants a refusal.
+DEAD = ORDER[4]
+
+#: Somewhere for a page to pin an encoder of its own, well clear of a lamp's four.
+PINNED = ORDER[5]
 
 
 def surface() -> Surface:
@@ -192,9 +227,15 @@ def test_the_idle_timeout_goes_home_without_making_a_fuss() -> None:
     view.handle(Press(0))
     outcome = view.handle(Idle())
     assert view.page.id == "home"
-    # A plain sideways wipe: no spiral, because nothing happened and nobody pressed
-    # anything. One pad per frame, so a whole grid covered and uncovered is thirty-two.
-    assert len(outcome.animation) == 32
+    # The same way out a button would have taken: the room is on the index, so the curtain
+    # winds back into its pad. No button flash, which is the part that matters — nothing
+    # happened, so nothing may look like it did.
+    #
+    # Worth knowing: `_idle` asks for `animate=False`, and that flag is unreachable while
+    # it also names the page being left. The quiet version the brief describes is not what
+    # runs. Left alone deliberately — it has been on the hardware for two days without
+    # complaint, and changing it is a separate question from the curtain's timing.
+    assert len(outcome.animation) == PAD_COUNT * 2 + CURTAIN_HOLD
     assert outcome.buttons is ButtonTiming.START
 
 
@@ -406,7 +447,7 @@ def lit_lamp() -> Surface:
 def test_a_knob_with_nothing_to_point_at_does_nothing() -> None:
     view = surface()
     view.handle(Press(0))
-    assert view.handle(Turn(1, 1)).calls == ()
+    assert view.handle(Turn(BRIGHTNESS, 1)).calls == ()
     assert view.hud is None
 
 
@@ -416,13 +457,13 @@ def test_a_knob_pointed_at_something_without_that_property_is_inert() -> None:
     view = surface()
     view.handle(Press(0))
     view.handle(Press(1, held=True))  # focus switch.fan
-    assert view.handle(Turn(1, 1)).calls == ()
+    assert view.handle(Turn(BRIGHTNESS, 1)).calls == ()
 
 
 def test_turning_a_knob_sets_a_value_and_puts_a_bar_on_the_grid() -> None:
     view = lit_lamp()
     view.handle(Press(0, held=True))
-    outcome = view.handle(Turn(1, 2))
+    outcome = view.handle(Turn(BRIGHTNESS, 2))
     call = outcome.calls[0]
     assert (call.domain, call.service) == ("light", "turn_on")
     # Half, plus two sixteenths, of 255.
@@ -433,18 +474,31 @@ def test_turning_a_knob_sets_a_value_and_puts_a_bar_on_the_grid() -> None:
 def test_the_bar_covers_the_whole_page_and_does_not_move() -> None:
     view = lit_lamp()
     view.handle(Press(0, held=True))
-    view.handle(Turn(1, 4))
+    view.handle(Turn(BRIGHTNESS, 4))
     rendering = view.rendering()
     assert rendering.rhythms == {}
-    assert set(rendering.frame) <= {WHITE, UNASSIGNED}
+    # A run in the property's own colour on a dark track, and nothing of the page left.
+    assert set(rendering.frame) <= {property_colour("brightness"), UNASSIGNED}
+
+
+def test_the_bar_is_the_colour_the_map_promised_for_that_encoder() -> None:
+    # The map is a promise about the bar you get if you turn that encoder, which is what
+    # makes a colour the property's name rather than a decoration. One table serves both.
+    view = lamp_that(["hs", "color_temp"])
+    for knob, (_, key) in view.knob_map().items():
+        view.legend = True
+        on_the_map = view.rendering().frame[knob_pad(knob)]
+        view.handle(Turn(knob, 1))
+        in_the_bar = {pad for pad in view.rendering().frame if pad != UNASSIGNED}
+        assert in_the_bar == {on_the_map}, key
 
 
 def test_a_knob_cannot_be_turned_past_either_end() -> None:
     view = lit_lamp()
     view.handle(Press(0, held=True))
-    view.handle(Turn(1, 99))
+    view.handle(Turn(BRIGHTNESS, 99))
     assert view.hud is not None and view.hud.value == 1.0
-    view.handle(Turn(1, -99))
+    view.handle(Turn(BRIGHTNESS, -99))
     assert view.hud is not None and view.hud.value == 0.0
 
 
@@ -455,7 +509,7 @@ def test_turning_a_knob_on_something_switched_off_starts_it_at_the_bottom() -> N
     view = Surface(PROFILE, registry)
     view.handle(Press(0))
     view.handle(Press(0, held=True))
-    view.handle(Turn(1, 1))
+    view.handle(Turn(BRIGHTNESS, 1))
     assert view.hud is not None and view.hud.value == 1 / 16
 
 
@@ -465,6 +519,19 @@ def test_holding_a_pad_peeks_at_its_value_without_changing_it() -> None:
     assert outcome.calls == ()
     assert view.hud is not None
     assert view.hud.value == 128 / 255
+    # And not the knob map: that is an answer to a question, and nobody has asked one yet.
+    assert view.legend is False
+
+
+def test_a_value_nobody_can_read_leaves_whatever_is_up_alone() -> None:
+    # A lamp that cannot dim has no value to show, and clearing the grid to say so would
+    # throw away an answer that may already be on it.
+    view = lamp_that(["onoff"])
+    view.handle(Turn(BRIGHTNESS, 1))  # every knob is dead here, so the map goes up
+    assert view.legend is True
+    view.peek("light.lamp")
+    assert view.legend is True
+    assert view.hud is None
 
 
 def test_the_bar_snaps_away_rather_than_animating() -> None:
@@ -504,14 +571,14 @@ def test_a_page_can_point_a_knob_somewhere_regardless_of_focus() -> None:
                 "Living",
                 ORANGE,
                 source=Source(SourceKind.AREA, "living"),
-                knobs={5: "media_player.tv"},
+                knobs={PINNED: "media_player.tv"},
             ),
         },
         root_id="home",
     )
     view = Surface(profile, registry)
     view.handle(Press(0))
-    call = view.handle(Turn(5, 1)).calls[0]
+    call = view.handle(Turn(PINNED, 1)).calls[0]
     assert (call.domain, call.service) == ("media_player", "volume_set")
 
 
@@ -523,7 +590,7 @@ def test_a_fast_turn_accumulates_even_though_the_entity_has_not_caught_up() -> N
     view = lit_lamp()
     view.handle(Press(0, held=True))
     for _ in range(4):
-        view.handle(Turn(1, 1))
+        view.handle(Turn(BRIGHTNESS, 1))
     assert view.hud is not None
     assert view.hud.value == pytest.approx(128 / 255 + 4 / 16)
 
@@ -533,8 +600,8 @@ def test_a_light_that_is_off_starts_at_the_bottom_and_then_climbs() -> None:
     view = Surface(PROFILE, registry)
     view.handle(Press(0))
     view.handle(Press(0, held=True))
-    view.handle(Turn(1, 1))
-    view.handle(Turn(1, 1))
+    view.handle(Turn(BRIGHTNESS, 1))
+    view.handle(Turn(BRIGHTNESS, 1))
     # Not stuck at one step: the second click builds on the first, not on the entity,
     # which is still off as far as the registry is concerned.
     assert view.hud is not None
@@ -604,8 +671,8 @@ def test_focus_announces_both_taking_and_releasing() -> None:
 def test_a_knob_turn_says_what_it_changed_and_to_what() -> None:
     view = lit_lamp()
     view.handle(Press(0, held=True))
-    turned = emitted(view.handle(Turn(1, 2)))["knob_turned"]
-    assert turned["knob"] == 1
+    turned = emitted(view.handle(Turn(BRIGHTNESS, 2)))["knob_turned"]
+    assert turned["knob"] == BRIGHTNESS
     assert turned["steps"] == 2
     assert turned["property"] == "brightness"
     assert turned["entity_id"] == "light.lamp"
@@ -715,9 +782,150 @@ def test_a_bar_does_not_follow_backwards_while_the_knob_is_still_turning() -> No
     # a moment ago. Following it would drag the bar backwards under the finger.
     view = lit_lamp()
     view.handle(Press(0, held=True))
-    view.handle(Turn(1, 4))
+    view.handle(Turn(BRIGHTNESS, 4))
     asked = view.hud.value if view.hud else None
 
     view.registry.attributes["light.lamp"] = {"brightness": 128}  # the older value landing
     view.settled("light.lamp", follow=False)
     assert view.hud is not None and view.hud.value == asked
+
+
+# ------------------------------------------------- which knobs are live, and saying so
+
+
+def lamp_that(modes: list[str] | None, state: str = "on") -> Surface:
+    """A living room with one lamp declaring exactly these colour modes, focused."""
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": state})
+    registry.attributes = {"light.lamp": {"supported_color_modes": modes or []}}
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))  # into the living room
+    view.handle(Press(0, held=True))  # point the knobs at the lamp
+    return view
+
+
+def test_a_full_colour_lamp_lights_up_four_knobs_and_the_spare() -> None:
+    view = lamp_that(["hs", "color_temp"])
+    assert view.knob_map() == {
+        BRIGHTNESS: ("light.lamp", "brightness"),
+        COLOUR_TEMP: ("light.lamp", "color_temp"),
+        HUE: ("light.lamp", "hue"),
+        SATURATION: ("light.lamp", "saturation"),
+    }
+
+
+def test_a_bulb_that_only_switches_has_no_live_knob_at_all() -> None:
+    # A light with no brightness is a real thing, and the domain alone cannot tell you.
+    # Before capabilities were checked, this reported all five and sent a brightness that
+    # the bulb could only round to "on".
+    assert lamp_that(["onoff"]).knob_map() == {}
+
+
+def test_a_lamp_with_no_white_leds_loses_exactly_one_knob() -> None:
+    # RGBWW carries a brightness and a colour but no colour temperature, so the colour
+    # temperature encoder is dead on this lamp and live on the one beside it. Nothing on
+    # the device says so, and nothing else can say it either.
+    live = lamp_that(["rgbww"]).knob_map()
+    # Three controls instead of four, so they close up: what was the colour temperature
+    # encoder now carries hue, and the fourth encoder goes dark.
+    assert live == {
+        BRIGHTNESS: ("light.lamp", "brightness"),
+        COLOUR_TEMP: ("light.lamp", "hue"),
+        HUE: ("light.lamp", "saturation"),
+    }
+    assert "color_temp" not in {key for _, key in live.values()}
+
+
+def test_a_lamp_that_says_nothing_about_itself_is_treated_as_unable() -> None:
+    # Home Assistant's own helpers answer False for an empty set, and claiming a capability
+    # nobody declared is how you end up sending a brightness into the dark.
+    assert lamp_that(None).knob_map() == {}
+
+
+def test_a_knob_that_cannot_touch_what_is_selected_answers_with_the_map() -> None:
+    # "Not that one" is the wrong answer to somebody who is searching. The useful reply
+    # names the ones that work, and it is a still frame rather than a flash.
+    view = lamp_that(["hs", "color_temp"])
+    view.clear_hud()
+    outcome = view.handle(Turn(DEAD, 1))  # past a lamp's four controls, so nothing
+    assert outcome.calls == ()
+    assert outcome.animation == ()
+    assert view.legend is True
+
+
+def test_a_live_knob_replaces_the_map_with_its_value() -> None:
+    view = lamp_that(["hs", "color_temp"])
+    outcome = view.handle(Turn(BRIGHTNESS, 1))
+    assert outcome.animation == ()
+    assert outcome.calls
+    assert view.legend is False
+    assert view.hud is not None and view.hud.property_key == "brightness"
+
+
+#: Where each knob lands on the grid, in knob order. Two across and four up, numbered from
+#: the bottom left, matching the encoders themselves.
+KNOB_PADS = (12, 13, 8, 9, 4, 5, 0, 1)
+
+
+def test_the_map_names_the_live_knobs_in_the_colour_of_what_they_adjust() -> None:
+    view = lamp_that(["hs", "color_temp"])
+    view.handle(Turn(DEAD, 1))  # a dead encoder puts the map up
+    frame = view.rendering().frame
+    live = {knob for knob, _ in view.knob_map().items()}
+    # The map agrees with the map: every live encoder lit in the thing's own colour, every
+    # dead one white, each in the place its encoder actually occupies.
+    for knob in range(1, KNOB_COUNT + 1):
+        assert (frame[knob_pad(knob)] != WHITE) is (knob in live), knob
+    # And on a colour light that means the first four encoders and nothing else.
+    assert live == {BRIGHTNESS, COLOUR_TEMP, HUE, SATURATION}
+
+
+def test_a_knob_with_nothing_selected_stays_silent_rather_than_shuddering() -> None:
+    # On an index page nothing is focused and every knob is dead. Shuddering there would
+    # fire whenever somebody brushed an encoder, which reads as a fault on a page where
+    # nothing is wrong.
+    view = surface()
+    outcome = view.handle(Turn(BRIGHTNESS, 1))
+    assert outcome.animation == ()
+    assert outcome.calls == ()
+
+
+def test_a_knob_pointed_at_something_unreachable_answers_the_same_way() -> None:
+    # Every knob is dead, so the map is all white, which is true and is the answer.
+    view = lamp_that(["hs", "color_temp"])
+    view.registry.states["light.lamp"] = "unavailable"
+    assert view.handle(Turn(BRIGHTNESS, 1)).animation == ()
+    assert view.legend is True
+    assert {view.rendering().frame[pad] for pad in KNOB_PADS} == {WHITE}
+
+
+def test_holding_a_lamp_that_cannot_dim_puts_no_bar_up() -> None:
+    # Focus still lands, so the pad breathes and the gesture is not silent. There is simply
+    # no value to show, which is the truth.
+    view = lamp_that(["onoff"])
+    assert view.focus == "light.lamp"
+    assert view.hud is None
+
+
+def test_a_page_pointing_a_knob_elsewhere_is_reported_against_that_entity() -> None:
+    registry = FakeRegistry(
+        areas={"living": ("light.lamp",)},
+        states={"light.lamp": "on", "media_player.speaker": "playing"},
+    )
+    profile = Profile(
+        pages={
+            "living": Page(
+                "living",
+                "Living",
+                ORANGE,
+                source=Source(SourceKind.AREA, "living"),
+                knobs={PINNED: "media_player.speaker"},
+            )
+        },
+        root_id="living",
+    )
+    view = Surface(profile, registry)
+    view.handle(Press(0, held=True))
+    live = view.knob_map()
+    assert live[BRIGHTNESS] == ("light.lamp", "brightness")
+    # Volume follows the page's speaker rather than the lamp that has focus.
+    assert live[PINNED] == ("media_player.speaker", "volume")

@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-from .palette import OFF
+from .palette import OFF, STATE_OFF
 
 #: The grid, and a frame's length.
 COLUMNS: Final = 4
@@ -136,7 +136,8 @@ def expand(origin: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[F
     rather than all at once at the end.
     """
     curtain: Frame = (colour,) * PAD_COUNT
-    return sweep(clockwise_order(origin), leaving, curtain) + uncover(colour, arriving)
+    covering = sweep(clockwise_order(origin), leaving, curtain)
+    return covering + (curtain,) * CURTAIN_HOLD + uncover(colour, arriving)
 
 
 def collapse(target: int, colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
@@ -149,7 +150,7 @@ def collapse(target: int, colour: int, leaving: Frame, arriving: Frame) -> tuple
     curtain: Frame = (colour,) * PAD_COUNT
     closing = sweep(column_order(rightwards=False), leaving, curtain)
     inward = tuple(reversed(clockwise_order(target)))
-    return closing + sweep(inward, curtain, arriving)
+    return closing + (curtain,) * CURTAIN_HOLD + sweep(inward, curtain, arriving)
 
 
 def wipe(colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
@@ -160,7 +161,8 @@ def wipe(colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
     somebody does with a surface that lies about causality is stop trusting it.
     """
     curtain: Frame = (colour,) * PAD_COUNT
-    return sweep(column_order(), leaving, curtain) + uncover(colour, arriving)
+    covering = sweep(column_order(), leaving, curtain)
+    return covering + (curtain,) * CURTAIN_HOLD + uncover(colour, arriving)
 
 
 def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
@@ -168,10 +170,42 @@ def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
     return sweep(column_order(), (colour,) * PAD_COUNT, arriving)
 
 
+#: How long the curtain stays fully closed before it opens again. Every transition that
+#: closes one, in both directions.
+#:
+#: It began as a fix rather than a flourish. The two halves of the way *out* collide on one
+#: pad — the last one the curtain covers is the first one it uncovers — so that pad held
+#: the curtain for a single frame, 45 ms, while its neighbours held it for up to 23. It
+#: read on the hardware as a pad that sometimes simply failed to light, which is how it was
+#: reported. Three frames put it at four, matching what the same pad already got on the way
+#: in.
+#:
+#: Then the same beat went on the way in and on a change nobody asked for, because a
+#: curtain that pauses when it is shut in one direction and not the other is a curtain with
+#: a stutter, and because the two halves of these transitions answer different questions —
+#: *which pad did I press* and *what is in here* — so a moment between them is what makes
+#: them read as two halves rather than one long slide.
+CURTAIN_HOLD: Final = 3
+
 #: How a pad says no. Three blinks, each half held for two frames, so it lasts a little
 #: over a quarter of a second and is plainly a reaction rather than a state.
 REFUSAL_BLINKS: Final = 3
 REFUSAL_HOLD: Final = 2
+
+#: How the eight encoders are laid out on the device: two across and four up, numbered
+#: from the bottom left, so knobs one and two are the nearest pair and seven and eight the
+#: furthest.
+#:
+#:      7 8
+#:      5 6
+#:      3 4
+#:      1 2
+#:
+#: The same convention the pads use, where PAD1 is the bottom left. Worth writing down
+#: because the engine counts everything else in reading order from the top, and the legend
+#: is the one place those two orders meet.
+KNOB_COLUMNS: Final = 2
+KNOBS_PER_COLUMN: Final = ROWS
 
 
 def refuse(frame: Frame, pad: int) -> tuple[Frame, ...]:
@@ -186,12 +220,60 @@ def refuse(frame: Frame, pad: int) -> tuple[Frame, ...]:
     It cannot add to the density problem either: only the pad being pressed can refuse, and
     it is finished before anybody looks away.
     """
-    dark = overlay(frame, pad, OFF)
-    return tuple(
-        state
-        for _ in range(REFUSAL_BLINKS)
-        for state in (*(dark,) * REFUSAL_HOLD, *(frame,) * REFUSAL_HOLD)
-    )
+    return _shudder(frame, overlay(frame, pad, OFF), REFUSAL_BLINKS, REFUSAL_HOLD)
+
+
+def knob_legend(colours: Sequence[int | None]) -> Frame:
+    """Which of the eight encoders do anything right now, drawn where they actually are.
+
+    The answer to the only question this hardware cannot answer about itself. Eight
+    identical knobs, no rings, no markings, and an assignment that is fixed precisely so it
+    can be learned once, which is no help at all on the first day.
+
+    A knob that does something shows the colour of what it is adjusting; a knob that does
+    nothing shows white; the rest of the grid is dark. That is the grid's own rule — colour
+    means it is there, white means it is not — applied to a knob instead of an entity, so
+    it costs no new vocabulary.
+
+    Laid out two across and four up, **numbered from the bottom**, exactly as the encoders
+    are (see ``KNOB_COLUMNS``). Getting this wrong is not a cosmetic matter: a map whose
+    shape does not match the thing it describes is a puzzle, and a puzzle is worse than
+    nothing when somebody is standing there with a hand on the wrong knob. It has a second
+    virtue: a page fills left to right and top to bottom, so eight lit pads standing in two
+    columns is a shape a page can never produce, and this cannot be mistaken for one.
+    """
+    frame = list(blank())
+    for knob, colour in enumerate(colours[: KNOB_COLUMNS * KNOBS_PER_COLUMN], start=1):
+        frame[knob_pad(knob)] = STATE_OFF if colour is None else colour
+    return tuple(frame)
+
+
+def knob_pad(knob: int) -> int:
+    """Where an encoder sits on the grid, by its printed number, one based.
+
+    Up from the bottom and across in pairs: knob one is the near left, knob eight the far
+    right. Every other index in this package counts down from the top, so this is the one
+    place the device's own numbering is honoured rather than translated — and the one place
+    anything else should ask, rather than working it out again.
+    """
+    index = knob - 1
+    return position(ROWS - 1 - index // KNOB_COLUMNS, index % KNOB_COLUMNS)
+
+
+def knobs_in_reading_order() -> tuple[int, ...]:
+    """The encoders as somebody looking at them reads them: top left, across, then down.
+
+    Which is **not** the order the device numbers them in. Numbered from the bottom left,
+    read from the top left, the block comes out 7, 8, 5, 6, 3, 4, 1, 2 — and that is the
+    order anything ranked should be handed out in, because the front of a ranking belongs
+    where the eye lands first.
+    """
+    return tuple(sorted(range(1, KNOB_COLUMNS * KNOBS_PER_COLUMN + 1), key=knob_pad))
+
+
+def _shudder(frame: Frame, dark: Frame, blinks: int, hold: int) -> tuple[Frame, ...]:
+    """Blink from something to darkness and back, and end on what was there."""
+    return tuple(state for _ in range(blinks) for state in (*(dark,) * hold, *(frame,) * hold))
 
 
 def value_bar(fraction: float, colour: int, track: int = OFF) -> Frame:

@@ -260,6 +260,12 @@ async def _async_get_pages(call: ServiceCall) -> ServiceResponse:
             "current_page": view.page_id,
             "focus": view.focus,
             "depth": view.depth,
+            # Same reason as the pads: nothing is written on the encoders either, and only
+            # the running engine knows which of them would do anything right now.
+            "knobs": [
+                {"knob": knob, "entity_id": entity_id, "property": prop}
+                for knob, entity_id, prop in view.knobs
+            ],
             "pages": [describe_page(page, surface.registry, surface.profile) for page in pages],
         }
     return response

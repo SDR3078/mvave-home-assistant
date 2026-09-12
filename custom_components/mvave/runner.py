@@ -106,6 +106,9 @@ class SurfaceView:
     #: Every page as (id, label), in the profile's own order. Labels are what a person
     #: picks from, so they are made unique here rather than in each thing that shows them.
     pages: tuple[tuple[str, str], ...] = ()
+    #: Which encoders would do something right now, as (knob, entity, property). The one
+    #: thing the hardware cannot say about itself, so it has to be said here.
+    knobs: tuple[tuple[int, str, str], ...] = ()
 
     def page_for(self, label: str) -> str | None:
         """The page id behind a label somebody chose."""
@@ -224,6 +227,10 @@ class SurfaceRunner:
             root_page_id=surface.profile.root_id,
             focus=surface.focus,
             pages=page_labels(surface.profile),
+            knobs=tuple(
+                (knob, entity_id, prop)
+                for knob, (entity_id, prop) in sorted(surface.knob_map().items())
+            ),
         )
 
     @callback
@@ -249,6 +256,17 @@ class SurfaceRunner:
         view = self.view
         if view == self._announced:
             return
+        if view.knobs != self._announced.knobs:
+            # The one question the device cannot answer about itself, in the one place
+            # somebody can go and look. "Knob two does nothing" has three possible causes
+            # — nothing selected, the wrong domain, or a lamp with no white LEDs — and
+            # from in front of the grid all three look identical.
+            LOGGER.debug(
+                "%s: live knobs: %s",
+                self.coordinator.address,
+                ", ".join(f"{knob}={prop} on {entity}" for knob, entity, prop in view.knobs)
+                or "none",
+            )
         self._announced = view
         for listener in list(self._watchers):
             listener()
@@ -458,11 +476,10 @@ class SurfaceRunner:
             task.cancel()
         if key in self._fired:
             self._fired.discard(key)
-            # The finger has lifted, so a bar the hold put up can start counting down. It
-            # does not count down while the finger is still there: holding a pad to look at
-            # a value and having it vanish under your hand is the surface deciding you have
-            # finished looking.
-            if self.surface is not None and self.surface.hud is not None and not self._fired:
+            # The finger has lifted, so whatever the hold put up can start counting down.
+            # It does not count down while the finger is still there: having the grid clear
+            # under your own hand is the surface deciding you have finished looking.
+            if self.surface is not None and self.surface.showing and not self._fired:
                 self._restart("hud", HUD_SECONDS, self._drop_hud)
             return
         self._dispatch(_event_for(key, held=False))
@@ -481,12 +498,12 @@ class SurfaceRunner:
         outcome = self._handle(Turn(knob, steps))
         # Logged when the knob or its target changes, not per step: one turn is around
         # thirty messages, and thirty identical lines hide the one that matters.
-        showing = self.surface.hud if self.surface is not None else None
-        signature = (
-            knob,
-            showing.entity_id if showing else None,
-            showing.property_key if showing else None,
-        )
+        # What this knob resolved to, not what the bar happens to be showing. Those are
+        # the same thing right up until a knob does nothing, when the bar is still holding
+        # the last live knob's value and the log says the dead one adjusts it. Which is
+        # exactly the line that made a refusal look like four refusals while reading back.
+        adjusting = self.surface.knob_map().get(knob) if self.surface is not None else None
+        signature = (knob, *(adjusting or (None, None)))
         if signature != self._logged:
             self._logged = signature
             LOGGER.debug(
@@ -497,7 +514,11 @@ class SurfaceRunner:
                 signature[1] or "nothing",
             )
         self._steps[knob] = self._steps.get(knob, 0) + steps
-        self._pending_call = outcome
+        # Only if it asked for something. A knob that refused carries no call, and letting
+        # it become the pending one would throw away the last command of a live knob
+        # turned a moment earlier.
+        if outcome.calls:
+            self._pending_call = outcome
 
         # Every step reaches the engine, so the bar follows the finger exactly. What is
         # rationed is what leaves this machine: a knob sends around thirty messages a
@@ -586,7 +607,7 @@ class SurfaceRunner:
                 self._restart(f"confirm:{entity_id}", CONFIRM_SECONDS, self._give_up(entity_id))
         self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
         # Not while a finger is still down on a pad: see `_up`.
-        if self.surface.hud is not None and not self._fired:
+        if self.surface.showing and not self._fired:
             self._restart("hud", HUD_SECONDS, self._drop_hud)
 
     def _perform(self, outcome: Outcome) -> None:
@@ -602,11 +623,13 @@ class SurfaceRunner:
         if not outcome.animation:
             return
         self._cancel_animation()
+        LOGGER.debug("%s: animating %d frames", self.coordinator.address, len(outcome.animation))
         self._playing = self._task(self._animate(outcome), "transition")
 
     async def _animate(self, outcome: Outcome) -> None:
         """Play a transition, and change the transport lights on the frame that owns them."""
         mine = asyncio.current_task()
+        began = time.monotonic()
         try:
             if outcome.buttons is ButtonTiming.START:
                 await self._show_buttons()
@@ -624,6 +647,13 @@ class SurfaceRunner:
                 self._started = time.monotonic()
                 self._playing = None
                 self._redraw()
+                # How long the grid was actually owned by the animation, which is the only
+                # way to tell "it blinked twice" from "one blink took twice as long".
+                LOGGER.debug(
+                    "%s: animation done in %.0f ms",
+                    self.coordinator.address,
+                    (time.monotonic() - began) * 1000,
+                )
 
     @callback
     def _redraw(self) -> None:

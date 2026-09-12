@@ -17,7 +17,16 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
-from .frames import Frame, collapse, expand, refuse, value_bar, wipe
+from .frames import (
+    Frame,
+    collapse,
+    expand,
+    knob_legend,
+    knobs_in_reading_order,
+    refuse,
+    value_bar,
+    wipe,
+)
 from .model import (
     Activate,
     Back,
@@ -34,8 +43,9 @@ from .model import (
     SourceKind,
     Toggle,
 )
+from .palette import property_colour
 from .ports import RegistryView
-from .properties import PROPERTIES, primary_for, property_for
+from .properties import KNOB_COUNT, PROPERTIES, packed, primary_for
 from .render import (
     BACK_BUTTON,
     HOME_BUTTON,
@@ -221,6 +231,11 @@ class Surface:
         #: it away again once the knob has been still long enough; the engine has no
         #: clock and so cannot decide when that is.
         self.hud: Hud | None = None
+        #: Showing which of the eight encoders do anything to what has focus, instead of a
+        #: value. Put up by turning a knob that can do nothing, and by nothing else: it is
+        #: an answer to a question somebody asked, in the moment they asked it, which is the
+        #: same rule that keeps an unreachable pad from spending a colour of its own.
+        self.legend = False
 
     # ------------------------------------------------------------------ where
 
@@ -248,6 +263,8 @@ class Surface:
         is not enough to show a level *and* a room at once, and a bar squeezed into a row
         would be both unreadable and permanently in the way.
         """
+        if self.legend:
+            return self._legend()
         if self.hud is not None:
             bar = self._bar(self.hud)
             if bar is not None:
@@ -266,6 +283,31 @@ class Surface:
     def _page_rendering(self) -> Rendering:
         page = self.page
         return render(page, self.slots(page), self.registry, self._view())
+
+    @property
+    def showing(self) -> bool:
+        """Whether anything transient is covering the page and owes it a countdown."""
+        return self.legend or self.hud is not None
+
+    def _legend(self) -> Rendering:
+        """Which encoders are live, each in the colour of what it adjusts.
+
+        Coloured by the property rather than by the entity, which matters more now that
+        what an encoder adjusts depends on what is focused: if the meaning can move, the
+        map has to say what it currently *is*, not merely that it is something. Orange is
+        the level and the other three are the colour controls — see ``palette.MAP_COLOURS``.
+        """
+        live = self.knob_map()
+        colours: list[int | None] = []
+        for knob in range(1, KNOB_COUNT + 1):
+            adjusting = live.get(knob)
+            colours.append(property_colour(adjusting[1]) if adjusting else None)
+        # No rhythms, for the same reason the bar has none: how the grid arrived is a
+        # channel of its own, and a legend that animated in would read as a page change.
+        return Rendering(
+            frame=knob_legend(colours),
+            buttons=buttons_for(self.page, self._view()),
+        )
 
     def _bar(self, hud: Hud) -> Rendering | None:
         """The value bar, or None if the property has stopped making sense."""
@@ -357,19 +399,25 @@ class Surface:
     def _turn(self, event: Turn) -> Outcome:
         """One knob, one property, one value.
 
-        A knob pointed at something without that property is inert rather than falling back
-        to something else. The alternative is the same knob doing different things
-        depending on what happened to be focused, which is the end of muscle memory.
+        What a knob adjusts is decided in one place, :meth:`knob_map`, and read from there
+        rather than worked out again here — otherwise what the grid says an encoder does
+        and what it actually does are two pieces of arithmetic that can disagree, and the
+        one thing a map may never be is wrong.
         """
-        target = self.page.knobs.get(event.knob) or self.focus
-        if target is None:
+        if self.page.knobs.get(event.knob) is None and self.focus is None:
+            # Nothing is selected, so there is nothing for this knob to answer *about*.
+            # Putting a map up here would fire on the index every time somebody brushed an
+            # encoder, on a page where no question has been asked.
             return NOTHING_HAPPENED
+
+        adjusting = self.knob_map().get(event.knob)
+        if adjusting is None:
+            return self._refuse_turn()
+        target, key = adjusting
         state = self.registry.state_of(target)
-        if state is None or state.is_opaque:
-            return NOTHING_HAPPENED
-        prop = property_for(event.knob, state)
-        if prop is None:
-            return NOTHING_HAPPENED
+        prop = PROPERTIES.get(key)
+        if state is None or prop is None:  # pragma: no cover - knob_map just found both
+            return self._refuse_turn()
 
         showing = self.hud
         if showing is not None and (showing.entity_id, showing.property_key) == (
@@ -391,6 +439,8 @@ class Surface:
         value = max(0.0, min(1.0, value))
 
         domain, service, data = prop.write(state, value)
+        # A live knob is past the question the legend answers: show the value instead.
+        self.legend = False
         self.hud = Hud(target, prop.key, value)
         return Outcome(
             calls=(Call(domain, service, data),),
@@ -408,6 +458,62 @@ class Surface:
             ),
         )
 
+    def _refuse_turn(self) -> Outcome:
+        """Something is selected and this knob cannot touch it.
+
+        Answered with the map rather than with a refusal, which is the one place this
+        surface departs from its own "anything that does nothing shudders" rule, and for
+        two reasons that both came out of trying it.
+
+        A pad shudders under the finger that pressed it: fifteen other pads keep reporting,
+        so the signal has a referent and costs almost nothing. A knob has no pad, so the
+        only surface available is the whole grid — and a whole grid going dark and back is
+        not a louder version of that signal, it is a different one. It already means
+        "nothing is driving this device", it is what the photosensitivity thresholds are
+        written about, and it was read on the hardware exactly as it reads everywhere else:
+        as the thing failing.
+
+        And "not that one" is the wrong answer anyway. Somebody turning a dead knob is
+        searching, and the useful reply names the ones that work. On a fan, where seven of
+        eight do nothing, a refusal says "no" seven times; the map says "it is number
+        eight" once.
+        """
+        self.legend = True
+        return NOTHING_HAPPENED
+
+    def knob_map(self) -> dict[int, tuple[str, str]]:
+        """What each of the eight encoders would do right now, and to what.
+
+        Knob number to (entity, property), and the only place that decides it: the grid
+        draws this, a turn obeys it, and Home Assistant reports it, so there is one answer
+        rather than three that can disagree.
+
+        A knob missing from this does nothing, and on the device there is no way whatever
+        to tell that apart from one that does — no rings, no markings, no screen.
+
+        Filled in two passes. A page may pin an individual encoder to an entity of its own
+        — "volume here always means this speaker" — and those are placed first, each
+        showing that entity's main control. Whatever the focused thing offers then fills the
+        encoders left over, in reading order from the top left, so its main value lands on
+        the first one still free.
+        """
+        found: dict[int, tuple[str, str]] = {}
+        for knob, pinned in self.page.knobs.items():
+            state = self.registry.state_of(pinned)
+            prop = primary_for(state) if state is not None and not state.is_opaque else None
+            if prop is not None:
+                found[knob] = (pinned, prop.key)
+
+        if self.focus is None:
+            return found
+        state = self.registry.state_of(self.focus)
+        if state is None or state.is_opaque:
+            return found
+        free = (knob for knob in knobs_in_reading_order() if knob not in found)
+        for knob, prop in zip(free, packed(state), strict=False):
+            found[knob] = (self.focus, prop.key)
+        return found
+
     def peek(self, entity_id: str) -> None:
         """Put an entity's main value on the grid without changing it.
 
@@ -419,8 +525,12 @@ class Surface:
             return
         prop = primary_for(state)
         if prop is None:
+            # Nothing readable to show. Leave whatever is up alone rather than clearing the
+            # grid to say so: a lamp that cannot dim has no value, and the legend that is
+            # probably showing has already said which knobs work on it.
             return
         self.hud = Hud(entity_id, prop.key, prop.read(state) or 0.0)
+        self.legend = False
 
     def clear_hud(self) -> Outcome:
         """Take the bar away, once the coordinator says the knob has been still long enough.
@@ -430,6 +540,7 @@ class Surface:
         flourish and becomes something to sit through.
         """
         self.hud = None
+        self.legend = False
         return NOTHING_HAPPENED
 
     def _idle(self) -> Outcome:
@@ -639,6 +750,7 @@ class Surface:
         # a bar showing its brightness has no business surviving the journey either.
         self.focus = None
         self.hud = None
+        self.legend = False
         after = self.rendering().frame
 
         announced = (

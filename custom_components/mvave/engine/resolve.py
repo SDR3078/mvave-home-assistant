@@ -102,7 +102,7 @@ def source_entities(source: Source, registry: RegistryView) -> list[str]:
     return []
 
 
-def _colour(entity_id: str, profile: Profile) -> int:
+def entity_colour(entity_id: str, profile: Profile) -> int:
     """What this entity shows when it is on, by its domain, as the profile has it."""
     domain = entity_id.split(".", 1)[0]
     return profile.colours.get(domain, colour_for(domain))
@@ -132,7 +132,7 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
         if 0 <= index < PAD_COUNT:
             slot = Slot(tap=config.tap, hold=config.hold, colour=config.colour)
             if slot.colour is None and slot.entity_id is not None:
-                slot = replace(slot, colour=_colour(slot.entity_id, profile))
+                slot = replace(slot, colour=entity_colour(slot.entity_id, profile))
             slots[index] = slot
 
     if page.source.kind is SourceKind.PAGES:
@@ -143,7 +143,7 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
         # holds sixteen, and there is no reason to work out what the other hundreds would
         # have looked like.
         filling = (
-            Slot(*default_actions(entity_id), colour=_colour(entity_id, profile))
+            Slot(*default_actions(entity_id), colour=entity_colour(entity_id, profile))
             for entity_id in source_entities(page.source, registry)
             if entity_id not in placed
         )

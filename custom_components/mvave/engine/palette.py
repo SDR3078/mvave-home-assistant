@@ -102,21 +102,50 @@ def name_for(colour: int) -> str:
     return NAMES.get(colour, str(colour))
 
 
-#: Bar colours, one flat colour per property rather than a gradient. Every ramp the design
-#: originally wanted needed many graded steps along one hue, which needs a brightness or a
-#: saturation control the device does not have.
-BAR_COLOURS: Final = {
-    "brightness": WHITE,
-    "color_temp": ORANGE,
-    "saturation": GREEN,
-    "volume": GREEN,
-    "position": BLUE,
-    "temperature": BLUE,
+#: One flat colour per adjustable property, used in **both** places a property is ever
+#: drawn: the knob map, and the value bar that appears when you turn that encoder. Not a
+#: gradient — every ramp the design originally wanted needed graded steps along one hue,
+#: which needs a brightness this device does not have.
+#:
+#: One rule, and it is the whole scheme: **orange is the level, and the other three are
+#: colour.** Whatever you are holding, its main value is orange — brightness, volume, how
+#: far a blind is open, a setpoint, a fan's speed. A lamp is the only thing in a house with
+#: more than one control, and its other three are the colour ones.
+#:
+#: **Shared on purpose.** A colour on the map is a promise about the bar you will get if
+#: you turn that encoder, which makes it the property's name rather than a decoration, and
+#: makes the map teach the bar. The old bar colours could not do that job: brightness drew
+#: a *white* bar, and white already means "this encoder does nothing" on the map, so the
+#: commonest control and the absence of a control would have been the same colour. Hue and
+#: saturation were both green, which never mattered while only one bar showed at a time and
+#: matters completely once all four are on the grid together.
+#:
+#: Purple is deliberately unused. It is the one colour reported as too close to white on
+#: the physical grid, and a map is mostly white.
+PROPERTY_COLOURS: Final[Mapping[str, int]] = {
+    "brightness": ORANGE,
+    "volume": ORANGE,
+    "position": ORANGE,
+    "temperature": ORANGE,
+    "percentage": ORANGE,
+    "color_temp": BLUE,
+    "hue": GREEN,
+    "saturation": RED,
 }
 
 #: Above a configured threshold a bar switches to this, a different colour appearing
 #: rather than a shade changing.
 BAR_ALERT: Final = RED
+
+#: What an encoder shows on the map when it can do nothing to whatever is focused. The
+#: grid's own rule — colour means it is there, white means it is not — applied to a knob.
+MAP_DEAD: Final = WHITE
+
+
+def property_colour(property_key: str) -> int:
+    """The colour that names this property, on the map and on its own bar alike."""
+    return PROPERTY_COLOURS.get(property_key, ORANGE)
+
 
 #: Values the device ignores or treats as off, which a renderer must never emit as a
 #: colour. 64 to 95 are one flat white-blue and are usable but pointless.

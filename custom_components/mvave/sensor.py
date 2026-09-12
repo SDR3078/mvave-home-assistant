@@ -8,7 +8,7 @@ which is why it is its own entity rather than another attribute on the page.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorEntity
 
@@ -35,9 +35,12 @@ async def async_setup_entry(
 
 
 class MvaveFocusSensor(MvaveSurfaceEntity, SensorEntity):
-    """The entity the knobs are currently adjusting, if any."""
+    """The entity the knobs are currently adjusting, and which of them can."""
 
     _attr_translation_key = "focus"
+    #: Derived entirely from the state beside it, and it changes whenever that does, so
+    #: recording it would store the same fact twice.
+    _unrecorded_attributes = frozenset({"knobs"})
 
     def __init__(self, runner: SurfaceRunner) -> None:
         """Initialise the sensor."""
@@ -47,3 +50,18 @@ class MvaveFocusSensor(MvaveSurfaceEntity, SensorEntity):
     def native_value(self) -> str | None:
         """The focused entity's id, or nothing when the knobs follow the page."""
         return self.view.focus
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Which of the eight encoders are live, and what each one adjusts.
+
+        The device says nothing about this and cannot: eight identical knobs, no rings, no
+        markings. Knob one is brightness everywhere so that muscle memory can form, but
+        that only helps once it has, and a lamp with no colour temperature leaves knob two
+        doing nothing with no way to know.
+
+        Keyed by knob number as a string, because that is what it becomes the moment it
+        leaves Python, and a template reading `state_attr(...)['2']` should find what it
+        expects rather than a number that used to be an integer.
+        """
+        return {"knobs": {str(knob): prop for knob, _, prop in self.view.knobs}}
