@@ -234,6 +234,27 @@ implementation plan and this file is the running to-do list.
   already has more than the address gives them, and a BLE address is not routable, not in
   any registry, and means nothing to anyone further away than the next room. The scrub was
   cheap hygiene, not a fix for a danger. Do not reopen this.
+- **Engine** (brief, milestone 4), building the language now specified in
+  `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
+  transitions, the two rhythms, the page model, the two protocols the platform reaches in
+  through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
+  holds, the transport buttons, the idle timeout and `handle(event) -> Outcome`.
+  The knobs are built too: the fixed global assignment, per-page overrides, holding a pad
+  to peek at its value, the transient bar, and the clamps. **Proven on the hardware** with
+  `scripts/surface_demo.py`, which drives the real pad from the real engine against a
+  pretend house, and which found four defects that the tests had not.
+
+  The last open question in it is now answered. What a scene or script pad looks like was
+  provisionally purple, and purple was the one
+  colour in the language nobody had judged by eye. **Judged on 2026-09-13 and kept.** The
+  worry was specific rather than aesthetic: `HARDWARE-BLE.md` section 9.1 records purple as
+  the weak pair against white, and a stateless pad shows its colour permanently and never
+  goes white — so if the two read alike, a scene is indistinguishable from a lamp somebody
+  switched off. Set up as a side-by-side, `button.push` pinned beside a lamp on the same
+  page and the lamp switched off, so the two were adjacent and touching. Verdict: "yes i can
+  tell them apart". Unreachable has no colour at all — it shows white like anything that is
+  off and shudders when pressed, which was the owner's idea and buys back a fifth of the
+  vocabulary.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
@@ -254,21 +275,7 @@ implementation plan and this file is the running to-do list.
 
 ## Build
 
-1. **Engine** (brief, milestone 4), building the language now specified in
-   `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
-   transitions, the two rhythms, the page model, the two protocols the platform reaches in
-   through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
-   holds, the transport buttons, the idle timeout and `handle(event) -> Outcome`.
-   The knobs are built too: the fixed global assignment, per-page overrides, holding a pad
-   to peek at its value, the transient bar, and the clamps. **Proven on the hardware** with
-   `scripts/surface_demo.py`, which drives the real pad from the real engine against a
-   pretend house, and which found four defects that the tests had not. What is left:
-   - **One provisional colour to judge on the grid**: what a scene or script pad looks
-     like, currently purple. Every other colour in the language was chosen by looking at
-     it; this one was not. Unreachable no longer has a colour at all — it shows white like
-     anything that is off and shudders when pressed, which was the owner's idea and buys
-     back a fifth of the vocabulary.
-2. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+1. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 
 ## Decided against
