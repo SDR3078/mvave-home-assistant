@@ -33,6 +33,7 @@ from .model import (
     INERT_ACTIONS,
     Activate,
     Back,
+    EntityState,
     EventOnly,
     Focus,
     Home,
@@ -545,7 +546,7 @@ class Surface:
             # has somewhere visible to go.
             value = prop.step
         elif (current := prop.read(state)) is not None:
-            self.last_known[target, prop.key] = current
+            self._learn(state)
             value = current + prop.step * event.steps
         else:
             # On, and yet it will not say. Home Assistant reports no colour temperature at
@@ -559,6 +560,12 @@ class Surface:
             # same situation. Resume where this surface last left it instead, and start in
             # the middle only if it has never been set — the one value that is not a claim
             # about anything.
+            # The middle of *this entity's own* range, not a constant: a lamp reports the
+            # temperatures it can reach even while it is refusing to name the one it is at,
+            # so the guess is at least made out of the lamp's own numbers. It is still a
+            # guess, and the only defence is that it is hard to reach — everything above
+            # learns from every reading it touches, so this needs a property the house has
+            # not named once since the surface started.
             value = self.last_known.get((target, prop.key), 0.5) + prop.step * event.steps
         value = max(0.0, min(1.0, value))
 
@@ -653,11 +660,24 @@ class Surface:
             # grid to say so: a lamp that cannot dim has no value, and the legend that is
             # probably showing has already said which knobs work on it.
             return
-        reading = prop.read(state)
-        if reading is not None:
-            self.last_known[entity_id, prop.key] = reading
-        self.hud = Hud(entity_id, prop.key, reading or 0.0)
+        self._learn(state)
+        self.hud = Hud(entity_id, prop.key, prop.read(state) or 0.0)
         self.legend = False
+
+    def _learn(self, state: EntityState) -> None:
+        """Record every value the house is currently naming for one entity.
+
+        Called wherever a state is already in hand, because reading one property off a
+        state and discarding the rest of the same reading is what keeps the guess below
+        reachable. Hold a pad on a lamp in colour-temperature mode and the temperature is
+        right there in the attributes; throwing it away means the knob has to invent one
+        ten seconds later, after somebody has given the lamp a colour and the house has
+        stopped naming it.
+        """
+        for prop in packed(state):
+            value = prop.read(state)
+            if value is not None:
+                self.last_known[state.entity_id, prop.key] = value
 
     def clear_hud(self) -> Outcome:
         """Take the bar away, once the coordinator says the knob has been still long enough.
@@ -762,9 +782,9 @@ class Surface:
         prop = PROPERTIES.get(showing.property_key)
         if state is None or prop is None:
             return
+        self._learn(state)
         value = prop.read(state)
         if value is not None:
-            self.last_known[entity_id, showing.property_key] = value
             self.hud = replace(showing, value=value)
 
     # --------------------------------------------------------------- outside

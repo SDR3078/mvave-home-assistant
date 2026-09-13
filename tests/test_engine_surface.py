@@ -612,7 +612,37 @@ def test_a_knob_on_a_value_the_entity_will_not_report_does_not_go_to_the_bottom(
     view = in_colour_mode()
     view.handle(Turn(COLOUR_TEMP, 1))
     assert view.hud is not None
-    assert view.hud.value == 0.5 + 1 / 16  # the middle is the one value that claims nothing
+    # The middle of this lamp's own range — a guess, and named as one in the code. It is
+    # only reachable because this lamp has not named a colour temperature once.
+    assert view.hud.value == 0.5 + 1 / 16
+
+
+def test_holding_a_pad_learns_everything_the_state_is_naming_not_just_the_bar() -> None:
+    # Holding a pad had the lamp's whole state in its hand and kept one property out of it.
+    # So looking straight at a colour temperature and then giving the lamp a colour left
+    # the knob guessing at a number it had been shown a minute earlier. Nobody turns the
+    # temperature knob first — you hold the pad to see where things are.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    registry.attributes = {
+        "light.lamp": {"color_mode": "color_temp", "brightness": 128, "color_temp_kelvin": 4000}
+    }
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.handle(Press(0, held=True))  # a hold, and nothing else
+
+    assert view.last_known["light.lamp", "brightness"] == 128 / 255
+    assert view.last_known["light.lamp", "color_temp"] == 2000 / 4500
+
+    # Now somebody gives it a colour, and the knob still knows where white was.
+    registry.attributes["light.lamp"] = {
+        "color_mode": "hs",
+        "brightness": 128,
+        "hs_color": (200, 80),
+        "color_temp_kelvin": None,
+    }
+    view.clear_hud()
+    view.handle(Turn(COLOUR_TEMP, 1))
+    assert view.hud is not None and view.hud.value == 2000 / 4500 + 1 / 16
 
 
 def test_a_knob_resumes_from_the_last_value_the_house_reported() -> None:
