@@ -253,6 +253,26 @@ implementation plan and this file is the running to-do list.
   and free: a bar at either end is sixteen pads lit or sixteen dark, which is as
   unambiguous as this grid gets. Nothing needs adding.
 
+- **Splitting the knob map by colour mode.** A colour bulb is offered four live encoders —
+  brightness, colour temperature, hue, saturation — but it can only be in one colour mode
+  at a time, so turning hue throws away the colour temperature and turning colour
+  temperature throws away the hue. Home Assistant's own light dialog treats these as modes
+  rather than peers: `more-info-light` renders `light-color-rgb-picker` **or**
+  `light-color-temp-picker`, never both, with an icon button group to switch. Read out of
+  the shipped frontend bundle on 2026-09-13, after asserting the opposite from memory.
+
+  Taken to the grid anyway, which is where it lost. Shown the map on a lamp that does both
+  and asked whether anything said those four could not all be true at once, the owner said
+  it did not bother him. The practical harm is small now that a knob resumes from the last
+  value the house reported, so the round trip through a colour and back to white is
+  smooth.
+
+  Worth knowing what it would have cost: mirroring Home Assistant means a lamp showing a
+  colour has no colour-temperature encoder at all, so there is no way back to white with
+  your hand — a poor trade for a distinction nobody standing at the device wanted. If it
+  is ever revisited, the map uses two columns and the right half of the grid is dark, so
+  there is room to say more without needing a colour the palette does not have.
+
 ## Also open
 
 - **A websocket subscription for the live grid.** `mvave.get_pages` answers "what does
