@@ -216,10 +216,7 @@ implementation plan and this file is the running to-do list.
 
 ## Build
 
-1. **`mvave.set_pad_color`**, using the vendor RGB write for any 24-bit colour on an
-   unarmed pad. Note that a pad cannot do both: armed pads take palette colours over
-   MIDI and ignore the RGB field entirely (HARDWARE-BLE.md section 6).
-2. **Engine** (brief, milestone 4), building the language now specified in
+1. **Engine** (brief, milestone 4), building the language now specified in
    `ble-midi-surface-design.md` sections 5 to 7. `engine/` has the palette, the frames and
    transitions, the two rhythms, the page model, the two protocols the platform reaches in
    through, slot resolution, rendering, and `Surface`: the navigation stack, presses,
@@ -233,12 +230,12 @@ implementation plan and this file is the running to-do list.
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
      anything that is off and shudders when pressed, which was the owner's idea and buys
      back a fifth of the vocabulary.
-3. **A brand icon**, which is the only real HACS failure left. `validate/brands.py` looks
+2. **A brand icon**, which is the only real HACS failure left. `validate/brands.py` looks
    for `custom_components/mvave/brand/icon.png` in the repository tree and returns early
    if it is there, so this does **not** need the pull request against
    `home-assistant/brands` first — that is only the fallback it checks second. Home
    Assistant's brands repository wants 256x256 and 512x512 PNGs with transparency.
-4. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+3. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 
 ## Decided against
@@ -272,6 +269,24 @@ implementation plan and this file is the running to-do list.
   your hand — a poor trade for a distinction nobody standing at the device wanted. If it
   is ever revisited, the map uses two columns and the right half of the grid is dark, so
   there is room to say more without needing a colour the palette does not have.
+
+- **`mvave.set_pad_color`.** Was the first item on the build list; deleted 2026-09-13 after
+  reading back what section 6 already recorded. Three independent reasons, none of them
+  fixable:
+
+  1. **An armed pad never shows its RGB field** — the write is stored, not shown. Every pad
+     the surface runs is armed at connect: `16 pads armed on notes 36-51`, straight out of
+     the log.
+  2. **Disarming one to make it visible breaks the language.** An unarmed pad *"flashes
+     white, then returns"* on its own press, firmware-owned feedback nothing can suppress,
+     and white is the one colour this design reserves for "off". The host also loses the
+     pad entirely — a note-on to an unarmed pad is ignored.
+  3. **The RGB path is worse even where it works.** Dimmer than the palette at every hue —
+     `(240, 0, 0)` against palette 14 read as "deeper red, but dimmer" — and far too slow
+     to animate. That is already the recorded reason the whole design chose the palette.
+
+  No niche survives. All sixteen pads are a page, `mvave.send_raw` covers experimenting,
+  and nothing written to the pad outlives a power cycle either way.
 
 ## Also open
 
