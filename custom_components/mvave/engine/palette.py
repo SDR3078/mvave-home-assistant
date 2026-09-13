@@ -55,6 +55,12 @@ UNASSIGNED: Final = OFF
 #: every pinned pad from its domain alone, so per-pad colour is unreachable from
 #: configuration and exists only for the engine's own tests.
 #:
+#: **Exactly the domains a pad can hold**, no more and no fewer — `resolve.PINNABLE`, which
+#: a test asserts against. Two rows here were dead until 2026-09-13, `alarm_control_panel`
+#: and `vacuum`, which nothing can put on a pad and which therefore offered a colour for
+#: something nobody could ever see; `humidifier` was the other way round, reachable and
+#: uncoloured, so it took the fallback and was orange by accident rather than by decision.
+#:
 #: Purple appears only where the pad is drawn as stateless. Everything with an on and an
 #: off shows white when it is off, and purple against white is the one pair that was
 #: reported as too close on the physical grid, so a lamp coloured purple would be
@@ -69,10 +75,9 @@ DOMAIN_COLOURS: Final[Mapping[str, int]] = {
     "siren": ORANGE,
     "media_player": BLUE,
     "cover": GREEN,
+    "humidifier": ORANGE,
     "climate": RED,
     "lock": RED,
-    "alarm_control_panel": RED,
-    "vacuum": RED,
     "scene": PURPLE,
     "script": PURPLE,
     "button": PURPLE,

@@ -249,17 +249,26 @@
   "options": {
     "step": {
       "init": {
-        "title": "What things look like",
-        "description": "A colour for each kind of thing, the same in every room.\n\nA pad shows its colour when the thing behind it is on, and white when it is off. That is the one rule the grid cannot bend, so white is not on offer.\n\nPurple is safe only on scenes. Scenes have no on and off, so they never show white, and purple is the one colour that is hard to tell from it.",
+        "title": "What each colour means",
+        "description": "A pad shows its colour when the thing behind it is **on**, and **white** when it is off. That is the one rule the grid cannot bend, so white is not on offer here.\n\nThe device has five colours and that is all it has, so this asks what each one means rather than asking after each kind of thing one at a time. **Every kind of thing belongs in exactly one box.** To paint your lights green, take them out of orange and put them in green — and you will see what they were sharing orange with.\n\nPurple only takes things with no on and off of their own. Purple against white is the one pair too close to tell apart on this hardware, so on anything that can be switched off it would be unreadable exactly when it mattered.",
         "data": {
-          "light": "Lights",
-          "switch": "Switches",
-          "media_player": "Media players",
-          "cover": "Blinds and covers",
-          "climate": "Thermostats",
-          "scene": "Scenes and scripts"
+          "blue": "Blue",
+          "green": "Green",
+          "orange": "Orange",
+          "red": "Red",
+          "purple": "Purple"
+        },
+        "data_description": {
+          "orange": "The usual home for anything with a plain on and off.",
+          "green": "Openings, and the things a pad only watches.",
+          "purple": "Only things you press once, which never show white."
         }
       }
+    },
+    "error": {
+      "colour_twice": "Something is in two boxes at once. Every kind of thing has exactly one colour.",
+      "colour_missing": "Something is in no box at all. Every kind of thing needs a colour, or its pads would have nothing to show.",
+      "purple_needs_stateless": "Purple only takes things with no on and off of their own. Purple and white are the one pair too close to tell apart on this device, so anything that can be switched off would be unreadable exactly when it mattered."
     }
   },
   "selector": {
@@ -270,6 +279,30 @@
         "orange": "Orange",
         "red": "Red",
         "purple": "Purple"
+      }
+    },
+    "paintable": {
+      "options": {
+        "light": "Lights",
+        "switch": "Switches",
+        "input_boolean": "Toggles",
+        "fan": "Fans",
+        "siren": "Sirens",
+        "humidifier": "Humidifiers",
+        "media_player": "Media players",
+        "cover": "Blinds, curtains and garage doors",
+        "climate": "Thermostats",
+        "lock": "Locks",
+        "scene": "Scenes",
+        "script": "Scripts",
+        "button": "Buttons",
+        "input_button": "Buttons you made",
+        "binary_sensor": "Door, window and motion sensors",
+        "device_tracker": "Phones and trackers",
+        "person": "People",
+        "sun": "The sun",
+        "calendar": "Calendars",
+        "schedule": "Schedules"
       }
     }
   },

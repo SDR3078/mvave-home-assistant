@@ -1,28 +1,27 @@
-"""What each kind of thing looks like, which is the same on every page.
+"""What each colour means, which is the same on every page.
 
-All that is left in the options once pages became things somebody adds. It is one screen,
-and the rule it has to keep is the one the whole language rests on: white is what "off"
-means, so white is never a colour anybody may choose for something that is on.
+All that is left in the options once pages became things somebody adds — and it is shaped
+like the palette rather than like the entity registry. The device has five colours; that is
+the scarce resource the whole design is built on, so the form asks what each one means
+instead of asking after each kind of thing one at a time.
+
+The screen this replaced offered six kinds of thing out of twenty and hid the rest, which
+meant painting "Lights" green split them silently from switches, fans and sirens and merged
+them just as silently with covers and every readout. One field, two invisible changes.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.mvave.config_flow import CHOOSABLE, COLOURABLE
+from custom_components.mvave.config_flow import CHOOSABLE, PAINTABLE
 from custom_components.mvave.const import CONF_ADDRESS, CONF_DOMAIN_COLOURS, DOMAIN
-from custom_components.mvave.engine.palette import (
-    BLUE,
-    DOMAIN_COLOURS,
-    GREEN,
-    ORANGE,
-    PURPLE,
-    RED,
-    WHITE,
-)
+from custom_components.mvave.engine.palette import DOMAIN_COLOURS, GREEN, ORANGE, WHITE
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -40,79 +39,130 @@ def entry(hass: HomeAssistant) -> MockConfigEntry:
     return made
 
 
-def filled(result: dict[str, object]) -> dict[str, object]:
-    """What each field arrives already holding."""
-    schema = result["data_schema"].schema  # type: ignore[attr-defined]
+def boxes(result: dict[str, Any]) -> dict[str, list[str]]:
+    """What is in each colour's box, as submitting the form unchanged would send it."""
     return {
-        str(key): (getattr(key, "description", None) or {}).get("suggested_value") for key in schema
+        str(key): (getattr(key, "description", None) or {}).get("suggested_value") or []
+        for key in result["data_schema"].schema
     }
 
 
-async def test_every_kind_of_thing_that_can_be_recoloured_gets_a_field(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
+async def open_it(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, Any]:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "init"
-    assert list(filled(result)) == list(COLOURABLE)
+    return result
 
 
-async def test_a_field_starts_at_the_colour_that_kind_of_thing_already_is(
+async def test_there_is_one_box_per_colour_and_no_box_for_white(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    # By name, because that is what somebody picks from; the palette value is what gets
-    # stored. Anything not chosen starts at the default for its domain.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    starting = filled(result)
-    assert starting["light"] == "orange"
-    assert starting["media_player"] == "blue"
-    assert starting["cover"] == "green"
-    assert starting["climate"] == "red"
-    assert starting["scene"] == "purple"
-    assert {CHOOSABLE[str(value)] for value in starting.values()} == {
-        DOMAIN_COLOURS[domain] for domain in COLOURABLE
-    }
-
-
-async def test_white_is_never_a_colour_anybody_can_choose(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> None:
-    # The one rule the readability of every page rests on. White means the thing behind a
-    # pad is off; a lamp somebody had coloured white would be unreadable exactly when it
-    # mattered, and "is anything still on in here" would stop being one glance.
+    # The form is shaped like the palette because the palette is the scarce thing. White is
+    # absent for the reason the whole language rests on: white is what "off" means, and a
+    # lamp somebody had painted white would be unreadable exactly when it mattered.
+    result = await open_it(hass, entry)
+    assert list(boxes(result)) == list(CHOOSABLE)
     assert WHITE not in CHOOSABLE.values()
-    assert set(CHOOSABLE.values()) == {BLUE, GREEN, ORANGE, RED, PURPLE}
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    schema = result["data_schema"].schema  # type: ignore[attr-defined]
-    for selector in schema.values():
-        assert "white" not in selector.config["options"]
 
 
-async def test_choosing_a_colour_stores_what_the_grid_speaks(
+async def test_every_kind_of_thing_a_pad_can_hold_is_somewhere(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    # A person picks a name and the device takes a palette value. Storing the name would
-    # put the translation somewhere that has to do it again on every render.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    answers = {domain: "purple" for domain in COLOURABLE}
+    # Twenty of them, against the six the old screen offered. Nothing may be missing: a kind
+    # of thing with no colour would be a pad with nothing to show.
+    result = await open_it(hass, entry)
+    everywhere = [domain for box in boxes(result).values() for domain in box]
+    assert sorted(everywhere) == sorted(PAINTABLE)
+    assert len(everywhere) == len(set(everywhere))  # and in exactly one box each
+
+
+async def test_the_boxes_start_holding_what_each_colour_already_means(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    starting = boxes(await open_it(hass, entry))
+    assert "light" in starting["orange"]
+    assert "media_player" in starting["blue"]
+    assert "cover" in starting["green"]
+    assert "binary_sensor" in starting["green"]  # readouts, which share green with openings
+    assert "script" in starting["purple"]
+    assert set(starting["orange"]) == {d for d, c in DOMAIN_COLOURS.items() if c == ORANGE}
+
+
+async def test_moving_one_kind_of_thing_shows_what_it_was_sharing_a_colour_with(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # The whole point of this shape. Painting lights green means taking them out of orange,
+    # so the switches, fans and sirens they were grouped with are visibly left behind rather
+    # than silently split from them.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["orange"] = [d for d in answers["orange"] if d != "light"]
+    answers["green"] = [*answers["green"], "light"]
+
     saved = await hass.config_entries.options.async_configure(result["flow_id"], answers)
-
     assert saved["type"] is FlowResultType.CREATE_ENTRY
-    assert saved["data"][CONF_DOMAIN_COLOURS] == dict.fromkeys(COLOURABLE, PURPLE)
+    painted = saved["data"][CONF_DOMAIN_COLOURS]
+    assert painted["light"] == GREEN
+    assert painted["switch"] == ORANGE  # left behind, and you watched it happen
+    assert painted["fan"] == ORANGE
 
 
-async def test_a_colour_somebody_chose_comes_back_when_they_look_again(
+async def test_saving_it_untouched_changes_nothing(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    first = await hass.config_entries.options.async_init(entry.entry_id)
-    await hass.config_entries.options.async_configure(
-        first["flow_id"], {**dict.fromkeys(COLOURABLE, "orange"), "light": "green"}
-    )
-    await hass.async_block_till_done()
+    result = await open_it(hass, entry)
+    saved = await hass.config_entries.options.async_configure(result["flow_id"], boxes(result))
+    assert saved["data"][CONF_DOMAIN_COLOURS] == dict(DOMAIN_COLOURS)
 
-    again = await hass.config_entries.options.async_init(entry.entry_id)
-    starting = filled(again)
-    assert starting["light"] == "green"
-    assert starting["cover"] == "orange"
-    assert entry.options[CONF_DOMAIN_COLOURS]["light"] == GREEN
+
+async def test_something_in_two_boxes_is_refused(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["blue"] = [*answers["blue"], "light"]  # still in orange as well
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["type"] is FlowResultType.FORM
+    assert again["errors"] == {"base": "colour_twice"}
+
+
+async def test_something_in_no_box_is_refused(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    # A kind of thing with no colour is a pad that cannot say what it is.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["orange"] = [d for d in answers["orange"] if d != "light"]
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["type"] is FlowResultType.FORM
+    assert again["errors"] == {"base": "colour_missing"}
+
+
+async def test_purple_refuses_anything_that_can_be_switched_off(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # Purple against white is the one pair measured as too close to tell apart on this
+    # hardware, so purple is only safe where a pad never shows white. This is the cost of a
+    # form that lets you paint anything any colour, and it is worth paying: the alternative
+    # is a lamp that is unreadable exactly when it matters.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["orange"] = [d for d in answers["orange"] if d != "light"]
+    answers["purple"] = [*answers["purple"], "light"]
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["type"] is FlowResultType.FORM
+    assert again["errors"] == {"base": "purple_needs_stateless"}
+
+
+async def test_a_refused_form_comes_back_holding_what_was_typed(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # Otherwise being told "something is in two boxes" throws away the arrangement somebody
+    # was halfway through making, and they have to build it again to find out which.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["blue"] = [*answers["blue"], "light"]
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert boxes(again)["blue"] == answers["blue"]

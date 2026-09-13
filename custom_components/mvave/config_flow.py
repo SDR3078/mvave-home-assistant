@@ -46,6 +46,7 @@ from .const import (
     SUBENTRY_PAGE,
 )
 from .engine.frames import PAD_COUNT
+from .engine.model import STATELESS_DOMAINS
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
 from .engine.resolve import PINNABLE
 from .registry import pads_now
@@ -168,7 +169,10 @@ BY_VALUE: Final = {value: name for name, value in CHOOSABLE.items()}
 
 #: The kinds of thing worth colouring separately. Not every domain: a list of forty would
 #: be worse than useless, and anything not here follows the built-in default.
-COLOURABLE: Final = ("light", "switch", "media_player", "cover", "climate", "scene")
+#: Every kind of thing a pad can hold, in the order the boxes list them. Exactly the keys
+#: of ``DOMAIN_COLOURS``, which a test holds equal to ``resolve.PINNABLE``, so a domain
+#: added to one of those cannot be quietly left off this screen.
+PAINTABLE: Final = tuple(DOMAIN_COLOURS)
 
 
 #: The sixteen pads drawn where they sit, so a column of fields can be read as a square.
@@ -194,6 +198,18 @@ def _pad_selector() -> EntitySelector:
     return EntitySelector(EntitySelectorConfig(domain=sorted(PINNABLE)))
 
 
+def _paintable_selector() -> SelectSelector:
+    """Every kind of thing a pad can hold, as chips you can move between the colours."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=list(PAINTABLE),
+            multiple=True,
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key="paintable",
+        )
+    )
+
+
 def _colour_selector() -> SelectSelector:
     """A choice of the five colours, by name."""
     return SelectSelector(
@@ -215,24 +231,57 @@ class MvaveOptionsFlow(OptionsFlow):
     """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Give each kind of thing its colour, which is the same on every page."""
-        if user_input is not None:
-            return self.async_create_entry(
-                data={
-                    CONF_DOMAIN_COLOURS: {
-                        domain: CHOOSABLE[user_input[domain]] for domain in COLOURABLE
-                    }
-                }
-            )
+        """Say what each colour means, which is the same on every page.
 
-        chosen = self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})
-        fields: dict[Any, Any] = {}
-        for domain in COLOURABLE:
-            colour = chosen.get(domain, DOMAIN_COLOURS.get(domain, ORANGE))
-            fields[vol.Required(domain, description={"suggested_value": BY_VALUE[colour]})] = (
-                _colour_selector()
-            )
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields))
+        A box per colour rather than a dropdown per kind of thing, and the difference is
+        not cosmetic. The device has five colours; that is the scarce resource the whole
+        design is built around, so a form shaped like the palette cannot lie about the
+        palette. It also makes moving something *visible*: to paint lights green you take
+        them out of the orange box, and you watch what they were grouped with stay behind.
+
+        The screen this replaced could not show that. It offered six kinds of thing and hid
+        fourteen, so painting "Lights" green split them silently from switches, fans and
+        sirens and merged them just as silently with covers and every readout — one field,
+        two invisible changes, and a label reading "Scenes and scripts" that moved scenes
+        and left scripts where they were.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            painted: dict[str, int] = {}
+            twice: set[str] = set()
+            for name, colour in CHOOSABLE.items():
+                for domain in user_input.get(name, ()):
+                    if domain in painted:
+                        twice.add(domain)
+                    painted[domain] = colour
+            missing = set(PAINTABLE) - set(painted)
+            stateful = {d for d in user_input.get("purple", ()) if d not in STATELESS_DOMAINS}
+
+            if twice:
+                errors["base"] = "colour_twice"
+            elif missing:
+                errors["base"] = "colour_missing"
+            elif stateful:
+                # Purple against white is the one pair measured as too close to tell apart,
+                # so purple is only safe where a pad never shows white. On anything with an
+                # off it would be unreadable exactly when it mattered.
+                errors["base"] = "purple_needs_stateless"
+            else:
+                return self.async_create_entry(data={CONF_DOMAIN_COLOURS: painted})
+
+        chosen = {**DOMAIN_COLOURS, **self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})}
+        fields: dict[Any, Any] = {
+            vol.Required(
+                name,
+                description={
+                    "suggested_value": user_input.get(name)
+                    if user_input is not None
+                    else [d for d in PAINTABLE if chosen.get(d) == colour]
+                },
+            ): _paintable_selector()
+            for name, colour in CHOOSABLE.items()
+        }
+        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields), errors=errors)
 
 
 class PageSubentryFlow(ConfigSubentryFlow):

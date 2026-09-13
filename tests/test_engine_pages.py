@@ -31,7 +31,16 @@ from engine.model import (
     Toggle,
     Watch,
 )
-from engine.palette import BLUE, GREEN, ON, ORANGE, PURPLE, STATE_OFF, UNASSIGNED
+from engine.palette import (
+    BLUE,
+    DOMAIN_COLOURS,
+    GREEN,
+    ON,
+    ORANGE,
+    PURPLE,
+    STATE_OFF,
+    UNASSIGNED,
+)
 from engine.render import (
     BACK_BUTTON,
     HOME_BUTTON,
@@ -42,7 +51,7 @@ from engine.render import (
     compose,
     render,
 )
-from engine.resolve import default_actions, resolve
+from engine.resolve import PINNABLE, default_actions, resolve
 from engine.rhythms import ALERT, BREATHE, Motion
 
 
@@ -510,3 +519,12 @@ def test_a_room_that_went_away_is_a_different_house() -> None:
     both = Profile(pages={"a": page("a"), "b": page("b")}, root_id="a")
     one = Profile(pages={"a": page("a")}, root_id="a")
     assert both != one
+
+
+def test_every_kind_of_thing_a_pad_can_hold_has_a_colour_and_nothing_else_does() -> None:
+    # Two failures, one invariant. A domain with a colour that can never reach a pad offers
+    # a choice nobody can ever see — `alarm_control_panel` and `vacuum` did that. A domain
+    # that can reach a pad with no colour takes the fallback and is right by accident rather
+    # than by decision — `humidifier` did that, landing on orange because ACTION is orange.
+    # Both were found by an agent reading the options screen, not by anything failing.
+    assert set(DOMAIN_COLOURS) == PINNABLE

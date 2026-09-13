@@ -44,7 +44,7 @@ This is the whole language, and it is short because the hardware is unforgiving 
 
 | The pad shows | It means |
 |---|---|
-| **Its own colour** | the thing behind it is **on**. Orange for lights and switches, blue for media players, green for covers, red for thermostats and locks, purple for scenes and scripts. All configurable |
+| **Its own colour** | the thing behind it is **on**. Orange for lights and switches, blue for media players, green for covers, red for thermostats and locks, purple for scenes and scripts. All twenty kinds of thing configurable |
 | **White** | the thing behind it is **off**. Never configurable — the readability of every page rests on this one rule |
 | **Dark** | nothing is assigned here. Pressing it does nothing |
 | **Breathing slowly** | the knobs are pointed at this one |
@@ -62,7 +62,7 @@ white when not — the same language as everything else — and it **shudders if
 it**, which is the truth about it.
 
 Readouts are green by default, all of them, so "green is something I watch" is one thing
-to learn rather than six. Configurable like every other colour.
+to learn rather than six. They sit in the green box with blinds, and you can move them out.
 
 Two rules keep them out of your way:
 
@@ -151,8 +151,17 @@ empty still fills itself from the room. So pinning one thing does not mean pinni
 A page's identity is its own — a ULID, not the room's name — so it survives the area being
 renamed, or deleted, or never having existed.
 
-**Configure** on the integration itself is one screen: what each kind of thing looks like,
-the same on every page. White is never offered, because white is what "off" means.
+**Configure** on the integration itself is one screen, and it is shaped like the palette
+rather than like your entity list: **a box per colour**, holding the kinds of thing that
+colour means. The device has five colours and that is all it has, so a form shaped any other
+way would be lying about the scarce thing.
+
+Every kind of thing belongs in exactly one box. To paint your lights green you take them out
+of orange and put them in green — and you see what they were sharing orange with, which a
+list of dropdowns cannot show you. White is never a box, because white is what "off" means.
+Purple only takes things with no on and off of their own: purple against white is the one
+pair too close to tell apart on this hardware, so on anything switchable it would be
+unreadable exactly when it mattered.
 
 Saving anything rebuilds the surface in place and keeps you on the page you were standing on.
 It does not reconnect, which would cost twenty seconds.
@@ -243,7 +252,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 434 tests
+pytest tests       # 440 tests
 ruff check . && ruff format --check . && mypy
 ```
 
