@@ -375,8 +375,11 @@ def test_a_scene_that_has_never_been_run_is_not_broken() -> None:
     living = page(source=Source(SourceKind.AREA, "living"))
     frame = render(living, resolve(living, registry, EMPTY), registry).frame
     assert frame[0] == PURPLE
-    # A script does have a lasting state: it is on while it is running.
-    assert frame[1] == STATE_OFF
+    # And an idle script keeps its colour too. It has a running state and is deliberately
+    # not shown in it: purple running against white idle is the one pair measured as too
+    # close to tell apart, so what that showed was a sub-second flash in the colour nobody
+    # can read. Pressing it says it ran; the pad no longer tries to.
+    assert frame[1] == PURPLE
 
 
 def test_the_focused_pad_breathes_and_nothing_else_moves() -> None:

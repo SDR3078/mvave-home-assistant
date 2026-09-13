@@ -32,6 +32,7 @@ from .frames import (
 from .model import (
     INERT_ACTIONS,
     STATELESS_DOMAINS,
+    UNKNOWN_AT_REST,
     Activate,
     Back,
     EntityState,
@@ -491,15 +492,17 @@ class Surface:
         command that cannot arrive would leave it moving forever waiting for a
         confirmation that is never coming.
 
-        Stateless pads are exempt — scenes, buttons and input buttons. Their resting state
-        in Home Assistant is "unknown", which is not the same as unreachable, and they are
-        exactly the pads people press. **Scripts are not among them**, despite what this
-        said until 2026-09-13: a script has a real running-or-idle state, so an unreachable
-        one refuses like anything else, which is correct and is what the code has always
-        done.
+        Pads resting at "unknown" are exempt — scenes, buttons and input buttons. That is
+        not the same as unreachable, and they are exactly the pads people press.
+
+        **Scripts are not among them**, even though they are drawn as stateless. A script
+        rests at "off", so a script reporting "unavailable" really is unreachable and
+        refuses like anything else. Those two facts came apart on 2026-09-13 and this is
+        the seam: how a pad is *drawn* and whether it can be *reached* stopped being the
+        same question the moment a script stopped showing its running state.
         """
         entity_id = slot.entity_id
-        if entity_id is None or slot.is_stateless:
+        if entity_id is None or entity_id.split(".", 1)[0] in UNKNOWN_AT_REST:
             return True
         state = self.registry.state_of(entity_id)
         return state is not None and not state.is_opaque

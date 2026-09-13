@@ -144,8 +144,26 @@ ACTIVE_STATES: Final[Mapping[str, frozenset[str]]] = {
 }
 
 #: Domains with no lasting state of their own. Pressing one starts something; there is
-#: nothing for the pad to reflect afterwards.
-STATELESS_DOMAINS: Final = frozenset({"scene", "button", "input_button"})
+#: nothing for the pad to reflect afterwards, so it keeps its colour and never shows white.
+#:
+#: A script is here by decision rather than by fact. It *does* have a running state, and
+#: showing it put a pad through purple-while-running and white-while-idle — the one pair
+#: measured as too close to tell apart, and the exact case purple is reserved for stateless
+#: domains to avoid. Since a script is idle almost always and usually runs for well under a
+#: second, what that bought was a flash nobody could see, rendered in the colour nobody can
+#: read. The acknowledgement latch answers "did it run" instead. What it gives up is "is it
+#: still running", which only a script with waits in it could ever have shown.
+STATELESS_DOMAINS: Final = frozenset({"scene", "script", "button", "input_button"})
+
+#: Domains that rest at ``unknown`` rather than at a value, which is not the same as being
+#: unreachable and must not be treated as it.
+#:
+#: Deliberately *not* the same set as above, though it was until scripts joined that one.
+#: The two ask different questions. A scene that has never been run reports ``unknown``
+#: forever, so refusing to press it would make it unpressable. A script reports ``off`` when
+#: it is idle, so a script reporting ``unavailable`` really is unreachable, and pressing it
+#: should refuse like anything else nobody can reach.
+UNKNOWN_AT_REST: Final = frozenset({"scene", "button", "input_button"})
 
 #: Domains a knob can meaningfully adjust, and so worth focusing on a hold.
 FOCUSABLE_DOMAINS: Final = frozenset({"light", "media_player", "cover", "climate", "fan"})

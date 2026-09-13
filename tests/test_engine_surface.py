@@ -970,17 +970,40 @@ def test_the_rest_of_the_grid_keeps_reporting_while_a_pad_is_held() -> None:
     assert view.rendering().frame[1] == ORANGE  # and the scene is still holding
 
 
-def test_a_script_is_not_acknowledged_because_it_already_says_so_itself() -> None:
-    # A script is not stateless: it reports running and then idle, so it already blinks and
-    # then settles like a lamp. Acknowledging it too would say the same thing twice, in two
-    # different vocabularies, on the same pad.
+def test_a_script_says_it_ran_the_same_way_a_scene_does() -> None:
+    # It used to blink and settle like a lamp, because a script has a running state. Showing
+    # that state meant purple while running against white while idle, which is the one pair
+    # measured as too close to tell apart — so the pad spent the colour nobody can read on a
+    # flash that is usually over in well under a second. It is drawn stateless now, and
+    # acknowledged like everything else you press once.
     registry = FakeRegistry(areas={"living": ("script.bedtime",)}, states={"script.bedtime": "off"})
     view = Surface(PROFILE, registry)
     view.handle(Press(0))
     outcome = view.handle(Press(0))
+
     assert outcome.calls[0].domain == "script"
-    assert outcome.acknowledged == ()
-    assert view.acknowledged == set()
+    assert outcome.acknowledged == ("script.bedtime",)
+    assert view.rendering().frame[0] == ORANGE  # holding, to say it ran
+
+
+def test_an_unreachable_script_still_refuses_even_though_it_is_drawn_stateless() -> None:
+    # The seam. How a pad is *drawn* and whether it can be *reached* stopped being one
+    # question the moment a script stopped showing its running state. A scene rests at
+    # "unknown" for ever, so refusing it would make it unpressable; a script rests at "off",
+    # so one saying "unavailable" really is unreachable and has to say so under a finger.
+    registry = FakeRegistry(
+        areas={"living": ("script.gone", "scene.never_run")},
+        states={"script.gone": "unavailable", "scene.never_run": "unknown"},
+    )
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    # Laid out by DOMAIN_ORDER, which puts scenes before scripts.
+    refused = view.handle(Press(1))
+    assert refused.calls == ()
+    assert refused.animation and refused.reaction is True
+
+    ran = view.handle(Press(0))
+    assert ran.calls[0].domain == "scene"
 
 
 def test_a_pad_that_would_do_nothing_shudders_rather_than_looking_broken() -> None:

@@ -55,10 +55,12 @@ UNASSIGNED: Final = OFF
 #: every pinned pad from its domain alone, so per-pad colour is unreachable from
 #: configuration and exists only for the engine's own tests.
 #:
-#: Purple appears only where the entity is stateless. Everything with an on and an off
-#: shows white when it is off, and purple against white is the one pair that was reported
-#: as too close on the physical grid, so a lamp coloured purple would be unreadable
-#: exactly when it mattered. A scene never shows white and so never runs into that.
+#: Purple appears only where the pad is drawn as stateless. Everything with an on and an
+#: off shows white when it is off, and purple against white is the one pair that was
+#: reported as too close on the physical grid, so a lamp coloured purple would be
+#: unreadable exactly when it mattered. A stateless pad never shows white and so never runs
+#: into that — which is why `script` being purple while *not* being stateless was a defect,
+#: found on 2026-09-13 and fixed by making a script stateless rather than by moving it.
 DOMAIN_COLOURS: Final[Mapping[str, int]] = {
     "light": ORANGE,
     "switch": ORANGE,
