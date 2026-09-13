@@ -72,7 +72,7 @@ PROFILE = Profile(
 REGISTRY = FakeRegistry(
     areas={
         "living": ("light.lamp", "switch.fan", "scene.evening", "media_player.tv"),
-        "kitchen": ("light.counter",),
+        "kitchen": ("light.counter", "climate.ecobee", "cover.blind"),
     },
     states={
         "light.lamp": "on",
@@ -80,11 +80,19 @@ REGISTRY = FakeRegistry(
         "scene.evening": "unknown",
         "media_player.tv": "unavailable",
         "light.counter": "on",
+        "climate.ecobee": "heat",
+        "cover.blind": "open",
     },
     attributes={
         # Dimmable, so holding it has something to point the knobs at. A lamp with no
         # colour modes at all has no adjustable property, and holding one now refuses.
         "light.lamp": {"friendly_name": "Reading lamp", "supported_color_modes": ["brightness"]},
+        # A temperature *range* rather than a setpoint: ClimateEntityFeature is
+        # TARGET_TEMPERATURE_RANGE (2), not TARGET_TEMPERATURE (1). Home Assistant's own
+        # demo Ecobee is exactly this, which is how the defect below was found.
+        "climate.ecobee": {"supported_features": 2, "target_temp_low": 21, "target_temp_high": 24},
+        # A blind that opens and closes but cannot be sent to a position: no SET_POSITION.
+        "cover.blind": {"supported_features": 0},
     },
 )
 
@@ -177,6 +185,27 @@ def test_an_empty_pad_is_dark_and_says_nothing() -> None:
         "shows": EMPTY,
         "colour": "dark",
     }
+
+
+def test_a_hold_that_would_refuse_is_reported_as_nothing() -> None:
+    # This service exists to say what a pad would *do*, and `hold` used to say what the pad
+    # was configured as. A focusable domain is not enough: a thermostat with a 21-24 range
+    # has no single temperature for an encoder to hold, so the grid refuses the hold with
+    # three blinks while this said `focus`. Found by holding the demo Ecobee on 2026-09-13.
+    #
+    # `shows: unreachable` has always warned that a *tap* will refuse. This is the same
+    # warning for a hold, which is the half that was missing.
+    thermostat = slot_for("kitchen", "climate.ecobee")
+    assert thermostat["tap"] == "toggle"  # it can still be switched
+    assert thermostat["hold"] == "nothing"
+    assert thermostat["shows"] == ON  # and it is perfectly reachable, which is the point
+
+    blind = slot_for("kitchen", "cover.blind")
+    assert blind["hold"] == "nothing"  # opens and closes, but goes to no position
+
+    # And a lamp that can be dimmed still says focus, or this would be reporting "nothing"
+    # for everything and passing for the wrong reason.
+    assert slot_for("living", "light.lamp")["hold"] == "focus"
 
 
 def test_a_navigation_pad_says_where_it_goes() -> None:

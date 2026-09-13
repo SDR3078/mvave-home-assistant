@@ -217,13 +217,18 @@ slot: 1
 entity_id: light.ceiling_lights
 name: Ceiling Lights
 tap: toggle
-hold: focus
+hold: focus        # what a hold would do — "nothing" if it would refuse
 shows: "on"        # on | off | unreachable | action | empty
 colour: orange
 ```
 
 Including the one thing the grid physically cannot say: an unreachable pad and a pad that
 is off are both white.
+
+Both `tap` and `hold` report what would actually happen rather than what was configured. A
+thermostat set to a *range* rather than a single temperature is a perfectly reachable
+climate entity with nothing an encoder can hold, so it comes back `hold: nothing` — and
+holding it on the grid refuses, which is the same answer.
 
 `mvave.press_slot` presses a **position**, for when the pad is out of reach or out of
 battery. Anything that wants one particular lamp should call that lamp's own action.
@@ -264,7 +269,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 460 tests
+pytest tests       # 461 tests
 ruff check . && ruff format --check . && mypy
 ```
 

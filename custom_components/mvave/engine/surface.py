@@ -51,7 +51,7 @@ from .model import (
 )
 from .palette import property_colour
 from .ports import RegistryView
-from .properties import KNOB_COUNT, PROPERTIES, packed, primary_for
+from .properties import KNOB_COUNT, PROPERTIES, can_focus, packed, primary_for
 from .render import (
     BACK_BUTTON,
     HOME_BUTTON,
@@ -792,7 +792,7 @@ class Surface:
             return replace(outcome, acknowledged=(action.entity_id,))
         if isinstance(action, Focus):
             state = self.registry.state_of(action.entity_id)
-            if state is None or state.is_opaque or primary_for(state) is None:
+            if not can_focus(state):
                 # The breathe is this device's one way of saying "the knobs are on this
                 # pad", and it was started for anything of a focusable *domain* — so a
                 # blind that cannot be positioned, or a lamp nobody can reach, breathed

@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Final
 
 from .model import (
+    NOTHING,
     UNKNOWN_AT_REST,
     Activate,
     Back,
@@ -39,6 +40,7 @@ from .model import (
 )
 from .palette import name_for
 from .ports import RegistryView
+from .properties import can_focus
 from .render import colour_of
 from .resolve import resolve
 
@@ -113,6 +115,13 @@ def describe_slot(
         return described
 
     state = registry.state_of(entity_id)
+    # What a hold would *do*, not what it was configured as. A focusable domain whose
+    # entity has no value an encoder can hold refuses on the grid, and this service exists
+    # to say what a pad would do — so reporting the configured `focus` here would be the
+    # one place that promised something the pad then refuses. `shows: unreachable` has
+    # always warned that a tap will refuse; this is the same warning for a hold.
+    if isinstance(slot.hold, Focus) and not can_focus(state):
+        described["hold"] = action_name(NOTHING)
     if state is not None:
         # The registry's own name for it, which is what somebody reading this recognises.
         # An entity id is a handle; "Ceiling lights" is what is written on the wall.

@@ -350,6 +350,22 @@ def packed(state: EntityState) -> list[Property]:
     ]
 
 
+def can_focus(state: EntityState | None) -> bool:
+    """Whether pointing the knobs at this would actually do anything.
+
+    A focusable *domain* is not enough. A blind that cannot be positioned, a thermostat
+    with a temperature range rather than a setpoint, a lamp nobody can reach — all of those
+    are covers, climates and lights, and none of them has a value an encoder can hold.
+
+    Asked in two places, so it lives in one. `Surface._perform` refuses a hold on anything
+    this rejects, and `describe_slot` reports that pad's hold as "nothing" — and those two
+    answers have to be the same one, or `mvave.get_pages` promises a focus that shudders.
+    That is exactly what it did until 2026-09-13: found by holding the demo Ecobee, whose
+    21-24 range means TARGET_TEMPERATURE_RANGE and no TARGET_TEMPERATURE.
+    """
+    return state is not None and not state.is_opaque and primary_for(state) is not None
+
+
 def primary_for(state: EntityState) -> Property | None:
     """The one value worth showing for an entity, for a peek.
 
