@@ -29,7 +29,6 @@ from .const import (
     SUBENTRY_PAGE,
 )
 from .engine import IDENTITY, EntityState, PadConfig, Page, Profile, Source, SourceKind
-from .engine.describe import describe_slot
 from .engine.frames import PAD_COUNT
 from .engine.palette import BLUE, DOMAIN_COLOURS
 from .engine.resolve import default_actions, resolve
@@ -219,16 +218,16 @@ def _pads_of(data: Mapping[str, Any]) -> dict[int, PadConfig]:
 
 
 def pads_now(hass: HomeAssistant, data: Mapping[str, Any]) -> list[str | None]:
-    """What a page made of this configuration would put on each of the sixteen pads.
+    """What a page made of this configuration puts on each of its sixteen pads.
 
-    For the configuration screen, which otherwise shows sixteen empty fields and no hint
-    of what is already there — a page that fills itself from a room looks identical to an
-    empty one. Names, in reading order, ``None`` where a pad is dark.
+    Entity ids, in reading order, ``None`` where a pad is dark. The configuration screen
+    fills its fields from this, so somebody editing a page that draws from a room can see
+    what is on it and change any of it — rather than sixteen empty boxes indistinguishable
+    from a page with nothing on it.
 
-    Deliberately *shown* rather than pre-filled into the fields. Every non-empty field on
-    that screen is saved as a **pin**, so pre-filling what the room supplies would mean
-    that merely opening the screen and pressing submit froze the page: it would stop
-    following the room, and the next lamp added there would never appear on it.
+    What is filled in is not therefore pinned. The screen compares what comes back against
+    this, and stores only what differs, so looking at a page and pressing submit leaves it
+    following its room exactly as before.
     """
     page = Page(
         id="preview",
@@ -239,11 +238,7 @@ def pads_now(hass: HomeAssistant, data: Mapping[str, Any]) -> list[str | None]:
     )
     registry = HomeAssistantRegistry(hass)
     slots = resolve(page, registry, Profile(pages={}, root_id="preview"))
-    named: list[str | None] = []
-    for index, slot in enumerate(slots):
-        described = describe_slot(index, slot, registry)
-        named.append(described["name"] or described["entity_id"])
-    return named
+    return [slot.entity_id if slot is not None else None for slot in slots]
 
 
 def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Profile:

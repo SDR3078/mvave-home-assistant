@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from custom_components.mvave.config_flow import _drawn
+from custom_components.mvave.config_flow import _NUMBERED
 from custom_components.mvave.engine.model import Activate, Focus, SourceKind, Toggle
 from custom_components.mvave.registry import _pads_of, _source_of
 
@@ -90,24 +90,13 @@ def test_a_page_with_nothing_pinned_says_so_plainly() -> None:
 # ------------------------------------------------------- what the form shows
 
 
-def test_the_pad_form_is_drawn_as_a_square_with_what_is_on_it() -> None:
-    # A form is a column and a page is a square, so the square gets drawn. Without it a
-    # page that fills itself from a room is sixteen empty fields — indistinguishable from a
-    # page with nothing on it at all, which is what somebody said while looking at one.
-    drawn = _drawn(["Bed Light", "Hall Window", None, None] + [None] * 12)
-    rows = drawn.splitlines()
+def test_the_form_draws_the_pads_where_they_actually_sit() -> None:
+    # A form is a column and a page is a square. Four of the sixteen labels used to be
+    # annotated with a corner and the other twelve were not, which left somebody
+    # interpolating; the square says it once instead.
+    rows = _NUMBERED.splitlines()
     assert len(rows) == 4
-    assert rows[0].startswith(" 1 Bed Light")
-    assert "2 Hall Window" in rows[0]
-    assert rows[3].startswith("13 —")
-    # Numbers stay aligned either side of ten, which is the whole point of drawing it.
-    assert all(row[:2].strip().isdigit() for row in rows)
-
-
-def test_a_long_name_is_cut_rather_than_breaking_the_square() -> None:
-    # A cell is a fixed width, so a long name loses its tail rather than pushing the pad
-    # beside it out of line. A square that stops being square stops being a map.
-    first = _drawn(["Living Room RGBWW Lights"] + [None] * 15).splitlines()[0]
-    assert "Living Room RGBWW Lights" not in first
-    assert first[:16] == " 1 Living Room R"  # two for the number, a space, thirteen of name
-    assert first[16:18] == " 2"
+    assert rows[0].split() == ["1", "2", "3", "4"]
+    assert rows[3].split() == ["13", "14", "15", "16"]
+    # Aligned either side of ten, which is the only reason to draw it rather than list it.
+    assert all(len(row) == len(rows[0]) for row in rows)

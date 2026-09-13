@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Mapping
 
 import voluptuous as vol
 from homeassistant.components.bluetooth import (
@@ -171,22 +171,16 @@ BY_VALUE: Final = {value: name for name, value in CHOOSABLE.items()}
 COLOURABLE: Final = ("light", "switch", "media_player", "cover", "climate", "scene")
 
 
+#: The sixteen pads drawn where they sit, so a column of fields can be read as a square.
+_NUMBERED: Final = "\n".join(
+    "".join(f"{pad:>3} " for pad in range(row * 4 + 1, row * 4 + 5)).rstrip()
+    for row in range(PAD_COUNT // 4)
+)
+
+
 def _pad_field(pad: int) -> str:
     """What one pad's form field is called. One based, as a person counts them."""
     return f"pad_{pad}"
-
-
-def _drawn(names: Sequence[str | None]) -> str:
-    """The sixteen pads laid out as they are, with whatever is on each.
-
-    A form is a column and the thing it describes is a square, so the square gets drawn.
-    Without it a page that fills itself from a room is sixteen empty fields, identical to
-    a page with nothing on it at all — which is what somebody said, looking at one.
-    """
-    cells = [f"{pad:>2} {(name or '—')[:13]:<13}" for pad, name in enumerate(names, start=1)]
-    return "\n".join(
-        "".join(cells[row * 4 : row * 4 + 4]).rstrip() for row in range(PAD_COUNT // 4)
-    )
 
 
 def _pad_selector() -> EntitySelector:
@@ -267,11 +261,21 @@ class PageSubentryFlow(ConfigSubentryFlow):
         as before, so pinning one thing does not mean pinning sixteen — and on a page with
         no room at all, these are the whole page.
         """
+        showing = pads_now(self.hass, self._page)
+        was: Mapping[str, str] = (
+            (self._existing.data.get(CONF_PADS) or {}) if self._existing else {}
+        )
         if user_input is not None:
+            # Only what somebody actually changed. The fields arrive filled with whatever
+            # the page already shows, most of which a room supplied, so storing all of it
+            # would pin all of it — and a page that had merely been looked at would quietly
+            # stop following its room, which nobody would notice until a lamp added to that
+            # room failed to appear on it.
             pads = {
-                str(pad): user_input[_pad_field(pad)]
+                str(pad): chosen
                 for pad in range(1, PAD_COUNT + 1)
-                if user_input.get(_pad_field(pad))
+                if (chosen := user_input.get(_pad_field(pad)))
+                and (chosen != showing[pad - 1] or str(pad) in was)
             }
             data = {**self._page, CONF_PADS: pads}
             if self._existing is None:
@@ -280,19 +284,16 @@ class PageSubentryFlow(ConfigSubentryFlow):
                 self._get_entry(), self._existing, title=self._title, data=data
             )
 
-        was: Mapping[str, str] = (
-            (self._existing.data.get(CONF_PADS) or {}) if self._existing else {}
-        )
         fields: dict[Any, Any] = {
             vol.Optional(
-                _pad_field(pad), description={"suggested_value": was.get(str(pad))}
+                _pad_field(pad), description={"suggested_value": showing[pad - 1]}
             ): _pad_selector()
             for pad in range(1, PAD_COUNT + 1)
         }
         return self.async_show_form(
             step_id="pads",
             data_schema=vol.Schema(fields),
-            description_placeholders={"grid": _drawn(pads_now(self.hass, self._page))},
+            description_placeholders={"grid": _NUMBERED},
         )
 
     async def async_step_reconfigure(
