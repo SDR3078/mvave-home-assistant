@@ -328,7 +328,14 @@ implementation plan and this file is the running to-do list.
   Built from real `BluetoothServiceInfoBleak` objects. A stand-in with the three attributes
   the flow happens to read would pass whatever the flow did with them.
 
-  Still uncovered: the options flow.
+  **And the options flow**, which is one screen and one rule: five tests, including that
+  white is never offered as a colour. That is the rule the readability of every page rests
+  on — white means the thing behind a pad is off, and a lamp somebody had coloured white
+  would be unreadable exactly when it mattered. Checked by making white choosable and
+  watching the test fail.
+
+  Every config flow this integration has is now walked by a test, and every one of those
+  tests was checked by breaking the code it covers.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
@@ -415,6 +422,24 @@ implementation plan and this file is the running to-do list.
   both at once and is the cheapest accessibility work available here. Nothing needs it yet,
   and it wants deciding at the grid: with motion off, a focused pad and a commanded one
   have to say what they are some other way, or stop saying it.
+- **Most kinds of thing cannot be recoloured, and the README says they can.** `COLOURABLE`
+  is six domains — light, switch, media_player, cover, climate, scene — while
+  `DOMAIN_COLOURS` now carries twenty-one. Missing: locks, fans, scripts, buttons, sirens,
+  alarm panels, vacuums, and every one of the six readout domains added on 2026-09-13.
+
+  The README claims otherwise in two places: "All configurable" after listing the domain
+  colours, and "Readouts are green by default, all of them ... Configurable like every other
+  colour." Both were written without checking this list. Found while writing the options
+  flow tests.
+
+  Three ways out, and the choice is a design one rather than a coding one. Widen `COLOURABLE`
+  to every domain, which is twenty-one fields on one screen and a lot of scrolling for
+  something most people touch once. Add a single **readouts** control that sets all six at
+  once, which is what the design already says about them — one colour so that "green is
+  something I watch" is one thing to learn rather than six — but which puts a field in that
+  screen that is not a domain. Or correct the README and leave the six as the curated set
+  they evidently are. Worth noting the collision that makes this more than tidiness: readouts
+  default to green and so do covers, so a house with blinds and door sensors has both.
 - **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
   applies when an entity is first registered and never again, which is correct — Home
   Assistant does not overrule a choice somebody may have made — but it means this only
