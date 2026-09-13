@@ -615,20 +615,57 @@ def test_a_knob_on_a_value_the_entity_will_not_report_does_not_go_to_the_bottom(
     assert view.hud.value == 0.5 + 1 / 16  # the middle is the one value that claims nothing
 
 
-def test_a_knob_resumes_where_it_was_last_left_rather_than_in_the_middle() -> None:
-    # The middle is only for a property nobody has ever set. Once this surface has asked
-    # for a value, that is where the knob is, and it stays there after the bar that was
-    # holding it has gone — which is the case that was actually felt at the grid, since a
-    # bar lasts about a second and a second is not how long anybody waits between clicks.
+def test_a_knob_resumes_from_the_last_value_the_house_reported() -> None:
+    # The middle is only for a property the house has never named. Once it has named one,
+    # that reading is where the knob is, and it stays there after the entity stops naming
+    # it — which is the whole case, since a lamp stops naming its colour temperature the
+    # moment somebody gives it a colour.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    registry.attributes = {
+        "light.lamp": {
+            "color_mode": "color_temp",
+            "brightness": 128,
+            "color_temp_kelvin": 4000,  # 0.4 of the way up the default 2000-6500 span
+        }
+    }
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.handle(Press(0, held=True))
+    view.handle(Turn(COLOUR_TEMP, 1))
+    view.clear_hud()
+
+    # Somebody gives it a colour, so it now reports no colour temperature at all.
+    registry.attributes["light.lamp"] = {
+        "color_mode": "hs",
+        "brightness": 128,
+        "hs_color": (200, 80),
+        "color_temp_kelvin": None,
+    }
+    view.handle(Turn(COLOUR_TEMP, 1))
+
+    # 4000 K is (4000 - 2000) / (6500 - 2000) of the way up the default span.
+    assert view.hud is not None
+    assert view.hud.value == 2000 / 4500 + 1 / 16
+
+
+def test_a_knob_does_not_resume_from_something_this_surface_merely_asked_for() -> None:
+    # The point of the whole mechanism, and the owner's correction on 2026-09-13: a command
+    # is an intention, not a fact. It can be clamped, ignored, or land on a lamp somebody
+    # else is already moving, so resuming from it would put the knob where the house has
+    # never been. Here nothing the surface sends is ever confirmed — the registry does not
+    # move — so four clicks up must leave no trace at all.
     view = in_colour_mode()
     view.handle(Turn(COLOUR_TEMP, 4))
-    asked = view.hud.value  # type: ignore[union-attr]
+    assert view.hud is not None and view.hud.value == 0.5 + 4 / 16
 
     view.clear_hud()
     view.handle(Turn(COLOUR_TEMP, 1))
 
-    assert view.hud is not None
-    assert view.hud.value == asked + 1 / 16
+    # Brightness *is* remembered, because holding the pad read it off the house. Colour
+    # temperature is not, because the house never named it — only this surface did.
+    assert ("light.lamp", "brightness") in view.last_known
+    assert ("light.lamp", "color_temp") not in view.last_known
+    assert view.hud is not None and view.hud.value == 0.5 + 1 / 16
 
 
 def test_the_entity_still_wins_over_what_the_knob_remembers() -> None:
@@ -926,7 +963,7 @@ def test_a_rebuild_keeps_what_belongs_to_the_house_and_drops_what_belongs_to_a_f
     assert rebuilt.stack == was.stack
     assert rebuilt.focus == "light.lamp"
     assert rebuilt.pending == {"light.lamp"}
-    assert rebuilt.last_asked == was.last_asked != {}
+    assert rebuilt.last_known == was.last_known != {}
 
     assert rebuilt.shifted is False
     assert rebuilt.legend is False
@@ -939,15 +976,15 @@ def test_what_a_rebuild_carries_is_copied_rather_than_shared() -> None:
     # replaced it.
     was = lit_lamp()
     was.pending.add("light.lamp")
-    was.last_asked["light.lamp", "brightness"] = 0.5
+    was.last_known["light.lamp", "brightness"] = 0.5
 
     rebuilt = Surface(PROFILE, was.registry)
     was.carry_into(rebuilt)
     was.pending.clear()
-    was.last_asked.clear()
+    was.last_known.clear()
 
     assert rebuilt.pending == {"light.lamp"}
-    assert rebuilt.last_asked == {("light.lamp", "brightness"): 0.5}
+    assert rebuilt.last_known == {("light.lamp", "brightness"): 0.5}
 
 
 def test_a_page_that_stopped_existing_drops_you_home() -> None:

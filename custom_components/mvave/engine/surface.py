@@ -245,13 +245,18 @@ class Surface:
         #: it away again once the knob has been still long enough; the engine has no
         #: clock and so cannot decide when that is.
         self.hud: Hud | None = None
-        #: The last value this surface asked for, per entity and property.
+        #: The last value **Home Assistant reported** for a property, per entity.
         #:
-        #: Consulted only when an entity is on and will not say what a value is, so it can
-        #: never override what the house reports. It is the value bar's memory outliving
-        #: the bar, and it suits encoders with no rings: the knob has no position of its
-        #: own, so the surface is the only thing that can hold one.
-        self.last_asked: dict[tuple[str, str], float] = {}
+        #: Written wherever a value is read off the house and nowhere else — never from
+        #: what this surface asked for. A command is an intention: it can be clamped,
+        #: ignored, or arrive at a lamp that was already moving, so remembering it would
+        #: make the knob resume from a place the house was never in.
+        #:
+        #: Read only when an entity is on and will not name a property at all, which a
+        #: light in colour mode does for colour temperature. So it never competes with a
+        #: live reading; it stands in for one that does not exist, and it suits encoders
+        #: with no rings, where the surface is the only thing that can hold a position.
+        self.last_known: dict[tuple[str, str], float] = {}
         #: Showing which of the eight encoders do anything to what has focus, instead of a
         #: value. Put up by turning a knob that can do nothing, and by nothing else: it is
         #: an answer to a question somebody asked, in the moment they asked it, which is the
@@ -282,7 +287,7 @@ class Surface:
         fresh.stack = kept or [fresh.profile.root_id]
         fresh.focus = self.focus
         fresh.pending = set(self.pending)
-        fresh.last_asked = dict(self.last_asked)
+        fresh.last_known = dict(self.last_known)
 
     # ------------------------------------------------------------------ where
 
@@ -540,6 +545,7 @@ class Surface:
             # has somewhere visible to go.
             value = prop.step
         elif (current := prop.read(state)) is not None:
+            self.last_known[target, prop.key] = current
             value = current + prop.step * event.steps
         else:
             # On, and yet it will not say. Home Assistant reports no colour temperature at
@@ -553,14 +559,13 @@ class Surface:
             # same situation. Resume where this surface last left it instead, and start in
             # the middle only if it has never been set — the one value that is not a claim
             # about anything.
-            value = self.last_asked.get((target, prop.key), 0.5) + prop.step * event.steps
+            value = self.last_known.get((target, prop.key), 0.5) + prop.step * event.steps
         value = max(0.0, min(1.0, value))
 
         domain, service, data = prop.write(state, value)
         # A live knob is past the question the legend answers: show the value instead.
         self.legend = False
         self.hud = Hud(target, prop.key, value)
-        self.last_asked[target, prop.key] = value
         return Outcome(
             calls=(Call(domain, service, data),),
             emits=(
@@ -648,7 +653,10 @@ class Surface:
             # grid to say so: a lamp that cannot dim has no value, and the legend that is
             # probably showing has already said which knobs work on it.
             return
-        self.hud = Hud(entity_id, prop.key, prop.read(state) or 0.0)
+        reading = prop.read(state)
+        if reading is not None:
+            self.last_known[entity_id, prop.key] = reading
+        self.hud = Hud(entity_id, prop.key, reading or 0.0)
         self.legend = False
 
     def clear_hud(self) -> Outcome:
@@ -756,6 +764,7 @@ class Surface:
             return
         value = prop.read(state)
         if value is not None:
+            self.last_known[entity_id, showing.property_key] = value
             self.hud = replace(showing, value=value)
 
     # --------------------------------------------------------------- outside
