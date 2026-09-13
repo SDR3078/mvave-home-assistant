@@ -49,7 +49,7 @@ DOMAIN_ORDER: Final = (
 
 #: Domains that take a plain toggle.
 TOGGLEABLE: Final = frozenset(
-    {"light", "switch", "input_boolean", "fan", "siren", "climate", "humidifier"}
+    {"light", "switch", "input_boolean", "fan", "siren", "climate", "humidifier", "lock"}
 )
 
 #: Domains with no lasting state, where a tap starts something.
@@ -59,7 +59,6 @@ ACTIVATABLE: Final = frozenset({"scene", "script", "button", "input_button"})
 TAP_SERVICES: Final = {
     "media_player": ("media_player", "media_play_pause"),
     "cover": ("cover", "toggle"),
-    "lock": ("lock", "open"),
 }
 
 #: Everything a pad can actually do something with.

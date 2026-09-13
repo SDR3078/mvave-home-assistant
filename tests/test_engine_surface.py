@@ -1286,11 +1286,15 @@ def test_a_knob_pointed_at_something_unreachable_answers_the_same_way() -> None:
     assert {view.rendering().frame[pad] for pad in KNOB_PADS} == {WHITE}
 
 
-def test_holding_a_lamp_that_cannot_dim_puts_no_bar_up() -> None:
-    # Focus still lands, so the pad breathes and the gesture is not silent. There is simply
-    # no value to show, which is the truth.
+def test_holding_a_lamp_that_cannot_dim_refuses_rather_than_breathing_over_nothing() -> None:
+    # This used to focus it: "the pad breathes and the gesture is not silent. There is
+    # simply no value to show, which is the truth." Reversed on 2026-09-13 by review, and
+    # the reversal is the more literal reading of the same rule. The breathe is this
+    # surface's one way of saying *the knobs are on this pad*, and on a lamp that only
+    # switches there is no knob it could mean — so the breathe was the untrue part, and the
+    # shudder this surface already has for "pressing this does nothing" is the true one.
     view = lamp_that(["onoff"])
-    assert view.focus == "light.lamp"
+    assert view.focus is None
     assert view.hud is None
 
 
@@ -1317,3 +1321,102 @@ def test_a_page_pointing_a_knob_elsewhere_is_reported_against_that_entity() -> N
     assert live[BRIGHTNESS] == ("light.lamp", "brightness")
     # Volume follows the page's speaker rather than the lamp that has focus.
     assert live[PINNED] == ("media_player.speaker", "volume")
+
+
+# ------------------------------------------------- what a press actually asks for
+
+
+def test_a_lock_pad_locks_and_unlocks_rather_than_opening_the_door() -> None:
+    # It called `lock.open` on every press until 2026-09-13. That is not a toggle and not
+    # even an unlock: it retracts the latch. So the pad opened the front door, opened it
+    # again on a second press, and nothing anywhere on this surface locked anything — on a
+    # pad that locks reach by auto-fill, with nobody having opted in.
+    for state, expected in (("locked", "unlock"), ("unlocked", "lock")):
+        registry = FakeRegistry(areas={"living": ("lock.front",)}, states={"lock.front": state})
+        view = Surface(PROFILE, registry)
+        view.handle(Press(0))
+        call = view.handle(Press(0)).calls[0]
+        assert (call.domain, call.service) == ("lock", expected)
+        assert call.service != "open"
+
+
+def test_a_knob_uses_a_value_it_can_read_even_when_the_thing_is_switched_off() -> None:
+    # "Switched off" was standing in for "there is no value to read". That is true of a
+    # lamp's brightness and false of a thermostat's setpoint, which Home Assistant reports
+    # perfectly well while the heating is off — so one click replaced a 21 degree setpoint
+    # with 7.5 and left it there for the next time the heating came on.
+    registry = FakeRegistry(areas={"living": ("climate.hall",)}, states={"climate.hall": "off"})
+    registry.attributes = {
+        "climate.hall": {
+            "supported_features": 1,
+            "temperature": 21.0,
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+        }
+    }
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.focus = "climate.hall"
+    call = view.handle(Turn(BRIGHTNESS, 1)).calls[0]
+    assert call.service == "set_temperature"
+    assert call.data["temperature"] > 21.0  # it went up from where it was, not down to the floor
+
+
+def test_a_knob_on_something_off_with_nothing_to_read_still_starts_at_the_bottom() -> None:
+    # The other half, unchanged: a lamp that is off reports no brightness at all, so there
+    # is genuinely nothing to continue from and the first click has to make it visible.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "off"})
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.handle(Press(0, held=True))
+    view.handle(Turn(BRIGHTNESS, 1))
+    assert view.hud is not None and view.hud.value == 1 / 16
+
+
+def test_holding_a_blind_that_cannot_be_positioned_refuses() -> None:
+    # The hold was granted by domain alone, so anything in FOCUSABLE_DOMAINS breathed —
+    # including the very common blind that only opens and closes and reports no
+    # SET_POSITION. The pad then showed this surface's one signal for "the knobs are on
+    # this" while no encoder could move anything, and the map that would have explained it
+    # only appears once you turn one.
+    registry = FakeRegistry(areas={"living": ("cover.garage",)}, states={"cover.garage": "open"})
+    registry.attributes = {"cover.garage": {"supported_features": 0}}  # no SET_POSITION
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+
+    outcome = view.handle(Press(0, held=True))
+    assert view.focus is None
+    assert view.rendering().rhythms == {}
+    assert outcome.animation and outcome.reaction is True
+
+
+def test_pointing_the_knobs_at_something_nobody_can_reach_refuses_too() -> None:
+    # Same gate, the other reason: §5.2 says an unreachable pad is completely still, and
+    # focus was the one route that could make one breathe.
+    registry = FakeRegistry(areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"})
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+
+    assert view.handle(Press(0, held=True)).reaction is True
+    assert view.focus is None
+
+
+def test_a_knob_turned_before_anything_is_held_draws_the_map_on_a_room_page() -> None:
+    # The state the device is in the first time anybody touches it, and again in every new
+    # room. Eight unmarked encoders answered nothing at all, which is what a dead knob also
+    # looks like. The map says "none of these, yet", which is true and is the only thing on
+    # this device that can say it.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+
+    assert view.focus is None
+    assert view.handle(Turn(BRIGHTNESS, 1)).animation or view.legend
+
+
+def test_a_knob_turned_on_the_index_still_says_nothing() -> None:
+    # The half the old guard got right: nothing can ever be focused on an index, so a map
+    # here would fire every time somebody brushed an encoder against a page with no answer.
+    view = surface()
+    assert view.page.source.kind is SourceKind.PAGES
+    assert view.handle(Turn(BRIGHTNESS, 1)) == Outcome()

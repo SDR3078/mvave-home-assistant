@@ -39,7 +39,15 @@ class FakeRegistry:
     def state_of(self, entity_id: str) -> EntityState | None:
         states = {"light.counter": "on", "switch.kettle": "off"}
         state = states.get(entity_id)
-        return None if state is None else EntityState(entity_id, state)
+        if state is None:
+            return None
+        # The lamp dims. Without a colour mode it has no adjustable property at all, and
+        # holding a pad with nothing for an encoder to move now refuses instead of
+        # pointing the knobs at it.
+        attributes = (
+            {"supported_color_modes": ["brightness"]} if entity_id.startswith("light.") else {}
+        )
+        return EntityState(entity_id, state, attributes)
 
 
 PROFILE = Profile(

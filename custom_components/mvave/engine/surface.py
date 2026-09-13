@@ -541,10 +541,16 @@ class Surface:
         one thing a map may never be is wrong.
         """
         if self.page.knobs.get(event.knob) is None and self.focus is None:
-            # Nothing is selected, so there is nothing for this knob to answer *about*.
-            # Putting a map up here would fire on the index every time somebody brushed an
-            # encoder, on a page where no question has been asked.
-            return NOTHING_HAPPENED
+            # On the index, nothing can be focused and nothing ever will be, so a map here
+            # would fire every time somebody brushed an encoder against a page that has no
+            # answer to give. Everywhere else it is a fair question badly answered: this
+            # returned silence on an ordinary room page too, which is the state the device
+            # is in the very first time anybody touches it and again in every new room —
+            # so eight unmarked encoders answered nothing at all, exactly when somebody
+            # would first try them. The map says "none of these, yet", which is true.
+            if self.page.source.kind is SourceKind.PAGES:
+                return NOTHING_HAPPENED
+            return self._refuse_turn()
 
         adjusting = self.knob_map().get(event.knob)
         if adjusting is None:
@@ -565,14 +571,20 @@ class Surface:
             # so re-reading it every step means a fast turn barely moves and then jumps
             # backwards when the answer finally arrives.
             value = showing.value + prop.step * event.steps
+        elif (current := prop.read(state)) is not None:
+            self._learn(state)
+            value = current + prop.step * event.steps
         elif not state.is_active:
             # Adjusting something that is off means adjusting a value nobody can see. The
             # first click turns it on at the bottom of its range instead, so the next one
             # has somewhere visible to go.
+            #
+            # Asked *after* the read, not before it. "Switched off" was standing in for
+            # "there is no value to read", which is true of a lamp's brightness and false
+            # of a thermostat's setpoint or a paused speaker's volume — both perfectly
+            # readable while off. Asked first, one click at an off thermostat replaced a
+            # 21 degree setpoint with 7.5 and left it there.
             value = prop.step
-        elif (current := prop.read(state)) is not None:
-            self._learn(state)
-            value = current + prop.step * event.steps
         else:
             # On, and yet it will not say. Home Assistant reports no colour temperature at
             # all for a light in colour mode and never derives one, because most colours
@@ -762,6 +774,15 @@ class Surface:
             self.acknowledged.add(action.entity_id)
             return replace(outcome, acknowledged=(action.entity_id,))
         if isinstance(action, Focus):
+            state = self.registry.state_of(action.entity_id)
+            if state is None or state.is_opaque or primary_for(state) is None:
+                # The breathe is this device's one way of saying "the knobs are on this
+                # pad", and it was started for anything of a focusable *domain* — so a
+                # blind that cannot be positioned, or a lamp nobody can reach, breathed
+                # while every encoder did nothing. Refusing says the true thing instead.
+                if origin is None:
+                    return NOTHING_HAPPENED
+                return Outcome(animation=refuse(self.rendering().frame, origin), reaction=True)
             # The same gesture releases it. Without that there is no way back to an
             # ordinary page once you have pointed the knobs at something, and a surface
             # you can get into a state you cannot get out of is a surface people stop
@@ -783,6 +804,17 @@ class Surface:
 
     def _toggle_call(self, entity_id: str) -> Call:
         domain = entity_id.split(".", 1)[0]
+        if domain == "lock":
+            # There is no `lock.toggle`, so the service is chosen here from the state.
+            #
+            # It used to be `lock.open` unconditionally, which is not a toggle and is not
+            # even an unlock: it retracts the latch. So the pad opened the front door when
+            # pressed, opened it again when pressed a second time, and there was no gesture
+            # anywhere on this surface that locked anything. Locks reach a pad by auto-fill,
+            # so nobody had to opt in to that. Found by review on 2026-09-13.
+            state = self.registry.state_of(entity_id)
+            service = "lock" if state is not None and state.is_active else "unlock"
+            return Call("lock", service, {"entity_id": entity_id})
         return Call(
             TOGGLE_SERVICES.get(domain, "homeassistant"), "toggle", {"entity_id": entity_id}
         )

@@ -81,7 +81,11 @@ REGISTRY = FakeRegistry(
         "media_player.tv": "unavailable",
         "light.counter": "on",
     },
-    attributes={"light.lamp": {"friendly_name": "Reading lamp"}},
+    attributes={
+        # Dimmable, so holding it has something to point the knobs at. A lamp with no
+        # colour modes at all has no adjustable property, and holding one now refuses.
+        "light.lamp": {"friendly_name": "Reading lamp", "supported_color_modes": ["brightness"]},
+    },
 )
 
 

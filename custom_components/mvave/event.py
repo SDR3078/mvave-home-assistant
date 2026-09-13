@@ -19,7 +19,7 @@ from homeassistant.helpers.event import async_call_later
 
 from .const import LOGGER
 from .devices import resolve_layout
-from .devices.smc_pad import ENCODER_CENTRE
+from .devices.smc_pad import ENCODER_CENTRE, PAD_NUMBER_BY_READING_ORDER
 from .entity import MvaveEntity
 from .runner import HOLD_SECONDS
 
@@ -197,7 +197,20 @@ class MvavePadEvent(_MvaveHoldableEvent):
         """Initialise the entity for one pad."""
         super().__init__(coordinator, spec.key, fallback)
         self._attr_event_types = list(HOLDABLE_EVENTS)
-        self._attr_translation_placeholders = {"number": str(spec.number)}
+        # Named by where the pad *is*, not by the number in the device's own preset records.
+        #
+        # Those two disagree on all sixteen pads: the device counts from the bottom left, a
+        # person reads from the top left, and until 2026-09-13 this entity was named after
+        # the first while the configuration screen, `mvave.press_slot` and the logbook all
+        # used the second. "Pad 1" meant the top-left pad on one screen and the bottom-left
+        # pad on the other — opposite corners — and nothing said so. Nothing is written on
+        # the pads themselves, so the device's numbering is a protocol detail nobody can
+        # see, and reading order is the only one a person can check by looking.
+        #
+        # `spec.key` is deliberately left alone: it is the unique id, and its job is to stay
+        # the same across a preset change rather than to be legible.
+        reading_order = PAD_NUMBER_BY_READING_ORDER.index(spec.number) + 1
+        self._attr_translation_placeholders = {"number": str(reading_order)}
 
     def _handle_midi(self, event: MidiEvent) -> None:
         spec = self.layout.pad(self._key)

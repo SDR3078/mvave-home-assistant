@@ -100,3 +100,30 @@ def test_the_form_draws_the_pads_where_they_actually_sit() -> None:
     assert rows[3].split() == ["13", "14", "15", "16"]
     # Aligned either side of ten, which is the only reason to draw it rather than list it.
     assert all(len(row) == len(rows[0]) for row in rows)
+
+
+# --------------------------------------------------- what "Pad N" means, everywhere
+
+
+def test_pad_entities_are_named_by_where_the_pad_is_not_by_the_devices_own_number() -> None:
+    # These disagreed on all sixteen pads until 2026-09-13. The device counts its preset
+    # records from the bottom left; a person reads from the top left; and the config screen,
+    # `mvave.press_slot` and the logbook all used reading order while the event entity used
+    # the device's. "Pad 1" was the top-left pad on one screen and the bottom-left on the
+    # other — opposite corners, with nothing saying so.
+    from custom_components.mvave.devices.smc_pad import (
+        PAD_NUMBER_BY_READING_ORDER,
+        SMC_PAD_FACTORY_LAYOUT,
+    )
+
+    named = {
+        PAD_NUMBER_BY_READING_ORDER.index(spec.number) + 1: spec
+        for spec in SMC_PAD_FACTORY_LAYOUT.pads
+    }
+    assert sorted(named) == list(range(1, 17))
+    # Reading order 1 is the top left, which the device calls 13 and puts on note 48.
+    assert named[1].number == 13
+    assert named[1].note == 48
+    # And reading order 13 is the bottom left, the device's own pad 1, on note 36.
+    assert named[13].number == 1
+    assert named[13].note == 36

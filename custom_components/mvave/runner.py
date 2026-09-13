@@ -502,9 +502,9 @@ class SurfaceRunner:
         """
         if self.surface is None:
             return
-        self._cancel_animation()
         outcome = ask(self.surface)
         self._arm(outcome)
+        self._make_way_for(outcome)
         self._settle(outcome)
 
     # ----------------------------------------------------------------- input
@@ -635,10 +635,26 @@ class SurfaceRunner:
     def _dispatch(self, event: InputEvent | None) -> None:
         if event is None:
             return
-        # Whatever was playing is over. Input is never queued behind eye candy: a press
-        # during a transition has to land now, not once the pretty part has finished.
+        outcome = self._handle(event)
+        self._make_way_for(outcome)
+        self._settle(outcome)
+
+    def _make_way_for(self, outcome: Outcome) -> None:
+        """Stop whatever is playing, unless what is arriving must not interrupt it.
+
+        Input is never queued behind eye candy: a press during a transition has to land
+        now, not once the pretty part has finished. The exception is a reaction arriving
+        while a reaction is playing — pressing a dead pad twice — which must leave the
+        first one alone, because three blinks in 540 ms is already 5.6 Hz and restarting
+        it puts more than three flashes into one second.
+
+        This cancelled unconditionally until 2026-09-13, *before* the outcome was even
+        computed, which made the guard in `_play` unreachable: `_playing` was always None
+        by the time it was asked. The whole of that protection was dead code.
+        """
+        if outcome.reaction and self._playing is not None and self._reacting:
+            return
         self._cancel_animation()
-        self._settle(self._handle(event))
 
     def _settle(self, outcome: Outcome) -> None:
         """Carry out an outcome, in the order the grid needs it.
@@ -712,7 +728,7 @@ class SurfaceRunner:
             return
         if outcome.reaction and self._playing is not None and self._reacting:
             return
-        self._cancel_animation()
+        # The caller has already made way, via _make_way_for.
         LOGGER.debug("%s: animating %d frames", self.coordinator.address, len(outcome.animation))
         self._reacting = outcome.reaction
         self._playing = self._task(self._animate(outcome), "transition")
