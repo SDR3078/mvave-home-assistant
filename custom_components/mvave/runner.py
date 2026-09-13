@@ -83,10 +83,19 @@ CONFIRM_SECONDS = 6.0
 #:
 #: Long enough to be seen as a state rather than caught as a flash, short enough that the
 #: pad is not still claiming to be acting when it has finished. Two transitions this far
-#: apart are not a flash at all — a flash is a *pair* of opposing changes, and these are
-#: over a second apart — which is what keeps an acknowledgement out of the photosensitivity
-#: arithmetic entirely rather than merely inside it.
-ACKNOWLEDGE_SECONDS = 1.5
+#: apart are not a flash at all — a flash is a *pair* of opposing changes, and these are a
+#: second apart — which keeps an acknowledgement out of the photosensitivity arithmetic
+#: entirely rather than merely inside it.
+#:
+#: Settled at the grid, which is the only place it could be. 1.5 s read as correct but
+#: overstayed — "it works, but maybe just a little less long"; 1.0 s was still a touch
+#: long. Each step was judged by pressing it, not reasoned about.
+#:
+#: Note what pressing again does. The countdown is *restarted*, not re-fired, so hammering
+#: a scene pad holds one unbroken colour rather than strobing it. That is the property that
+#: makes this safe to press as fast as somebody likes, and it is why the acknowledgement is
+#: a latch rather than a one-shot animation.
+ACKNOWLEDGE_SECONDS = 0.8
 
 #: Note-on, channel 1. The device ignores the channel on the LED path entirely, measured
 #: on all sixteen (``docs/HARDWARE-BLE.md`` section 9.1).

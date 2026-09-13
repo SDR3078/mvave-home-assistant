@@ -193,6 +193,12 @@ CURTAIN_HOLD: Final = 3
 #: The arithmetic is worth spelling out because it was got wrong here and in the design
 #: brief, both of which said "a little over a quarter of a second": that counts three
 #: blinks of two frames and forgets that a blink is two halves.
+#: **Do not make this faster or add a blink.** Three blinks in 540 ms is 5.6 Hz, which is
+#: legal only because three is the most a thing may flash in a second, and its leading
+#: edges are 180 ms apart, well inside the 334 ms that would make it safe regardless of
+#: rate. It has no margin at all. It gets away with it because a refusal is rare and fires
+#: only under the finger that asked for it; an acknowledgement is neither, which is why
+#: that one is a latch instead.
 REFUSAL_BLINKS: Final = 3
 REFUSAL_HOLD: Final = 2
 

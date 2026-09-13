@@ -176,7 +176,16 @@ def buttons_for(page: Page, view: ViewState) -> dict[str, bool]:
 
 
 def compose(rendering: Rendering, elapsed: float) -> Frame:
-    """The still plus a clock reading, which is what actually goes to the device."""
+    """The still plus a clock reading, which is what actually goes to the device.
+
+    **Every motion is driven from this one ``elapsed``, and that must not change.** It
+    phase-locks them: ten pads blinking together present the eye 2.5 flashes a second, the
+    same as one does. Measure phase per pad instead — from when each entity became pending,
+    say — and ten unsynchronised pads put twenty-five luminance changes a second into a
+    single visual field, which is a photosensitivity problem rather than an aesthetic one.
+    There is no area exemption to fall back on either: two pads of this size already exceed
+    the 0.006 sr threshold at every distance anybody uses this from.
+    """
     frame = rendering.frame
     for pad, motion in rendering.rhythms.items():
         if not motion.lit(elapsed):

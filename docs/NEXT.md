@@ -255,6 +255,33 @@ implementation plan and this file is the running to-do list.
   tell them apart". Unreachable has no colour at all — it shows white like anything that is
   off and shudders when pressed, which was the owner's idea and buys back a fifth of the
   vocabulary.
+- **A scene says it ran.** The one pad on the surface that could be pressed with no result
+  of any kind: a scene has no on and no off, so nothing changed anywhere. Raised at the
+  grid — "i actually want a feedback mechanism after i touched the button".
+
+  Three UX agents were asked, and the two obvious answers are both wrong. **Reusing the
+  existing blink fails on termination, not rate**: ALERT means the surface and the world
+  disagree and stops when the world reports, but a scene that fired correctly never
+  disagrees, so the condition that ends it does not exist — the `is_stateless` guard
+  everyone wanted deleted is the thing that bounds it, and ITU-R BT.1702-3 warns that a
+  sequence over five seconds may be a risk even when compliant, against a `CONFIRM_SECONDS`
+  of six. **Flashing white fails on contrast**: §5.2 gives purple to stateless domains
+  precisely because those pads never show white, purple against white being the one pair
+  recorded as too close — so it would be the lowest-contrast event the palette can make.
+
+  So a **latch, not a flash**: hold the action colour, let go. One transition in and one
+  out, which is not a flash at all — a flash is a *pair* of opposing changes — so it never
+  enters that arithmetic rather than merely passing it. No new rhythm, nothing new to tell
+  apart from breathing and blinking, and it never shows white. Drawn over the settled frame
+  rather than animated, so the other fifteen pads keep reporting while it is held.
+
+  **0.8 s, judged at the grid over three rounds**: 1.5 s read as correct but overstayed,
+  1.0 s was still a touch long. Pressing again restarts the countdown rather than re-firing
+  it, so hammering a scene pad holds one unbroken colour instead of strobing — a property
+  of it being a latch, and the reason it is safe to press as fast as anybody likes.
+
+  Scripts are deliberately untouched: a script is not stateless, it reports running and
+  then idle, so it already blinks and settles like a lamp.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
@@ -334,6 +361,13 @@ implementation plan and this file is the running to-do list.
   this mean" and is deliberately pull-only. A wall tablet mirroring the grid as it
   changes wants a subscription instead, which is what `weather` does alongside its own
   action. Nothing needs it yet.
+- **One setting that turns all motion off.** Raised by the accessibility pass and not built.
+  `BREATHE` starts on its own and runs for as long as a pad is selected, which is the shape
+  WCAG 2.2.2 is written about; 2.3.3 covers animation triggered by interaction, which the
+  page transitions are. Neither literally binds an LED grid, but one switch would answer
+  both at once and is the cheapest accessibility work available here. Nothing needs it yet,
+  and it wants deciding at the grid: with motion off, a focused pad and a commanded one
+  have to say what they are some other way, or stop saying it.
 - **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
   applies when an entity is first registered and never again, which is correct — Home
   Assistant does not overrule a choice somebody may have made — but it means this only

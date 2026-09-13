@@ -49,6 +49,7 @@ This is the whole language, and it is short because the hardware is unforgiving 
 | **Dark** | nothing is assigned here. Pressing it does nothing |
 | **Breathing slowly** | the knobs are pointed at this one |
 | **Blinking fast** | commanded, not yet confirmed. It stops as soon as the entity reports back |
+| **Holding orange for a moment** | a scene or button you just pressed, saying so. It has no on and off of its own, so this is the only thing it can tell you |
 | **Three quick blinks under your finger** | it refused: either nobody can reach that entity, or this pad cannot be acted on |
 
 "Is anything still on in the kitchen?" becomes "is any pad not white", which is one glance.
