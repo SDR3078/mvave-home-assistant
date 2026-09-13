@@ -187,8 +187,12 @@ def uncover(colour: int, arriving: Frame) -> tuple[Frame, ...]:
 #: them read as two halves rather than one long slide.
 CURTAIN_HOLD: Final = 3
 
-#: How a pad says no. Three blinks, each half held for two frames, so it lasts a little
-#: over a quarter of a second and is plainly a reaction rather than a state.
+#: How a pad says no. Three blinks, each *half* held for two frames — so twelve frames,
+#: 540 ms, starting on dark and ending lit. Plainly a reaction rather than a state.
+#:
+#: The arithmetic is worth spelling out because it was got wrong here and in the design
+#: brief, both of which said "a little over a quarter of a second": that counts three
+#: blinks of two frames and forgets that a blink is two halves.
 REFUSAL_BLINKS: Final = 3
 REFUSAL_HOLD: Final = 2
 
