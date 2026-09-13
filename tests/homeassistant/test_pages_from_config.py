@@ -8,10 +8,12 @@ configuration says and what the engine is handed.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from custom_components.mvave.config_flow import _NUMBERED
 from custom_components.mvave.engine.model import Activate, Focus, SourceKind, Toggle
+from custom_components.mvave.event import MvavePadEvent
 from custom_components.mvave.registry import _pads_of, _source_of
 
 
@@ -52,8 +54,10 @@ def test_a_room_wins_over_a_label_if_both_somehow_survive_the_form() -> None:
 
 
 def test_a_pinned_pad_is_counted_the_way_a_person_counts_pads() -> None:
-    # One based on the way in, because "pad 1" is the top left everywhere a person looks;
-    # zero based from here on, because that is how a frame is indexed.
+    # Positions in reading order, not the numbers printed on the pads: "1" here is the top
+    # left, while the pad with 1 written on it is the bottom left. The stored key is
+    # deliberately the one a person never sees, so the labels can be corrected without
+    # migrating anything — which is exactly what happened on 2026-09-13.
     pads = _pads_of(describe(pads={"1": "light.lamp", "16": "light.other"}))
     assert set(pads) == {0, 15}
 
@@ -94,10 +98,15 @@ def test_the_form_draws_the_pads_where_they_actually_sit() -> None:
     # A form is a column and a page is a square. Four of the sixteen labels used to be
     # annotated with a corner and the other twelve were not, which left somebody
     # interpolating; the square says it once instead.
+    #
+    # And it says it in the numbers printed on the hardware, which run *up* the grid: the
+    # top row is 13 to 16 and the bottom row is 1 to 4. Drawn the other way up on
+    # 2026-09-13 for half a day, which put a tidy 1-2-3-4 along the top of a screen whose
+    # top-left pad has 13 written on it.
     rows = _NUMBERED.splitlines()
     assert len(rows) == 4
-    assert rows[0].split() == ["1", "2", "3", "4"]
-    assert rows[3].split() == ["13", "14", "15", "16"]
+    assert rows[0].split() == ["13", "14", "15", "16"]
+    assert rows[3].split() == ["1", "2", "3", "4"]
     # Aligned either side of ten, which is the only reason to draw it rather than list it.
     assert all(len(row) == len(rows[0]) for row in rows)
 
@@ -105,25 +114,48 @@ def test_the_form_draws_the_pads_where_they_actually_sit() -> None:
 # --------------------------------------------------- what "Pad N" means, everywhere
 
 
-def test_pad_entities_are_named_by_where_the_pad_is_not_by_the_devices_own_number() -> None:
-    # These disagreed on all sixteen pads until 2026-09-13. The device counts its preset
-    # records from the bottom left; a person reads from the top left; and the config screen,
-    # `mvave.press_slot` and the logbook all used reading order while the event entity used
-    # the device's. "Pad 1" was the top-left pad on one screen and the bottom-left on the
-    # other — opposite corners, with nothing saying so.
+def test_every_number_shown_to_a_person_is_the_one_printed_on_the_pad() -> None:
+    # Three screens show a pad number — the event entity, the pad fields on the page
+    # screen, and `mvave.press_slot` — and the only numbering all three can be checked
+    # against is the one written on the hardware. PAD1 is the bottom-left pad.
+    #
+    # On 2026-09-13 all three were briefly moved onto reading order instead, on the belief
+    # that the device's numbering was a protocol detail nobody could see. It is printed on
+    # the pads. That made "Pad 1" the top-left pad in Home Assistant and the bottom-left
+    # pad under your hand, which is the same opposite-corner confusion the move was meant
+    # to end, relocated. This test is what fails if anybody tries it again.
+    from custom_components.mvave.config_flow import _pad_field
     from custom_components.mvave.devices.smc_pad import (
         PAD_NUMBER_BY_READING_ORDER,
         SMC_PAD_FACTORY_LAYOUT,
     )
 
+    # Ground truth, from docs/HARDWARE-BLE.md section 4: note 36 is PAD1 and note 51 is
+    # PAD16, so the notes ascend with the printed numbers and both run up the grid.
+    by_number = {spec.number: spec for spec in SMC_PAD_FACTORY_LAYOUT.pads}
+    assert sorted(by_number) == list(range(1, 17))
+    assert by_number[1].note == 36
+    assert by_number[16].note == 51
+
+    top_left, bottom_left = PAD_NUMBER_BY_READING_ORDER[0], PAD_NUMBER_BY_READING_ORDER[12]
+    assert (top_left, bottom_left) == (13, 1)
+
+    # The entity name, built for real rather than re-derived: the top-left pad is "Pad 13"
+    # and the bottom-left one is "Pad 1".
+    stub = SimpleNamespace(
+        address="AA:BB:CC:DD:EE:FF", device_name="SMC-PAD", manufacturer=None, model=None
+    )
     named = {
-        PAD_NUMBER_BY_READING_ORDER.index(spec.number) + 1: spec
+        spec.number: MvavePadEvent(stub, spec, SMC_PAD_FACTORY_LAYOUT).translation_placeholders[  # type: ignore[arg-type]
+            "number"
+        ]
         for spec in SMC_PAD_FACTORY_LAYOUT.pads
     }
-    assert sorted(named) == list(range(1, 17))
-    # Reading order 1 is the top left, which the device calls 13 and puts on note 48.
-    assert named[1].number == 13
-    assert named[1].note == 48
-    # And reading order 13 is the bottom left, the device's own pad 1, on note 36.
-    assert named[13].number == 1
-    assert named[13].note == 36
+    assert named == {number: str(number) for number in range(1, 17)}
+
+    # The page screen's field for those same two pads.
+    assert _pad_field(top_left) == "pad_13"
+    assert _pad_field(bottom_left) == "pad_1"
+
+    # `mvave.press_slot` is covered by test_services.py, which drives the real service and
+    # checks slot 13 reaches the first room while slot 1 reaches nothing.

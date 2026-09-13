@@ -46,6 +46,7 @@ from .const import (
     MIDI_SERVICE_UUID,
     SUBENTRY_PAGE,
 )
+from .devices.smc_pad import PAD_NUMBER_BY_READING_ORDER
 from .engine.frames import PAD_COUNT
 from .engine.model import STATELESS_DOMAINS
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
@@ -177,14 +178,17 @@ PAINTABLE: Final = tuple(DOMAIN_COLOURS)
 
 
 #: The sixteen pads drawn where they sit, so a column of fields can be read as a square.
+#: The numbers are the ones printed on the hardware, which run up the grid: the top-left
+#: pad says 13. A square that disagreed with the pads under somebody's fingers would be
+#: worse than no square at all.
 _NUMBERED: Final = "\n".join(
-    "".join(f"{pad:>3} " for pad in range(row * 4 + 1, row * 4 + 5)).rstrip()
-    for row in range(PAD_COUNT // 4)
+    "".join(f"{PAD_NUMBER_BY_READING_ORDER[index]:>3} " for index in row).rstrip()
+    for row in (range(start, start + 4) for start in range(0, PAD_COUNT, 4))
 )
 
 
 def _pad_field(pad: int) -> str:
-    """What one pad's form field is called. One based, as a person counts them."""
+    """What one pad's form field is called, by the number printed on it."""
     return f"pad_{pad}"
 
 
@@ -374,11 +378,14 @@ class PageSubentryFlow(ConfigSubentryFlow):
             # would pin all of it — and a page that had merely been looked at would quietly
             # stop following its room, which nobody would notice until a lamp added to that
             # room failed to appear on it.
+            # Stored by position, one based, exactly as before: the printed number is what
+            # the field is *called*, not what the configuration is keyed by. Keeping the key
+            # off the label is what lets the label change without migrating anybody's pages.
             pads = {
-                str(pad): chosen
-                for pad in range(1, PAD_COUNT + 1)
-                if (chosen := user_input.get(_pad_field(pad)))
-                and (chosen != showing[pad - 1] or str(pad) in was)
+                str(index + 1): chosen
+                for index in range(PAD_COUNT)
+                if (chosen := user_input.get(_pad_field(PAD_NUMBER_BY_READING_ORDER[index])))
+                and (chosen != showing[index] or str(index + 1) in was)
             }
             data = {**self._page, CONF_PADS: pads}
             if self._existing is None:
@@ -387,11 +394,14 @@ class PageSubentryFlow(ConfigSubentryFlow):
                 self._get_entry(), self._existing, title=self._title, data=data
             )
 
+        # In reading order, so the form runs down the grid the way the square above it does,
+        # even though the numbers on the fields count the other way.
         fields: dict[Any, Any] = {
             vol.Optional(
-                _pad_field(pad), description={"suggested_value": showing[pad - 1]}
+                _pad_field(PAD_NUMBER_BY_READING_ORDER[index]),
+                description={"suggested_value": showing[index]},
             ): _pad_selector()
-            for pad in range(1, PAD_COUNT + 1)
+            for index in range(PAD_COUNT)
         }
         return self.async_show_form(
             step_id="pads",

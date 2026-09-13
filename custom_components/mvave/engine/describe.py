@@ -16,7 +16,7 @@ a different audience, and it is the one nobody can otherwise get an answer to.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Final
 
 from .model import (
@@ -72,14 +72,22 @@ def action_name(action: PadAction) -> str:
     return ACTION_NAMES.get(type(action), type(action).__name__.lower())
 
 
-def describe_slot(index: int, slot: Slot | None, registry: RegistryView) -> dict[str, Any]:
+def describe_slot(
+    index: int,
+    slot: Slot | None,
+    registry: RegistryView,
+    numbering: Callable[[int], int] = lambda index: index + 1,
+) -> dict[str, Any]:
     """One pad, in words.
 
-    Numbered from one, because that is how a person counts pads and how the configuration
-    is written, while everything inside the engine counts from zero.
+    The engine counts pads from zero in reading order and has no idea what is printed on
+    any of them — which numbering a person sees is a fact about the hardware, so it arrives
+    as `numbering` rather than being known here. The default is the position, which is what
+    every test in this package wants; the integration passes the number on the pad, so that
+    a slot read out of `mvave.get_pages` can be handed straight back to `mvave.press_slot`.
     """
     described: dict[str, Any] = {
-        "slot": index + 1,
+        "slot": numbering(index),
         "entity_id": None,
         "name": None,
         "tap": "nothing",
@@ -132,6 +140,7 @@ def describe_page(
     registry: RegistryView,
     profile: Profile,
     slots: Sequence[Slot | None] | None = None,
+    numbering: Callable[[int], int] = lambda index: index + 1,
 ) -> dict[str, Any]:
     """One page and everything on it, resolved as it stands right now."""
     resolved = resolve(page, registry, profile) if slots is None else slots
@@ -142,5 +151,7 @@ def describe_page(
         "source": str(page.source.kind),
         "area_id": page.source.key if page.source.kind is SourceKind.AREA else None,
         "parent_page_id": page.parent_id,
-        "slots": [describe_slot(index, slot, registry) for index, slot in enumerate(resolved)],
+        "slots": [
+            describe_slot(index, slot, registry, numbering) for index, slot in enumerate(resolved)
+        ],
     }

@@ -203,9 +203,9 @@ def _pads_of(data: Mapping[str, Any]) -> dict[int, PadConfig]:
     and nothing else. Any pad left unpinned fills itself from the page's source as before,
     and a page with no source at all is exactly these and nothing more.
 
-    One based on the way in, because that is how a person counts pads and how every other
-    interface here numbers them; zero based from here on, because that is how a frame is
-    indexed.
+    One based on the way in, counting positions in reading order rather than the numbers
+    printed on the pads — this is storage, and it is keyed on the one thing that cannot
+    change; zero based from here on, because that is how a frame is indexed.
     """
     pinned: dict[int, PadConfig] = {}
     for pad, entity_id in (data.get(CONF_PADS) or {}).items():

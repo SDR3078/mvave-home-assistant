@@ -16,6 +16,7 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.mvave import services as services_module
+from custom_components.mvave.devices.smc_pad import PAD_NUMBER_BY_READING_ORDER
 from custom_components.mvave.engine.model import EntityState, Page, Profile, Source, SourceKind
 from custom_components.mvave.engine.palette import BLUE, GREEN, ORANGE
 from custom_components.mvave.engine.surface import Surface, Trigger
@@ -128,28 +129,35 @@ def unbuilt(monkeypatch: pytest.MonkeyPatch) -> StubRunner:
 async def test_pressing_a_pad_presses_whatever_is_on_that_position(
     runner: StubRunner,
 ) -> None:
-    await _async_press_slot(FakeCall(slot=1, action="tap"))
-    # Pad one of the index is the first room, so the surface went there.
+    # PAD13 is the top-left pad — the number printed on it, which runs up the grid — and
+    # the top-left pad of the index is the first room, so the surface went there.
+    await _async_press_slot(FakeCall(slot=13, action="tap"))
     assert runner.surface is not None
     assert runner.surface.page.id == "kitchen"
 
 
-async def test_a_pressed_pad_is_counted_from_one(runner: StubRunner) -> None:
-    await _async_press_slot(FakeCall(slot=2, action="tap"))
+async def test_a_pad_is_named_by_the_number_printed_on_it(runner: StubRunner) -> None:
+    # Not by where it falls in reading order, which is the trap: 1 is a real pad and it is
+    # the *bottom* left, three rows away from where somebody counting from the top would
+    # put it. Taking the printed number is what makes an automation checkable by looking at
+    # the hardware, and this test is the one that fails if that is ever quietly inverted.
+    await _async_press_slot(FakeCall(slot=14, action="tap"))
     assert runner.surface is not None
-    # The second pad of the index is the second room, not the first.
-    assert runner.surface.page.id == "garage"
+    assert runner.surface.page.id == "garage"  # PAD14, second along the top row
+
+    await _async_press_slot(FakeCall(slot=1, action="tap"))
+    assert runner.surface.page.id == "garage"  # PAD1 is bottom left, and the index is empty there
 
 
 async def test_a_held_pad_does_what_holding_it_does(runner: StubRunner) -> None:
-    await _async_press_slot(FakeCall(slot=1, action="tap"))  # into the kitchen
-    await _async_press_slot(FakeCall(slot=1, action="hold"))  # hold the lamp
+    await _async_press_slot(FakeCall(slot=13, action="tap"))  # into the kitchen
+    await _async_press_slot(FakeCall(slot=13, action="hold"))  # hold the lamp
     assert runner.surface is not None
     assert runner.surface.focus == "light.counter"
 
 
 async def test_a_service_press_is_never_mistaken_for_a_finger(runner: StubRunner) -> None:
-    await _async_press_slot(FakeCall(slot=1, action="tap"))
+    await _async_press_slot(FakeCall(slot=13, action="tap"))
     emitted = runner.driven[0].emits[-1]
     assert emitted.data["trigger"] == str(Trigger.SERVICE)
 
@@ -203,6 +211,27 @@ async def test_it_describes_the_pads_in_the_colours_the_grid_uses(runner: StubRu
     assert page["colour"] == "green"
     assert page["slots"][0]["colour"] == "orange"  # a light that is on
     assert page["slots"][1]["colour"] == "white"  # a switch that is off
+
+
+async def test_a_slot_that_comes_back_can_be_pressed_without_translating_it(
+    runner: StubRunner,
+) -> None:
+    # The round trip, on one page. `get_pages` is how an automation finds out what is on a
+    # pad and `press_slot` is how it presses one, so the two have to count the same way or
+    # reading something at "slot 1" and pressing slot 1 reaches a different pad three rows
+    # away. Both use the number printed on the hardware, which runs up the grid.
+    response = await _async_get_pages(FakeCall(page="home"))
+    assert response is not None
+    (page,) = response[DEVICE_ID]["pages"]
+    assert [slot["slot"] for slot in page["slots"]] == list(PAD_NUMBER_BY_READING_ORDER)
+
+    # The first room sits on the top-left pad, and that pad says 13.
+    first = next(slot for slot in page["slots"] if slot["to_page"] == "kitchen")
+    assert first["slot"] == 13
+
+    await _async_press_slot(FakeCall(slot=first["slot"], action="tap"))
+    assert runner.surface is not None
+    assert runner.surface.page.id == "kitchen"
 
 
 async def test_asking_for_a_page_that_does_not_exist_lists_the_ones_that_do(

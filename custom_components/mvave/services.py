@@ -27,6 +27,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
 from .const import DOMAIN, LOGGER
+from .devices.smc_pad import PAD_NUMBER_BY_READING_ORDER
 from .engine.describe import describe_page
 from .engine.frames import PAD_COUNT
 
@@ -215,10 +216,13 @@ async def _async_press_slot(call: ServiceCall) -> None:
     """
     slot: int = call.data[ATTR_SLOT]
     held = call.data[ATTR_ACTION] == HOLD
+    # The number printed on the pad on the way in, because that is the one an automation's
+    # author can check by looking; zero based in reading order everywhere inside, because
+    # that is how a frame is indexed. The two disagree on all sixteen pads — PAD1 is the
+    # bottom-left — so this conversion is the whole of the difference.
+    index = PAD_NUMBER_BY_READING_ORDER.index(slot)
     for runner in _surfaces(call):
-        # One based on the way in, because that is how a person counts pads; zero based
-        # everywhere inside, because that is how a frame is indexed.
-        runner.drive(lambda surface, pad=slot - 1: surface.press(pad, held=held))
+        runner.drive(lambda surface, pad=index: surface.press(pad, held=held))
 
 
 GET_PAGES_SCHEMA = TARGET_SCHEMA.extend({vol.Optional(ATTR_PAGE): cv.string})
@@ -266,7 +270,18 @@ async def _async_get_pages(call: ServiceCall) -> ServiceResponse:
                 {"knob": knob, "entity_id": entity_id, "property": prop}
                 for knob, entity_id, prop in view.knobs
             ],
-            "pages": [describe_page(page, surface.registry, surface.profile) for page in pages],
+            "pages": [
+                # Reported by the number printed on the pad, the same one `press_slot`
+                # takes, so a slot read out of this response can be pressed without
+                # anybody having to know the two count in opposite directions.
+                describe_page(
+                    page,
+                    surface.registry,
+                    surface.profile,
+                    numbering=lambda index: PAD_NUMBER_BY_READING_ORDER[index],
+                )
+                for page in pages
+            ],
         }
     return response
 

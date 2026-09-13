@@ -42,9 +42,12 @@ CONF_COLOUR = "colour"
 CONF_AREA = "area"
 #: The label a page fills itself from, which is how a page spans rooms.
 CONF_LABEL = "label"
-#: Entities pinned to particular pads, keyed by the pad number **as a person counts them**:
-#: "1" is the top left and "16" the bottom right. The engine counts from zero, and that
-#: translation happens once, here at the edge.
+#: Entities pinned to particular pads, keyed by **position in reading order**: "1" is the
+#: top left and "16" the bottom right. Deliberately not the number printed on the pad,
+#: which is what the form's fields are labelled with and runs the other way up — keeping
+#: the stored key off the label is what let the labels be corrected on 2026-09-13 without
+#: migrating anybody's pages. The engine counts from zero, and that translation happens
+#: once, here at the edge.
 CONF_PADS = "pads"
 
 #: Which areas become pages, in the order they will appear on the index. Superseded by

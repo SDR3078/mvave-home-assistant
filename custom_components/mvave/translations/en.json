@@ -223,7 +223,7 @@
         },
         "slot": {
           "name": "Pad",
-          "description": "Which pad, counted from one, reading order: 1 is the top left and 16 is the bottom right."
+          "description": "Which pad, by the number printed on it: 1 is the bottom left and 16 is the top right, so they run up the grid. The top-left pad is 13."
         },
         "action": {
           "name": "Press or hold",

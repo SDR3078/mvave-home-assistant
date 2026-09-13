@@ -123,13 +123,17 @@ async def test_a_room_fills_the_pad_fields_so_they_can_be_seen_and_changed(
 ) -> None:
     # The fields arrive holding what the page will actually show. Sixteen empty boxes look
     # the same whether a room supplies four things or nothing does.
+    #
+    # A room fills from the top left, and the top-left pad has 13 printed on it, so the
+    # first four things in the room land on 13 to 16 and pad 1 — bottom left — stays empty.
     form = await add_page(hass, entry, area=bedroom)
     filled = suggested(form)
-    assert filled["pad_1"] == "light.bed_light"
-    assert filled["pad_2"] == "cover.hall_window"
-    assert filled["pad_3"] == "climate.ecobee"
-    assert filled["pad_4"] == "fan.ceiling_fan"
-    assert filled.get("pad_5") is None
+    assert filled["pad_13"] == "light.bed_light"
+    assert filled["pad_14"] == "cover.hall_window"
+    assert filled["pad_15"] == "climate.ecobee"
+    assert filled["pad_16"] == "fan.ceiling_fan"
+    assert filled.get("pad_9") is None  # the next pad down, and the fifth to fill
+    assert filled.get("pad_1") is None  # three rows below that, and the last
 
 
 async def test_saving_a_room_page_untouched_pins_nothing(
@@ -149,8 +153,10 @@ async def test_changing_one_pad_pins_that_one_and_leaves_the_rest_following(
     hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
 ) -> None:
     form = await add_page(hass, entry, area=bedroom)
-    answers = {**suggested(form), "pad_2": "light.bed_light"}
+    answers = {**suggested(form), "pad_14": "light.bed_light"}
     result = await hass.config_entries.subentries.async_configure(form["flow_id"], answers)
+    # Stored by position rather than by the printed number — PAD14 is the second pad in
+    # reading order — so the label on the field could change without migrating anything.
     assert result["data"][CONF_PADS] == {"2": "light.bed_light"}
 
 
@@ -196,14 +202,14 @@ async def test_editing_a_page_shows_the_pins_it_already_has(
     # the two steps had no pads key, so the pad screen resolved the page the room supplies
     # on its own: every pin was missing from the one screen that edits them, and the
     # comparison deciding what to keep was made against a page nobody had.
-    await add_page(hass, entry, area=bedroom, pads={"pad_2": "light.bed_light"})
+    await add_page(hass, entry, area=bedroom, pads={"pad_14": "light.bed_light"})
     assert dict(next(iter(entry.subentries.values())).data[CONF_PADS]) == {"2": "light.bed_light"}
 
     filled = suggested(await reconfigure(hass, entry))
-    assert filled["pad_2"] == "light.bed_light"  # the pin, not what the room would put here
+    assert filled["pad_14"] == "light.bed_light"  # the pin, not what the room would put here
     # And the room's own contents fill in around it, never placed twice.
-    assert filled["pad_1"] == "cover.hall_window"
-    assert "light.bed_light" not in [filled[key] for key in filled if key != "pad_2"]
+    assert filled["pad_13"] == "cover.hall_window"
+    assert "light.bed_light" not in [filled[key] for key in filled if key != "pad_14"]
 
 
 async def test_editing_a_page_and_changing_nothing_keeps_its_pins(
@@ -211,7 +217,7 @@ async def test_editing_a_page_and_changing_nothing_keeps_its_pins(
 ) -> None:
     # A pin is a statement, so it survives being looked at even where it matches what the
     # room would have supplied anyway. Only an emptied field gives one up.
-    await add_page(hass, entry, area=bedroom, pads={"pad_2": "light.bed_light"})
+    await add_page(hass, entry, area=bedroom, pads={"pad_14": "light.bed_light"})
     form = await reconfigure(hass, entry)
     await hass.config_entries.subentries.async_configure(form["flow_id"], suggested(form))
     assert dict(next(iter(entry.subentries.values())).data[CONF_PADS]) == {"2": "light.bed_light"}

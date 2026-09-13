@@ -6,8 +6,10 @@ and some attributes; whether that came from a live state machine or from a dicti
 test is not this package's business.
 
 Slots are numbered in **reading order, zero based**, top-left to bottom-right, the same as
-a frame. Configuration written by a person is one based, because "pad 1" is the top left;
-that translation belongs to the config flow, not here.
+a frame. Stored configuration is the same order, one based. Neither is the number printed
+on the pad, which runs the other way up and is a fact about one piece of hardware — every
+translation into it happens outside this package, which is why nothing here imports
+``devices``.
 """
 
 from __future__ import annotations

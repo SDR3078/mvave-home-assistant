@@ -147,12 +147,13 @@ def test_an_event_fired_before_the_device_exists_still_goes_out(
         ({"type": "focus_set", "entity_id": "light.a"}, "pointed the knobs at light.a"),
         ({"type": "focus_cleared", "entity_id": "light.a"}, "let go of the knobs"),
         (
+            # Frame index 4 is the first pad of the second row, which has 9 printed on it.
             {"type": "pad_pressed", "pad": 4, "entity_id": "light.a", "trigger": "pad"},
-            "pressed pad 5 (light.a) from a pad",
+            "pressed pad 9 (light.a) from a pad",
         ),
         (
             {"type": "pad_held", "pad": 0, "entity_id": None, "trigger": "service"},
-            "held pad 1 from an automation",
+            "held pad 13 from an automation",
         ),
         (
             {"type": "knob_turned", "knob": 1, "property": "brightness", "entity_id": "light.a"},
@@ -166,10 +167,15 @@ def test_every_event_reads_as_a_sentence(data: dict[str, Any], expected: str) ->
     assert _message(data) == expected
 
 
-def test_pads_are_numbered_from_one_in_the_timeline() -> None:
-    # Zero based is a frame index. Nobody has ever called the top left pad "pad 0".
-    assert "pad 1" in _message({"type": "pad_pressed", "pad": 0})
-    assert "pad 16" in _message({"type": "pad_pressed", "pad": 15})
+def test_pads_are_named_in_the_timeline_by_the_number_printed_on_them() -> None:
+    # The event carries a frame index, which is zero based and in reading order; nobody has
+    # ever called the top-left pad "pad 0", and on this hardware nobody can call it "pad 1"
+    # either, because 1 is printed on the pad three rows below it.
+    assert "pad 13" in _message({"type": "pad_pressed", "pad": 0})  # top left
+    assert "pad 4" in _message({"type": "pad_pressed", "pad": 15})  # bottom right
+    # And an index off the end of the grid does not put a traceback in somebody's timeline.
+    assert "a pad" in _message({"type": "pad_pressed", "pad": 99})
+    assert "a pad" in _message({"type": "pad_pressed", "pad": -1})
 
 
 def test_an_event_nobody_taught_it_still_produces_a_line() -> None:

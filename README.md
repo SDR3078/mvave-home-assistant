@@ -198,14 +198,15 @@ quietly starts closing a blind is the worst kind of bug, and no naming scheme pr
 mvave.navigate:    {device_id, page}                      # page id, not title
 mvave.focus:       {device_id, entity_id}
 mvave.home:        {device_id}
-mvave.press_slot:  {device_id, slot: 1-16, action: tap|hold}
+mvave.press_slot:  {device_id, slot: 1-16, action: tap|hold}   # the number on the pad
 mvave.get_pages:   {device_id, page?}                     # returns a response
 mvave.send_raw:    {device_id, data}                      # raw MIDI, escape hatch
 ```
 
-`mvave.get_pages` is the answer to the problem this device creates by design: **nothing is
-written on it**, and a room page fills itself from the live registry, so the running
-integration is the only thing that can say what a pad would do. It returns every page and
+`mvave.get_pages` is the answer to the problem this device creates by design: **nothing on
+it says what a pad does** — the pads carry their numbers and nothing else — and a room page
+fills itself from the live registry, so the running integration is the only thing that can
+say what a pad would do. It returns every page and
 every pad, resolved, in the same vocabulary the LEDs use:
 
 ```yaml
@@ -254,7 +255,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 455 tests
+pytest tests       # 456 tests
 ruff check . && ruff format --check . && mypy
 ```
 
