@@ -608,8 +608,17 @@ class SurfaceRunner:
 
     @callback
     def _flush_knobs(self, _now: Any = None) -> None:
-        """Make the one call the whole turn asked for."""
-        self._timers.pop("knob", None)
+        """Make the one call the whole turn asked for.
+
+        This is the one timer callback that is also called *directly*, at the throttle
+        boundary, which is why it takes no argument. Popping without cancelling therefore
+        left a live timer behind every 0.15 s of a sustained turn; an orphan firing later
+        would clear the key that `_on_state` reads as "a turn is in flight", and could
+        outlive an unload and call a service for a device that is gone.
+        """
+        cancel = self._timers.pop("knob", None)
+        if cancel is not None:
+            cancel()
         moved, self._steps = self._steps, {}
         outcome, self._pending_call = self._pending_call, None
         if outcome is None:
@@ -652,6 +661,13 @@ class SurfaceRunner:
         computed, which made the guard in `_play` unreachable: `_playing` was always None
         by the time it was asked. The whole of that protection was dead code.
         """
+        if outcome == Outcome():
+            # It asked for nothing, so there is nothing for it to show and no reason to
+            # stop what is. Letting go of the back button is the case: it ends the switcher
+            # mode, which is already over, and its only observable effect was killing the
+            # curtain that same gesture had just started — a few frames into 1.575 s, every
+            # time, because a finger comes off *back* not long after tapping the room.
+            return
         if outcome.reaction and self._playing is not None and self._reacting:
             return
         self._cancel_animation()
@@ -872,6 +888,12 @@ class SurfaceRunner:
                 for pad, value in changes.items()
                 if pad in self._notes
             ]
+            # Cleared *before* the write, not after it. A cancellation is delivered at the
+            # resume point, so a write that has already reached the device can still skip
+            # the line that records it — and the next diff against a cache claiming the old
+            # frame then finds no changes and sends nothing, leaving a pad dark until
+            # something else happens to move it. `_cancel_animation` runs on every input.
+            self._shown = None
             try:
                 await self.coordinator.async_send_many(messages)
             except (BleakError, EOFError, TimeoutError) as err:
@@ -879,7 +901,6 @@ class SurfaceRunner:
                 # What must not happen is swallowing everything: a mistake in the note map
                 # would then look exactly like a dark grid with nothing wrong.
                 LOGGER.debug("%s: frame not sent: %r", self.coordinator.address, err)
-                self._shown = None
                 return
             self._shown = frame
 
@@ -897,11 +918,13 @@ class SurfaceRunner:
             ]
             if not messages:
                 return
+            # Same reasoning as the frame cache above: cleared before the write, so a
+            # cancellation cannot leave this claiming a transport light it did not set.
+            self._lit.clear()
             try:
                 await self.coordinator.async_send_many(messages)
             except (BleakError, EOFError, TimeoutError) as err:
                 LOGGER.debug("%s: buttons not sent: %r", self.coordinator.address, err)
-                self._lit.clear()
                 return
             self._lit.update(wanted)
 

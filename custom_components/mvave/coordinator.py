@@ -254,8 +254,14 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         """Put what the device said about itself where Home Assistant will show it.
 
         The entities carry this in their ``DeviceInfo`` too, but they were created before
-        anything had connected, when a MAC address was all there was. The registry keeps
-        what it was told first, so it has to be told again.
+        anything had connected, when a MAC address was all there was — so this is the first
+        moment there is anything true to say.
+
+        This used to explain itself as "the registry keeps what it was told first, so it has
+        to be told again", which is backwards: it keeps what it was told *last*, and writes
+        anything that is not UNDEFINED. That is why `entity.py` now leaves an unknown field
+        out of its ``DeviceInfo`` rather than passing None — otherwise every restart wiped
+        what this had put there, until the pad next connected.
 
         Only the *default* name is touched. Whatever the owner renamed the device to lives
         separately as ``name_by_user`` and outranks this, so a rename is never undone.
@@ -319,6 +325,12 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         perfectly good source of MIDI, and dropping the link over it would cost more than
         the LEDs are worth.
         """
+        # Withdrawn before the attempt. It was assigned only on success and cleared
+        # nowhere, so a reconnect whose arming failed left the *previous* session's note
+        # map standing — and the runner, seeing a non-None arming, built a surface on it
+        # and reported itself ready while the device was unarmed, its pads dark, its notes
+        # moved and its encoders back in absolute mode.
+        self.arming = None
         session = VendorSession(client, self.address, stopping=lambda: self._shutdown)
         if not session.available:
             LOGGER.debug(
@@ -441,10 +453,6 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         it would keep redrawing thirty times a second against a dead link.
         """
         self._shutdown = True
-        # Before closing rather than after: a timer that fires between the two would find
-        # the client gone, which is harmless, but a timer that outlives the coordinator
-        # entirely is a wake-up Home Assistant keeps honouring after the entry is unloaded.
-        self._stop_asking_about_the_battery()
         try:
             await self._async_close()
         finally:
@@ -455,6 +463,15 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         async with self._connect_lock:
             client = self._client
             self._client = None
+            # Cancelled here, inside the lock, rather than before `async_shutdown` takes it.
+            #
+            # `_async_connect` is a hass-level background task, so an unload does not cancel
+            # it. Cancelling first meant an unload that arrived mid-connect killed a timer
+            # that did not exist yet, waited on this lock, and let the connect re-create one
+            # on its way out — a wake-up every thirty minutes for ever, holding a dead
+            # coordinator, one more on every reload. `_handle_disconnect` cannot save it
+            # either: it returns early on the client this line has just cleared.
+            self._stop_asking_about_the_battery()
             if client is None:
                 return
             # Each step gets its own handler so a failure in one cannot strand the other.

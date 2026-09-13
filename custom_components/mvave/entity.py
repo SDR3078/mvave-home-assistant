@@ -15,6 +15,11 @@ if TYPE_CHECKING:
     from .runner import SurfaceRunner, SurfaceView
 
 
+def _known(**fields: str | None) -> dict[str, str]:
+    """Only the fields that have an answer, so the rest are absent rather than null."""
+    return {key: value for key, value in fields.items() if value}
+
+
 class MvaveEntity(Entity):
     """An entity belonging to one BLE MIDI device."""
 
@@ -35,9 +40,18 @@ class MvaveEntity(Entity):
             # that. Entities exist before anything has connected, so this is the optimistic
             # half; `async_describe_device` is what corrects the registry once the device
             # has actually said who it is.
-            name=coordinator.device_name,
-            manufacturer=coordinator.manufacturer,
-            model=coordinator.model,
+            # Only what is actually known. `DeviceInfo` is a TypedDict, so passing
+            # `manufacturer=None` is a present key with a null value, and the device
+            # registry writes anything that is not UNDEFINED — so every restart, when the
+            # platforms are set up before anything has connected, overwrote the stored
+            # manufacturer, model and name with nothing. Proved against the real registry.
+            # The comment in `_describe_device` saying the registry "keeps what it was told
+            # first" is the other way round: it keeps what it was told last.
+            **_known(
+                name=coordinator.device_name,
+                manufacturer=coordinator.manufacturer,
+                model=coordinator.model,
+            ),
         )
 
     @property

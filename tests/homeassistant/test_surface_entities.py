@@ -252,3 +252,24 @@ def test_the_battery_says_nothing_rather_than_zero_before_it_has_been_asked() ->
     coordinator = StubCoordinator()
     coordinator.battery = None
     assert MvaveBatterySensor(coordinator).native_value is None
+
+
+def test_a_device_field_nobody_knows_yet_is_left_out_rather_than_sent_as_nothing() -> None:
+    # DeviceInfo is a TypedDict, so `manufacturer=None` is a present key with a null value,
+    # and the device registry writes anything that is not UNDEFINED. Entities are built
+    # before anything has connected, so passing None wiped the manufacturer, model and name
+    # a previous session had learned — on every restart, until the pad next connected, which
+    # for a battery pad that is switched off may be never.
+    entity = MvaveBatterySensor(StubCoordinator())  # type: ignore[arg-type]
+    info = entity.device_info
+    assert info is not None
+    for field in ("manufacturer", "model", "name"):
+        assert info.get(field)  # present, because this stub knows them
+
+    nothing_known = StubCoordinator()
+    nothing_known.manufacturer = None  # type: ignore[assignment]
+    nothing_known.model = None  # type: ignore[assignment]
+    blank = MvaveBatterySensor(nothing_known).device_info  # type: ignore[arg-type]
+    assert blank is not None
+    assert "manufacturer" not in blank
+    assert "model" not in blank
