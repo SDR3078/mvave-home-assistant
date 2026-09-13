@@ -1007,9 +1007,7 @@ def test_a_refusal_says_it_is_a_reaction_so_it_cannot_restart_itself() -> None:
     # pressing a dead pad twice is exactly what somebody does when the first press looked
     # like it did nothing. The engine cannot enforce that, having no clock, so it says which
     # animations are reactions and the runner declines to restart one with another.
-    registry = FakeRegistry(
-        areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"}
-    )
+    registry = FakeRegistry(areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"})
     view = Surface(PROFILE, registry)
     going_in = view.handle(Press(0))
     # A page change is not a reaction: pressing a second room mid-curtain means it.

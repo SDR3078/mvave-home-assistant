@@ -164,8 +164,12 @@ class HomeAssistantSink:
         its id never changes afterwards.
         """
         if self._device_id is None:
-            device = dr.async_get(self.hass).async_get_device(
-                identifiers={(DOMAIN, format_mac(self.address))}
+            # Scoped to this entry, like the coordinator's own lookup. An identifier is
+            # unique only *within* a config entry — this pad is very likely also known to
+            # the ESPHome proxy relaying it — so the unscoped call has to guess between
+            # them, which is why it is deprecated.
+            device = dr.async_get(self.hass).async_get_device_by_identifier(
+                (DOMAIN, format_mac(self.address)), self.entry.entry_id
             )
             if device is not None:
                 self._device_id = device.id

@@ -17,10 +17,12 @@ from homeassistant.components.logbook import LOGBOOK_ENTRY_MESSAGE, LOGBOOK_ENTR
 from homeassistant.const import ATTR_DEVICE_ID
 
 from custom_components.mvave import registry as registry_module
+from custom_components.mvave.const import DOMAIN
 from custom_components.mvave.logbook import FALLBACK_NAME, _message
 from custom_components.mvave.registry import HomeAssistantSink
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
+ENTRY_ID = "01JZZZCONFIGENTRY"
 DEVICE_ID = "device-1234"
 
 
@@ -44,15 +46,24 @@ class FakeDevice:
         self.id = device_id
 
 
+class FakeEntry:
+    def __init__(self, entry_id: str) -> None:
+        self.entry_id = entry_id
+
+
 class FakeDeviceRegistry:
-    """A registry that finds one device, and counts how often it was asked."""
+    """A registry that finds one device, counts the asking, and records how it was asked."""
 
     def __init__(self, device: FakeDevice | None) -> None:
         self.device = device
         self.lookups = 0
+        self.asked: tuple[tuple[str, str], str] | None = None
 
-    def async_get_device(self, identifiers: set[tuple[str, str]]) -> FakeDevice | None:
+    def async_get_device_by_identifier(
+        self, identifier: tuple[str, str], config_entry_id: str
+    ) -> FakeDevice | None:
         self.lookups += 1
+        self.asked = (identifier, config_entry_id)
         return self.device
 
 
@@ -61,7 +72,7 @@ def sink(monkeypatch: pytest.MonkeyPatch) -> HomeAssistantSink:
     """A sink whose device registry holds exactly one device."""
     devices = FakeDeviceRegistry(FakeDevice(DEVICE_ID))
     monkeypatch.setattr(registry_module.dr, "async_get", lambda hass: devices)
-    made = HomeAssistantSink(FakeHass(), object(), "mvave_event", ADDRESS)  # type: ignore[arg-type]
+    made = HomeAssistantSink(FakeHass(), FakeEntry(ENTRY_ID), "mvave_event", ADDRESS)  # type: ignore[arg-type]
     made.devices = devices  # type: ignore[attr-defined]
     return made
 
@@ -78,6 +89,19 @@ def test_an_event_about_a_device_says_which_device(sink: HomeAssistantSink) -> N
     assert data["page_id"] == "kitchen"
 
 
+def test_the_device_is_asked_for_within_this_entry_and_not_across_all_of_them(
+    sink: HomeAssistantSink,
+) -> None:
+    # An identifier is unique only inside a config entry — this pad is very likely also
+    # known to the ESPHome proxy relaying it — so the unscoped lookup has to guess between
+    # them, and Home Assistant deprecated it for exactly that. Found in the log a day after
+    # the same call was fixed in the coordinator and this second one was missed, because
+    # what got fixed was the file the warning named rather than everywhere it was called.
+    sink.fire("page_entered", {"page_id": "kitchen"})
+    asked = sink.devices.asked  # type: ignore[attr-defined]
+    assert asked == ((DOMAIN, ADDRESS.lower()), ENTRY_ID)
+
+
 def test_the_device_is_looked_up_once_and_kept(sink: HomeAssistantSink) -> None:
     # The device is registered when the first entity is added, which is after the surface
     # starts, so this cannot be resolved in the constructor. Its id never changes
@@ -91,7 +115,7 @@ def test_an_event_fired_before_the_device_exists_still_goes_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(registry_module.dr, "async_get", lambda hass: FakeDeviceRegistry(None))
-    made = HomeAssistantSink(FakeHass(), object(), "mvave_event", ADDRESS)  # type: ignore[arg-type]
+    made = HomeAssistantSink(FakeHass(), FakeEntry(ENTRY_ID), "mvave_event", ADDRESS)  # type: ignore[arg-type]
     made.fire("pad_pressed", {"pad": 0})
     _, data = made.hass.bus.fired[0]  # type: ignore[attr-defined]
     # Better a nameless event than a swallowed one: the surface works before anything is
