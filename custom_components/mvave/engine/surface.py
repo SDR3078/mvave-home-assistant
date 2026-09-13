@@ -991,6 +991,11 @@ class Surface:
         """
         before = self.rendering().frame
         departed = self.page
+        # Read before the move, not after. `departed` was already captured here, but the
+        # depth that goes out with it used to be `self.depth + 1` from *after* the stack
+        # had changed — which is the right answer only for a single step back, and that is
+        # the only move anybody had checked. Leaving the index announced it at depth 2.
+        departed_depth = self.depth
         move()
         # Focus does not follow you between pages. A lamp singled out in the kitchen has
         # no business still holding the knobs once you are looking at the bedroom, and
@@ -1004,7 +1009,7 @@ class Surface:
         announced = (
             Emit(
                 EventType.PAGE_EXITED,
-                {**self._describe(departed), "depth": self.depth + 1, "trigger": str(trigger)},
+                {**self._describe(departed), "depth": departed_depth, "trigger": str(trigger)},
             ),
             Emit(
                 EventType.PAGE_ENTERED,

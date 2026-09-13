@@ -31,6 +31,9 @@ You get a **grid of pages**. One page per room, plus an index listing them.
 - **Hold left** and the top row becomes your rooms, each in its own colour, with the rest
   of the grid dark — press one to go straight there without passing home. Let go without
   pressing and nothing happened.
+- Rooms you switch between build up **behind the back button**: hop through three and back
+  retraces them one at a time. That is deliberate, and it is what **stop** is for — one
+  press to the index from wherever you are, however far you have wandered.
 - Leave it alone inside a room for thirty seconds and it returns to the index the same way
   a press of **back** would have, curtain and all. The event it fires says `idle` rather
   than `button`, so an automation can still tell nobody was standing there.
@@ -261,7 +264,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 459 tests
+pytest tests       # 460 tests
 ruff check . && ruff format --check . && mypy
 ```
 

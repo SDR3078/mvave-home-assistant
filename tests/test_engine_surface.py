@@ -838,6 +838,42 @@ def test_going_into_a_room_announces_leaving_and_arriving_separately() -> None:
     assert events["page_entered"]["depth"] == 1
 
 
+def test_a_page_event_says_which_depth_each_of_the_two_pages_was_at() -> None:
+    # `page_exited` announces the depth of the page you left, `page_entered` the depth of
+    # the one you arrived at. Obvious, and wrong until 2026-09-13: the departed page was
+    # captured before the move and its depth read after it, as `self.depth + 1`. That is
+    # the right answer for exactly one kind of move — a single step back — which is the
+    # only kind anybody had checked, so leaving the index announced it at depth 2.
+    #
+    # The stack is a history rather than a tree: every page's parent is the root, and the
+    # switcher deliberately pushes, so back walks the rooms you visited and the stop button
+    # is the one press to the index. Depth is therefore how far you have wandered, and
+    # these are the four ways it changes.
+    view = surface()
+
+    going_in = emitted(view.handle(Press(0)))  # home -> living
+    assert going_in["page_exited"]["depth"] == 0
+    assert going_in["page_entered"]["depth"] == 1
+
+    sideways = emitted(  # living -> office, without passing home
+        (view.handle(ButtonPress(BACK_BUTTON, held=True)), view.handle(Press(2)))[1]
+    )
+    assert sideways["page_exited"]["depth"] == 1
+    assert sideways["page_entered"]["depth"] == 2
+    assert view.stack == ["home", "living", "office"]
+
+    coming_back = emitted(view.handle(ButtonPress(BACK_BUTTON)))  # office -> living
+    assert coming_back["page_exited"]["depth"] == 2
+    assert coming_back["page_entered"]["depth"] == 1
+
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(Press(1))  # wander again, so home is a jump rather than a step
+    assert view.depth == 2
+    straight_home = emitted(view.handle(ButtonPress(HOME_BUTTON)))
+    assert straight_home["page_exited"]["depth"] == 2
+    assert straight_home["page_entered"]["depth"] == 0
+
+
 def test_a_page_event_carries_enough_to_act_on_without_asking_anything_else() -> None:
     events = emitted(surface().handle(Press(0)))
     entered = events["page_entered"]
