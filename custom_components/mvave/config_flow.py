@@ -320,6 +320,12 @@ class PageSubentryFlow(ConfigSubentryFlow):
                     CONF_COLOUR: CHOOSABLE[user_input[CONF_COLOUR]],
                     CONF_AREA: area,
                     CONF_LABEL: label,
+                    # Carried through, so the next step resolves the page somebody actually
+                    # has rather than the one its room would supply on its own. Without it
+                    # the pad fields showed the room's own contents and every existing pin
+                    # was missing from the screen that exists to edit them — and the "keep
+                    # only what changed" comparison was against a page nobody was looking at.
+                    CONF_PADS: (existing.data.get(CONF_PADS) or {}) if existing else {},
                 }
                 self._title = user_input[CONF_NAME]
                 return await self.async_step_pads()

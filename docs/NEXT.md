@@ -368,6 +368,17 @@ implementation plan and this file is the running to-do list.
   both at once and is the cheapest accessibility work available here. Nothing needs it yet,
   and it wants deciding at the grid: with motion off, a focused pad and a commanded one
   have to say what they are some other way, or stop saying it.
+- **Nothing tests the config flow.** `pytest-homeassistant-custom-component` is installed and
+  its `hass` fixture is available, but no test uses it, so every flow is covered only by the
+  pure helpers underneath it. That is how a real defect shipped on 2026-09-13: the pads step
+  was handed page data with no `pads` key, so it resolved the page a room would supply on
+  its own — existing pins were missing from the very screen that edits them, and the
+  "keep only what changed" comparison was made against a page nobody had. The suite went
+  407 to 407 across the fix.
+
+  Worth the setup, because the flows are where the fiddly stateful code now lives: two
+  steps, an in-flight `self._page` carried between them, and add versus reconfigure sharing
+  one form.
 - **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
   applies when an entity is first registered and never again, which is correct — Home
   Assistant does not overrule a choice somebody may have made — but it means this only
