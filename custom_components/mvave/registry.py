@@ -29,9 +29,10 @@ from .const import (
     SUBENTRY_PAGE,
 )
 from .engine import IDENTITY, EntityState, PadConfig, Page, Profile, Source, SourceKind
+from .engine.describe import describe_slot
 from .engine.frames import PAD_COUNT
 from .engine.palette import BLUE, DOMAIN_COLOURS
-from .engine.resolve import default_actions
+from .engine.resolve import default_actions, resolve
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -215,6 +216,34 @@ def _pads_of(data: Mapping[str, Any]) -> dict[int, PadConfig]:
         if 0 <= index < PAD_COUNT:
             pinned[index] = PadConfig(*default_actions(entity_id))
     return pinned
+
+
+def pads_now(hass: HomeAssistant, data: Mapping[str, Any]) -> list[str | None]:
+    """What a page made of this configuration would put on each of the sixteen pads.
+
+    For the configuration screen, which otherwise shows sixteen empty fields and no hint
+    of what is already there — a page that fills itself from a room looks identical to an
+    empty one. Names, in reading order, ``None`` where a pad is dark.
+
+    Deliberately *shown* rather than pre-filled into the fields. Every non-empty field on
+    that screen is saved as a **pin**, so pre-filling what the room supplies would mean
+    that merely opening the screen and pressing submit froze the page: it would stop
+    following the room, and the next lamp added there would never appear on it.
+    """
+    page = Page(
+        id="preview",
+        title="",
+        colour=BLUE,
+        source=_source_of(data),
+        pads=_pads_of(data),
+    )
+    registry = HomeAssistantRegistry(hass)
+    slots = resolve(page, registry, Profile(pages={}, root_id="preview"))
+    named: list[str | None] = []
+    for index, slot in enumerate(slots):
+        described = describe_slot(index, slot, registry)
+        named.append(described["name"] or described["entity_id"])
+    return named
 
 
 def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Profile:

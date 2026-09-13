@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
 import voluptuous as vol
 from homeassistant.components.bluetooth import (
@@ -48,6 +48,7 @@ from .const import (
 from .engine.frames import PAD_COUNT
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
 from .engine.resolve import PINNABLE
+from .registry import pads_now
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -175,6 +176,19 @@ def _pad_field(pad: int) -> str:
     return f"pad_{pad}"
 
 
+def _drawn(names: Sequence[str | None]) -> str:
+    """The sixteen pads laid out as they are, with whatever is on each.
+
+    A form is a column and the thing it describes is a square, so the square gets drawn.
+    Without it a page that fills itself from a room is sixteen empty fields, identical to
+    a page with nothing on it at all — which is what somebody said, looking at one.
+    """
+    cells = [f"{pad:>2} {(name or '—')[:13]:<13}" for pad, name in enumerate(names, start=1)]
+    return "\n".join(
+        "".join(cells[row * 4 : row * 4 + 4]).rstrip() for row in range(PAD_COUNT // 4)
+    )
+
+
 def _pad_selector() -> EntitySelector:
     """What a pad may be pointed at.
 
@@ -275,7 +289,11 @@ class PageSubentryFlow(ConfigSubentryFlow):
             ): _pad_selector()
             for pad in range(1, PAD_COUNT + 1)
         }
-        return self.async_show_form(step_id="pads", data_schema=vol.Schema(fields))
+        return self.async_show_form(
+            step_id="pads",
+            data_schema=vol.Schema(fields),
+            description_placeholders={"grid": _drawn(pads_now(self.hass, self._page))},
+        )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
