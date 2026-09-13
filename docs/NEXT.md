@@ -282,6 +282,25 @@ implementation plan and this file is the running to-do list.
 
   Scripts are deliberately untouched: a script is not stateless, it reports running and
   then idle, so it already blinks and settles like a lamp.
+- **The config flow is tested through the flow, not around it.** There were no flow tests
+  at all, and two defects reached the device on 2026-09-13 with the suite green because of
+  it: a deprecated device lookup that had a second call site nobody grepped for, and a pads
+  step handed page data with no `pads` key — so it showed the contents a room supplies on
+  its own, hid every pin from the one screen that edits them, and compared against a page
+  nobody had. The count went 407 to 407 across that fix, which was the argument.
+
+  `pytest-homeassistant-custom-component` registers itself through an entry point, so it
+  loads where it is installed and nowhere else — the pure jobs install no Home Assistant and
+  run with `--ignore=tests/homeassistant`, so none of this reaches them. Seven tests drive
+  `hass.config_entries.subentries` for real: adding a page, a room filling the pad fields,
+  saving one untouched pinning nothing, changing one pad pinning only that one, the
+  two-sources error, and the two that cover the defect — that editing a page shows the pins
+  it has, and that looking at one and saving keeps them.
+
+  **The two regression tests were checked by putting the bug back**, which is the only way
+  to know a regression test does anything. Both failed; both pass with it fixed.
+
+  Still uncovered: the discovery and bluetooth config flow, the options flow, and migration.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
@@ -368,17 +387,6 @@ implementation plan and this file is the running to-do list.
   both at once and is the cheapest accessibility work available here. Nothing needs it yet,
   and it wants deciding at the grid: with motion off, a focused pad and a commanded one
   have to say what they are some other way, or stop saying it.
-- **Nothing tests the config flow.** `pytest-homeassistant-custom-component` is installed and
-  its `hass` fixture is available, but no test uses it, so every flow is covered only by the
-  pure helpers underneath it. That is how a real defect shipped on 2026-09-13: the pads step
-  was handed page data with no `pads` key, so it resolved the page a room would supply on
-  its own — existing pins were missing from the very screen that edits them, and the
-  "keep only what changed" comparison was made against a page nobody had. The suite went
-  407 to 407 across the fix.
-
-  Worth the setup, because the flows are where the fiddly stateful code now lives: two
-  steps, an in-flight `self._page` carried between them, and add versus reconfigure sharing
-  one form.
 - **The knob entities stay enabled on an existing install.** `entity_registry_enabled_default`
   applies when an entity is first registered and never again, which is correct — Home
   Assistant does not overrule a choice somebody may have made — but it means this only
