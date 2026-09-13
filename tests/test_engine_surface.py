@@ -289,19 +289,27 @@ def test_navigating_to_a_page_that_does_not_exist_does_nothing() -> None:
     assert view.depth == 0
 
 
-def test_the_idle_timeout_goes_home_without_making_a_fuss() -> None:
-    view = surface()
-    view.handle(Press(0))
-    outcome = view.handle(Idle())
-    assert view.page.id == "home"
-    # No animation at all, which is what both documents promise and what `_idle` has always
-    # asked for: nothing happened, so nothing may look like it did. The flag saying so was
-    # unreachable until 2026-09-13 — the branch that draws a curtain returned before it was
-    # ever read — so a page that timed out played the identical 1.575 s collapse as a
-    # deliberate press, and the one thing separating "you left" from "somebody left" was
-    # gone.
-    assert outcome.animation == ()
-    assert outcome.buttons is ButtonTiming.START
+def test_the_idle_timeout_leaves_exactly_the_way_a_finger_would_have() -> None:
+    # Frame for frame a back press, which is the point. Both documents used to promise a
+    # quieter exit and the code used to ask for one — `animate=False`, never read, because
+    # the branch that draws a curtain returned first. Made real on 2026-09-13 and judged at
+    # the grid the same afternoon: "for this i actually want the animation back like
+    # earlier". So the flag went instead, and the documents were corrected to match.
+    #
+    # What still separates the two is the event, not the light — see
+    # test_what_moved_you_is_part_of_the_event. A room across the house should not
+    # have to be watched to know whether anybody was standing at the grid.
+    timed_out = surface()
+    timed_out.handle(Press(0))
+    outcome = timed_out.handle(Idle())
+    assert timed_out.page.id == "home"
+
+    pressed = surface()
+    pressed.handle(Press(0))
+    by_hand = pressed.handle(ButtonPress(BACK_BUTTON))
+    assert outcome.animation == by_hand.animation
+    assert outcome.animation  # and it is a curtain, not two empty tuples agreeing
+    assert outcome.buttons is by_hand.buttons is ButtonTiming.START
 
 
 def test_going_idle_at_home_is_not_an_event() -> None:

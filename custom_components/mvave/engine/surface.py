@@ -748,10 +748,16 @@ class Surface:
         return NOTHING_HAPPENED
 
     def _idle(self) -> Outcome:
-        """Give up and go home, quietly.
+        """Give up and go home.
 
-        No rings and no button flash. Nothing happened, so it must not look like it did;
-        an animation here would pull somebody's eye across the room for no reason.
+        The same way out a finger would have taken, which is what it looked like in
+        practice: `animate=False` was asked for here and never read, because the branch
+        that draws a curtain returned first. Made real on 2026-09-13 and judged at the
+        grid the same afternoon — the owner wanted the curtain back, so the flag is gone
+        rather than honoured, and both documents have been corrected to say so.
+
+        What still marks it out is the event, which carries `idle` rather than a finger,
+        so an automation can tell the difference even though the grid cannot.
         """
         if self.depth == 0:
             return NOTHING_HAPPENED
@@ -760,7 +766,6 @@ class Surface:
             lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]),
             trigger=Trigger.IDLE,
             leaving=leaving,
-            animate=False,
         )
 
     # ---------------------------------------------------------------- actions
@@ -977,7 +982,6 @@ class Surface:
         origin: int | None = None,
         entering: str | None = None,
         leaving: str | None = None,
-        animate: bool = True,
     ) -> Outcome:
         """Move, and work out which curtain covers the move.
 
@@ -1025,12 +1029,6 @@ class Surface:
             )
             return Outcome(emits=announced, animation=frames, buttons=ButtonTiming.END)
 
-        if leaving is not None and not animate:
-            # Nothing happened, so it must not look like it did. `animate` was unreachable
-            # until 2026-09-13 — this branch returned before it was ever read — so a page
-            # that timed out played the same 1.575 s collapse as a deliberate press, which
-            # both documents promise it does not.
-            return Outcome(emits=announced)
         if leaving is not None:
             page = self.profile.page(leaving)
             colour = page.colour if page else self.page.colour
@@ -1042,6 +1040,6 @@ class Surface:
             )
             return Outcome(emits=announced, animation=frames)
 
-        # An idle timeout. A plain sideways wipe, in the colour of wherever you ended up.
-        animation = wipe(self.page.colour, before, after) if animate else ()
-        return Outcome(emits=announced, animation=animation)
+        # Nowhere named on either side: a plain sideways wipe, in the colour of wherever
+        # you ended up.
+        return Outcome(emits=announced, animation=wipe(self.page.colour, before, after))

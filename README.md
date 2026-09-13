@@ -31,8 +31,9 @@ You get a **grid of pages**. One page per room, plus an index listing them.
 - **Hold left** and the top row becomes your rooms, each in its own colour, with the rest
   of the grid dark — press one to go straight there without passing home. Let go without
   pressing and nothing happened.
-- Leave it alone inside a room for thirty seconds and it returns to the index quietly —
-  no animation, no flash, because nothing happened and it must not look like it did.
+- Leave it alone inside a room for thirty seconds and it returns to the index the same way
+  a press of **back** would have, curtain and all. The event it fires says `idle` rather
+  than `button`, so an automation can still tell nobody was standing there.
 
 Nothing needs configuring for this to work. A fresh install builds a page per room out of
 your area registry and fills each one from what is actually in that room.
