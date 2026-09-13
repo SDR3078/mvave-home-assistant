@@ -300,7 +300,23 @@ implementation plan and this file is the running to-do list.
   **The two regression tests were checked by putting the bug back**, which is the only way
   to know a regression test does anything. Both failed; both pass with it fixed.
 
-  Still uncovered: the discovery and bluetooth config flow, the options flow, and migration.
+  **Migration is covered too**, and is the piece most worth it: it runs exactly once on a
+  real installation and cannot be run again to see what it did, so if it drops something,
+  the thing it dropped is already gone. Nine tests — order preserved, because the order
+  rooms were picked is where they sit on the index; a chosen colour kept and the rest handed
+  out; a deleted room still becoming a page, since outliving its room is the whole point;
+  genuine settings staying in the options; both shapes of the old list, in the data and in
+  the options; and the version check on its own.
+
+  **All of it was checked by breaking the code**, which is how two of these earned their
+  keep. Reordering and leaving a stale option were caught immediately. Deleting the version
+  guard was *not*: the list is read from the data or the options, the migration only cleaned
+  the options, and the test happened to use that shape — so the second run found nothing to
+  duplicate and the suite stayed green. That exposed a real gap on both sides. The migration
+  now clears the list out of the data as well, rather than half surviving its own migration,
+  and there is a test of the guard alone that fails when it is removed.
+
+  Still uncovered: the discovery and bluetooth config flow, and the options flow.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,

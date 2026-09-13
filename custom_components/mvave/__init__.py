@@ -114,7 +114,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: MvaveConfigEntry) -> b
         for key, value in entry.options.items()
         if key not in (CONF_PAGES, CONF_PAGE_COLOURS)
     }
-    hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    # Out of the data as well, not only the options. The list was read from either, so
+    # leaving a copy behind means the old shape half survives its own migration — and the
+    # only thing then standing between it and a doubled index is the version check above.
+    data = {key: value for key, value in entry.data.items() if key != CONF_PAGES}
+    hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=2)
     LOGGER.info("%s: migrated %d room(s) into pages", entry.title, len(chosen))
     return True
 
