@@ -316,7 +316,19 @@ implementation plan and this file is the running to-do list.
   now clears the list out of the data as well, rather than half surviving its own migration,
   and there is a test of the guard alone that fails when it is removed.
 
-  Still uncovered: the discovery and bluetooth config flow, and the options flow.
+  **The way in is covered too.** Six tests for the flow somebody meets first: a discovered
+  pad named in its confirmation dialog rather than announced as "a device"; one already set
+  up not being offered again, which fires constantly in practice because the pad advertises
+  whenever nothing is holding it; adding by hand offering only what carries the BLE-MIDI
+  service UUID, since a house is full of bluetooth this would connect to and have nothing to
+  say to; nothing in range saying so rather than showing an empty list; and the entry
+  recording an address and a name and nothing that needed connecting, because the pad takes
+  one central at a time and taking its slot during setup would hold it off whatever has it.
+
+  Built from real `BluetoothServiceInfoBleak` objects. A stand-in with the three attributes
+  the flow happens to read would pass whatever the flow did with them.
+
+  Still uncovered: the options flow.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
