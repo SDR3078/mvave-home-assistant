@@ -10,6 +10,7 @@ seven gets a row saying ``mvave_event`` and nothing else.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -18,8 +19,11 @@ from homeassistant.const import ATTR_DEVICE_ID
 
 from custom_components.mvave import registry as registry_module
 from custom_components.mvave.const import DOMAIN
+from custom_components.mvave.devices.smc_pad import PAD_NUMBER_BY_READING_ORDER
+from custom_components.mvave.engine.surface import Emit, EventType, Outcome
 from custom_components.mvave.logbook import FALLBACK_NAME, _message
 from custom_components.mvave.registry import HomeAssistantSink
+from custom_components.mvave.runner import SurfaceRunner, as_printed
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 ENTRY_ID = "01JZZZCONFIGENTRY"
@@ -147,12 +151,11 @@ def test_an_event_fired_before_the_device_exists_still_goes_out(
         ({"type": "focus_set", "entity_id": "light.a"}, "pointed the knobs at light.a"),
         ({"type": "focus_cleared", "entity_id": "light.a"}, "let go of the knobs"),
         (
-            # Frame index 4 is the first pad of the second row, which has 9 printed on it.
-            {"type": "pad_pressed", "pad": 4, "entity_id": "light.a", "trigger": "pad"},
+            {"type": "pad_pressed", "pad": 9, "entity_id": "light.a", "trigger": "pad"},
             "pressed pad 9 (light.a) from a pad",
         ),
         (
-            {"type": "pad_held", "pad": 0, "entity_id": None, "trigger": "service"},
+            {"type": "pad_held", "pad": 13, "entity_id": None, "trigger": "service"},
             "held pad 13 from an automation",
         ),
         (
@@ -168,14 +171,61 @@ def test_every_event_reads_as_a_sentence(data: dict[str, Any], expected: str) ->
 
 
 def test_pads_are_named_in_the_timeline_by_the_number_printed_on_them() -> None:
-    # The event carries a frame index, which is zero based and in reading order; nobody has
-    # ever called the top-left pad "pad 0", and on this hardware nobody can call it "pad 1"
-    # either, because 1 is printed on the pad three rows below it.
-    assert "pad 13" in _message({"type": "pad_pressed", "pad": 0})  # top left
-    assert "pad 4" in _message({"type": "pad_pressed", "pad": 15})  # bottom right
-    # And an index off the end of the grid does not put a traceback in somebody's timeline.
-    assert "a pad" in _message({"type": "pad_pressed", "pad": 99})
-    assert "a pad" in _message({"type": "pad_pressed", "pad": -1})
+    # Straight through: the event already carries the printed number, so this converts
+    # nothing. Converting a second time is the mistake the line is shaped to avoid, and
+    # there is no pad it would get away with: not one of the sixteen maps to itself, so a
+    # second pass is wrong everywhere rather than wrong somewhere.
+    assert "pad 13" in _message({"type": "pad_pressed", "pad": 13})  # top left
+    assert "pad 1" in _message({"type": "pad_pressed", "pad": 1})  # bottom left
+    # And a number off the grid does not put "pad 0" or a traceback in somebody's timeline.
+    for nonsense in (0, 17, -1, None, "3"):
+        assert "a pad" in _message({"type": "pad_pressed", "pad": nonsense})
+
+
+# ------------------------------------------- from a frame index to a printed number
+
+
+def test_the_bus_carries_the_number_printed_on_the_pad() -> None:
+    # The engine counts pads from zero in reading order and has no idea what is written on
+    # any of them. `as_printed` is the one place that converts, on the way out, and it is
+    # the exact inverse of what `mvave.press_slot` does on the way in — so a pad taken off
+    # the bus can be handed straight back to it.
+    assert as_printed({"pad": 0})["pad"] == 13  # top left
+    assert as_printed({"pad": 15})["pad"] == 4  # bottom right
+    # The rest of the payload is untouched, and a knob was already numbered the device's
+    # own way, so it must not be converted a second time.
+    assert as_printed({"pad": 0, "entity_id": "light.a", "trigger": "pad"}) == {
+        "pad": 13,
+        "entity_id": "light.a",
+        "trigger": "pad",
+    }
+    assert as_printed({"knob": 7, "steps": -2}) == {"knob": 7, "steps": -2}
+    # Nothing to convert is not an error. The surface fires plenty of events with no pad.
+    assert as_printed({"page_id": "kitchen"}) == {"page_id": "kitchen"}
+    assert as_printed({"pad": None}) == {"pad": None}
+    assert as_printed({"pad": 99}) == {"pad": 99}
+
+
+def test_the_conversion_is_on_the_path_events_actually_take(sink: HomeAssistantSink) -> None:
+    # `as_printed` being correct is worth nothing if the runner does not call it. This
+    # drives the real `_perform` against the real sink, which is the whole path from an
+    # engine outcome to the bus.
+    runner = SurfaceRunner.__new__(SurfaceRunner)
+    runner.sink = sink
+    runner.coordinator = SimpleNamespace(address=ADDRESS)  # type: ignore[assignment]
+    runner._perform(Outcome(emits=(Emit(EventType.PAD_PRESSED, {"pad": 0}),)))
+
+    _, data = sink.hass.bus.fired[0]  # type: ignore[attr-defined]
+    assert data["pad"] == 13
+    assert data["address"] == ADDRESS
+
+
+def test_a_pad_number_survives_the_trip_from_the_engine_to_the_timeline() -> None:
+    # Both halves composed, for all sixteen, which is the thing that actually has to be
+    # right: converted once on the way out and not again on the way in.
+    for index, printed in enumerate(PAD_NUMBER_BY_READING_ORDER):
+        fired = as_printed({"pad": index})
+        assert f"pad {printed}" in _message({"type": "pad_pressed", **fired})
 
 
 def test_an_event_nobody_taught_it_still_produces_a_line() -> None:

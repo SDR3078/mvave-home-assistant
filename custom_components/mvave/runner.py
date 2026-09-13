@@ -47,7 +47,7 @@ from .registry import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Callable, Coroutine, Mapping
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, Event, EventStateChangedData, HomeAssistant
@@ -96,6 +96,26 @@ CONFIRM_SECONDS = 6.0
 #: makes this safe to press as fast as somebody likes, and it is why the acknowledgement is
 #: a latch rather than a one-shot animation.
 ACKNOWLEDGE_SECONDS = 0.8
+
+
+def as_printed(data: Mapping[str, Any]) -> dict[str, Any]:
+    """An engine payload with any pad index replaced by the number printed on that pad.
+
+    The engine counts pads from zero in reading order and cannot do this for itself: which
+    number is printed on which pad is a fact about one piece of hardware, and ``engine/``
+    imports no device. This is the last point before a payload becomes something an
+    automation reads, and it is the exact inverse of what ``mvave.press_slot`` does on the
+    way back in — so a ``pad`` taken off the bus can be handed straight to it.
+
+    Knob numbers are deliberately untouched. The engine already counts encoders the way the
+    device does: ``knobs_in_reading_order()`` returns 7, 8, 5, 6, 3, 4, 1, 2, so the numbers
+    in a ``knob_turned`` payload have always been the printed ones.
+    """
+    pad = data.get("pad")
+    if not isinstance(pad, int) or not 0 <= pad < len(PAD_NUMBER_BY_READING_ORDER):
+        return dict(data)
+    return {**data, "pad": PAD_NUMBER_BY_READING_ORDER[pad]}
+
 
 #: Note-on, channel 1. The device ignores the channel on the LED path entirely, measured
 #: on all sixteen (``docs/HARDWARE-BLE.md`` section 9.1).
@@ -726,7 +746,9 @@ class SurfaceRunner:
         for call in outcome.calls:
             self.sink.call(call.domain, call.service, call.data)
         for emit in outcome.emits:
-            self.sink.fire(str(emit.type), {**emit.data, "address": self.coordinator.address})
+            self.sink.fire(
+                str(emit.type), {**as_printed(emit.data), "address": self.coordinator.address}
+            )
 
     @callback
     def _play(self, outcome: Outcome) -> None:

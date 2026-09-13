@@ -866,6 +866,10 @@ def test_every_press_is_announced_even_when_the_pad_does_nothing() -> None:
     # A pad with nothing on it stays silent, though. There is nothing to announce, and an
     # event for every dead pad would make the useful ones harder to find.
     assert emitted(view.handle(Press(15))) == {}
+    # A frame index, zero based and in reading order, which is the only numbering this
+    # package has: what is printed on a pad is a fact about one piece of hardware, and
+    # nothing in `engine/` imports a device. `runner.as_printed` converts it on the way to
+    # the bus, so an automation sees 14 where this sees 1. Do not "correct" these.
     pressed = emitted(view.handle(Press(1)))
     assert pressed["pad_pressed"]["pad"] == 1
     assert pressed["pad_pressed"]["entity_id"] == "switch.fan"

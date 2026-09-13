@@ -16,7 +16,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
-from .devices.smc_pad import PAD_NUMBER_BY_READING_ORDER
+from .engine.frames import PAD_COUNT
 from .runner import EVENT_TYPE
 
 if TYPE_CHECKING:
@@ -82,16 +82,12 @@ def _message(data: dict[str, Any]) -> str:
     if kind == "focus_cleared":
         return "let go of the knobs"
     if kind in ("pad_pressed", "pad_held"):
-        # By the number printed on the pad, the same as everywhere else a person sees one.
-        # The event carries a frame index, which counts from zero in reading order and is
-        # the one numbering nothing on the hardware agrees with.
+        # Printed straight through: the event already carries the number written on the
+        # pad, converted once by `runner.as_printed` on its way to the bus. Converting it a
+        # second time here is the mistake this line is shaped to avoid, and it would be
+        # wrong on every one of the sixteen — no pad number maps to itself.
         pad = data.get("pad")
-        printed = (
-            PAD_NUMBER_BY_READING_ORDER[pad]
-            if isinstance(pad, int) and 0 <= pad < len(PAD_NUMBER_BY_READING_ORDER)
-            else None
-        )
-        where = f"pad {printed}" if printed is not None else "a pad"
+        where = f"pad {pad}" if isinstance(pad, int) and 1 <= pad <= PAD_COUNT else "a pad"
         entity_id = data.get("entity_id")
         about = f" ({entity_id})" if entity_id else ""
         verb = "held" if kind == "pad_held" else "pressed"

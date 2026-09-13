@@ -231,6 +231,12 @@ Every transition fires `mvave_event` with a `device_id`, and carries a `trigger`
 `button`, `service` or `idle` — so an automation can never mistake its own effect for a
 person. A logbook platform renders each one as a sentence.
 
+A `pad_pressed` or `pad_held` carries `pad`, **the number printed on the pad** — the same
+number `mvave.press_slot` takes and `mvave.get_pages` returns, so one can be fed to the
+other. Every number this integration shows you is the one written on the hardware, because
+it is the only one you can check by looking. They run *up* the grid: 1 is the bottom-left
+pad and the top-left pad is 13.
+
 ---
 
 ## The constraint that shapes everything
@@ -255,7 +261,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 456 tests
+pytest tests       # 459 tests
 ruff check . && ruff format --check . && mypy
 ```
 
