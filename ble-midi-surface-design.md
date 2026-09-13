@@ -77,7 +77,7 @@ A source yields an **ordered list of entity IDs**. Explicit `pads` config wins; 
 
 v1:
 
-- `area` — entities in `area_id`, ordered `light`, `media_player`, `cover`, `switch`, `scene`, `script`. Uses the HA area + entity registries. This is the "room page".
+- `area` — entities in `area_id`, ordered by `resolve.DOMAIN_ORDER`: `light`, `media_player`, `cover`, `climate`, `fan`, `switch`, `input_boolean`, `lock`, `scene`, `script`. Uses the HA area + entity registries. This is the "room page".
 - `label` — entities carrying an HA label (e.g. `pad:morning`). Curated in the UI users already know; works across domains. This is the "dashboard-like page".
 - `explicit` — the `pads` config is the whole page, no auto-fill.
 
@@ -201,7 +201,7 @@ That separation is what makes five colours enough. Identity colours live on the 
 | Page: entity nobody can reach | **white**, like one that is off, and it **shudders when pressed**: three quick blinks to dark and back, 540 ms, starting dark and ending lit | A colour reserved for this would cost a fifth of the entire vocabulary, permanently, for a condition that is rare and usually temporary, and it would still only tell somebody something they can act on at the moment they try. A refusal under the finger says it exactly then and says nothing the rest of the time. It cannot add to the density problem either: only the pad being pressed can refuse, and it is over before anybody looks away |
 | Page: a scene or button just pressed | **holds the action colour, orange, for 0.8 s**, then lets go | A stateless pad has no on and no off, so pressing one changed nothing anywhere and was the only press on this surface with no result of any kind. It is a **latch, not a flash**: one transition in and one out, 0.8 s apart, so it never enters the flash arithmetic rather than merely passing it, and it adds no rhythm that would have to be told apart from the two that already move. It never shows white, which matters here more than anywhere — purple is the stateless default *because* those pads never go white, that being the one pair reported as too close. Drawn over the settled frame rather than animated, so the other fifteen pads keep reporting while it is held: a scene that switches three lamps on should be watchable doing it. Duration judged at the grid over three rounds, 1.5 s then 1.0 s then 0.8 s |
 | Focused pad, the knob target | **breathing between on and off**: 1.4 s period, its own colour for about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
-| Waiting, commanded but not confirmed | **swinging between on and off**, about 2 Hz | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
+| Waiting, commanded but not confirmed | **swinging between on and off**, 2.5 Hz — 0.4 s, half lit | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
 | `back` available | **left button lit** | see §1 |
 | `home` available | **stop button lit** | |
 
@@ -209,7 +209,7 @@ That separation is what makes five colours enough. Identity colours live on the 
 
 **Nothing ever blinks to darkness.** Both rhythms alternate the two state colours, orange and white. A pad blinking to black reads as a light going out, which is a lie about a lamp that is on and staying on, and it was the first thing anybody complained about when it was tried on the hardware. Novation reached the same rule independently: their flash alternates two colours and only their slow pulse goes dark. The two rhythms therefore differ in rate alone, by a factor of three and a half, which was enough.
 
-**Only a pad in one of the two states may move.** Motion means "between on and off", so a pad that is in neither has nothing to be between. An unreachable pad is therefore completely still, and it is also completely inert: pressing or holding it does nothing. Commanding something that cannot answer would leave the pad moving forever, waiting for a confirmation that never comes. Scenes and scripts are exempt from the inertness, because their resting state in Home Assistant is `unknown`, which is not the same as unreachable, and they are exactly the pads people press.
+**Only a pad in one of the two states may move.** Motion means "between on and off", so a pad that is in neither has nothing to be between. An unreachable pad is therefore completely still, and it is also completely inert: pressing or holding it does nothing. Commanding something that cannot answer would leave the pad moving forever, waiting for a confirmation that never comes. Stateless pads are exempt from the inertness — scenes, buttons and input buttons — because their resting state in Home Assistant is `unknown`, which is not the same as unreachable, and they are exactly the pads people press. **Scripts are not among them**, despite what this said until 2026-09-13: a script has a real running-or-idle state, so an unreachable one refuses like anything else.
 
 **A pad only goes solid once the entity's real state arrives.** The surface is deliberately not optimistic: it never claims a lamp changed because somebody asked. The cost is that a slow cloud-connected device will swing for as long as it takes to answer, and the timeout for it is the coordinator's job rather than the engine's, since the engine has no clock: `runner.CONFIRM_SECONDS`, six seconds, after which it gives up and the pad goes solid.
 
@@ -223,7 +223,7 @@ Sixty full-grid frames a second are available, so the budget is generous.
 
 **One pad lights at a time, never more.** That is the single rule the shapes below exist to satisfy, and it was arrived at the hard way: rings and columns were built first, and both felt uneven no matter how evenly they were timed. They cannot help it. A ring around a corner pad is one pad wide and the next is three, then five, then seven, so the amount of light arriving changes at every step. Measuring the frames on the wire proved the timing was even to within a few milliseconds while it still read as a limp. A single pad per step cannot have that problem, and it removed a second one for free: entering from a middle pad used to take fewer steps than from a corner, so the same gesture had two different durations.
 
-**45 ms a pad**, so a page change is under a second and a half. Below about 40 the travelling edge stops reading as an edge and becomes a blur, which is the floor worth going to. A ring or a column at a time needed 350 ms a step to read at all; a pad at a time reads comfortably at a fraction of that, because there is no longer a jump to take in.
+**45 ms a pad**, so a page change is 1.575 s: sixteen pads covered, three frames of the curtain held, sixteen uncovered. It read as under a second and a half here and in `frames.py` until 2026-09-13, both written before `CURTAIN_HOLD` was added. Below about 40 the travelling edge stops reading as an edge and becomes a blur, which is the floor worth going to. A ring or a column at a time needed 350 ms a step to read at all; a pad at a time reads comfortably at a fraction of that, because there is no longer a jump to take in.
 
 **Entering a page** answers two questions in order: which pad did I press, and what is in here.
 
@@ -256,7 +256,7 @@ Entering a page from its own pad on the index means that pad already carries the
 - **Any pad press aborts the running animation** and jumps to the resolved state. Input is never queued behind eye candy.
 - Anything that is not a grid frame, the transport buttons above all, must be schedulable **against a specific frame** of an animation rather than firing at its start or its end.
 - Primitives: `sweep(order, before, after)` and the two orders it is given, a clockwise spiral from a pad and a column sweep sideways. Every transition is one of those; the shapes are the design and the mechanism underneath has nothing in it. Plus `breathe(pad)` and `blink(pad)`. No fade and no partial intensity: there is no intensity.
-- Global setting `animations: full | minimal | off`; `minimal` = the sideways wipe only, no spiral.
+- ~~Global setting `animations: full | minimal | off`~~ — **never built.** The options screen has only colours on it. A single switch that turned all motion off is still worth having, for a different reason than this one: see `docs/NEXT.md`.
 
 ---
 
@@ -297,7 +297,7 @@ Since there is no persistent readout, the grid becomes a transient one.
 
 ### 6.2 Peek
 
-`hold` on a pad shows that entity's primary value bar **immediately, before anything changes** — brightness for a light, volume for a player, position for a cover. Turning a knob while holding adjusts that entity. On release the HUD fades and the entity stays **sticky focus**, so a later bare knob turn still targets it. This replaces what encoder rings would have provided.
+`hold` on a pad shows that entity's primary value bar **immediately, before anything changes** — brightness for a light, volume for a player, position for a cover. Turning a knob while holding adjusts that entity. On release the HUD snaps away — nothing on this device fades — and the entity stays **sticky focus**, so a later bare knob turn still targets it. This replaces what encoder rings would have provided.
 
 ### 6.3 Color language per property
 
@@ -309,8 +309,8 @@ Constant across every page. **One flat colour per property, not a gradient**: ev
 | colour temp | blue | |
 | hue | green | |
 | saturation | red-pink | |
-| volume | orange | pads above a configurable "loud" threshold switch to red-pink, an extra colour appearing rather than a shade changing |
-| cover position | orange | fills **top-down**, the one exception, because it is a blind |
+| volume | orange | ~~pads above a configurable "loud" threshold switch to red-pink~~ — **never built.** `palette.BAR_ALERT` exists, is exported, and is read by nothing; no threshold is configurable anywhere |
+| cover position | orange | fills upward like every other bar. ~~Top-down, because it is a blind~~ was specified and **never built**: `value_bar` takes no direction |
 | climate | orange | see §6.4 |
 
 Rewritten 2026-09-12. **One table serves the bar and the knob map (§6.0) alike**, which is the point: a colour on the map is a promise about the bar you get if you turn that encoder, so the colour becomes the property's *name* rather than a decoration, and the map teaches the bar. The previous set could not do that job. Brightness drew a *white* bar, and white already means "this encoder does nothing" on the map, so the commonest control and the absence of a control would have been the same colour. Hue and saturation were both green, which never mattered while only one bar showed at a time and matters completely once all four are on the grid together. Purple is deliberately unused: it is the one colour reported as too close to white on the physical grid, and a map is mostly white.
@@ -321,11 +321,15 @@ Rewritten 2026-09-12. **One table serves the bar and the knob map (§6.0) alike*
 
 ### 6.4 Climate
 
+**Never built.** A thermostat gets the same orange bar every other property gets, and
+`PROPERTY_COLOURS["temperature"]` is flat orange. What follows is the specification, kept
+because the reasoning still holds if anybody builds it.
+
 Two numbers, so: **fill = setpoint**, one contrasting pad = **current temperature**, making the gap visible. Fill colour by direction relative to current: blue when asking for cooling, red-pink for heating, white within ±0.3 °C. The current-temperature marker is a **white pad on the same 16-step scale**, so the distance still to travel is the gap between the top of the fill and the marker. Mode (cool/heat/auto) is **not** a knob — assign it to a pad.
 
 ### 6.5 Behavior
 
-- Update the HUD on **every** tick (optimistic), but **debounce the service call ~250 ms** after the last tick. Turning a knob must never fire 40 `light.turn_on` calls.
+- Update the HUD on **every** tick (optimistic), and **throttle** the service call rather than debounce it: `KNOB_THROTTLE_SECONDS = 0.15` sends about seven a second *while* the knob turns, and `KNOB_SETTLE_SECONDS = 0.25` sends a last one once it stops. Debouncing was the plan and would have meant the lamp not moving until you let go, which is what Home Assistant's own slider does and what this is better than.
 - Min/max reached: ~~one quick full-bar flash~~ — **cut 2026-09-12, nothing replaces it.** A full-bar flash is a whole-surface luminance change, and it would fire again for every click somebody kept turning at the limit. Those two properties together are what made the knob refusal read as the device failing (§6.0), and they are what the photosensitivity thresholds are written about. The signal is also already there and free: a bar at either end is sixteen pads lit or sixteen dark, which is as unambiguous as this grid gets.
 - If the target is off (light off, player muted), the first tick **turns it on at the lowest step** rather than adjusting an invisible value.
 - The HUD interrupts page animations; any pad press cancels the HUD and executes immediately.

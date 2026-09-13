@@ -50,7 +50,10 @@ STATE_OFF: Final = WHITE
 UNASSIGNED: Final = OFF
 
 #: What a pad shows when it is on, by the domain of what is behind it. A default only:
-#: any pad can be given a colour of its own, and any of these can be changed.
+#: any of these can be changed. A pad may also carry a colour of its own — `PadConfig`
+#: takes one and `resolve` honours it — but nothing sets one: `registry._pads_of` builds
+#: every pinned pad from its domain alone, so per-pad colour is unreachable from
+#: configuration and exists only for the engine's own tests.
 #:
 #: Purple appears only where the entity is stateless. Everything with an on and an off
 #: shows white when it is off, and purple against white is the one pair that was reported
@@ -144,8 +147,9 @@ PROPERTY_COLOURS: Final[Mapping[str, int]] = {
     "saturation": RED,
 }
 
-#: Above a configured threshold a bar switches to this, a different colour appearing
-#: rather than a shade changing.
+#: **Unused.** A bar was to switch to this above a configured threshold, a different colour
+#: appearing rather than a shade changing. Nothing reads it and no threshold is configurable,
+#: so it is a specification kept next to the values it would need rather than a behaviour.
 BAR_ALERT: Final = RED
 
 #: What an encoder shows on the map when it can do nothing to whatever is focused. The

@@ -25,7 +25,9 @@ COLUMNS: Final = 4
 ROWS: Final = 4
 PAD_COUNT: Final = COLUMNS * ROWS
 
-#: How long one pad of an animation lasts, so a whole page change is thirty-two of these.
+#: How long one pad of an animation lasts. A page change is thirty-five of them — sixteen
+#: pads covered, CURTAIN_HOLD frames held, sixteen uncovered — so 1.575 s. It said
+#: thirty-two here until 2026-09-13, having been written before the hold was added.
 #: Settled by eye on the hardware, which is the only way any of this was settled: a ring or
 #: a column at a time needed 350 ms a step to read at all, and a single pad at a time reads
 #: comfortably at a fraction of that, because there is no longer a jump to take in.
@@ -156,9 +158,14 @@ def collapse(target: int, colour: int, leaving: Frame, arriving: Frame) -> tuple
 def wipe(colour: int, leaving: Frame, arriving: Frame) -> tuple[Frame, ...]:
     """A page change with no origin: both halves travel sideways.
 
-    For navigation that came from a service call, an automation or a presence sensor.
-    Inventing an origin pad would imply a finger that was not there, and the first thing
-    somebody does with a surface that lies about causality is stop trusting it.
+    For a move with nowhere to grow from: the page being entered is not on the page being
+    left, so there is no pad that stands for it.
+
+    This once read "for navigation that came from a service call", on the reasoning that
+    inventing an origin would imply a finger that was not there. The surface argues the
+    other way now, in ``Surface._navigate``: where the destination *does* occupy a pad,
+    growing out of it invents nothing, because that is the pad a finger would have used,
+    and what caused the move is carried on the event where an automation can read it.
     """
     curtain: Frame = (colour,) * PAD_COUNT
     covering = sweep(column_order(), leaving, curtain)
@@ -310,8 +317,9 @@ def value_bar(fraction: float, colour: int, track: int = OFF) -> Frame:
     because blinking already means "commanded but not confirmed". Capping the run with a
     second colour read as a pad that did not belong to the bar.
 
-    Upward because level rises. Cover position fills downward instead, which then reads as
-    the deliberate exception it is rather than as an inconsistency.
+    Upward because level rises, for everything. A blind was to be the exception and fill
+    downward; that was specified and never built, and this function takes no direction at
+    all, so a cover's bar rises like the rest.
     """
     lit = round(max(0.0, min(1.0, fraction)) * PAD_COUNT)
     return tuple(colour if _height(index) < lit else track for index in range(PAD_COUNT))

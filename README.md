@@ -20,7 +20,7 @@ directly.
 You get a **grid of pages**. One page per room, plus an index listing them.
 
 - Press a room on the index and it opens: the page **grows out of the pad you pressed**,
-  ring by ring, then a curtain opens left to right. Going back runs the same thing in
+  one pad at a time, winding outwards, then a curtain opens left to right. Going back runs the same thing in
   reverse, shrinking into the pad the room lives on.
 - Inside a room, every pad is something in that room. **Tap** toggles it. **Hold** points
   the knobs at it.
@@ -101,8 +101,10 @@ will get. It is the only thing on the device that can tell you which encoders ar
 there are no rings and no markings — and it is why a fan, where seven of the eight do
 nothing, is usable at all.
 
-A page may redirect a knob to a different *entity* ("volume here always means the kitchen
-speaker").
+A page can redirect a knob to a different *entity* — "volume here always means the kitchen
+speaker" — in the engine. **There is no way to set it yet:** the page form asks for a name,
+a colour, a source and sixteen pads, and nothing writes the knob or button overrides that
+`Page` carries.
 
 Turning a knob moves the light **while you turn**, throttled to about seven commands a
 second. For comparison, Home Assistant's own brightness slider sends nothing at all until
@@ -241,7 +243,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 392 tests
+pytest tests       # 434 tests
 ruff check . && ruff format --check . && mypy
 ```
 

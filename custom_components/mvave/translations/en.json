@@ -163,7 +163,7 @@
   "services": {
     "navigate": {
       "name": "Go to page",
-      "description": "Send a control surface to one of its pages. The grid animates as if it had been pressed, but without a spiral, because nobody pressed anything.",
+      "description": "Send a control surface to one of its pages. The grid animates exactly as if the pad had been pressed, growing out of wherever that page sits on the screen it is leaving — that is not an invented origin, it is the pad a finger would have used. What actually caused the move is carried on the event instead, where an automation needs it and the grid cannot say it.",
       "fields": {
         "device_id": {
           "name": "Device",
