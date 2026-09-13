@@ -212,6 +212,19 @@ implementation plan and this file is the running to-do list.
   filenames with a fallback chain. So there is no pull request to make. `logo@2x.png` is
   deliberately absent: the source is 221 pixels tall and the hDPI rule wants a shortest
   side of at least 256, so upscaling would only blur it, and the chain falls back.
+- **The pad's Bluetooth address is out of the repository and out of its history.** It stood
+  in 18 files — a line of `HARDWARE-BLE.md`, a parametrize in `test_layout.py` proving both
+  cases parse, and a `# device SMC-PAD ...` comment atop 16 capture fixtures. None of it
+  load-bearing, which is what made the scrub mechanical: `AA:BB:CC:DD:EE:FF` was already the
+  placeholder three Home Assistant test modules used.
+
+  Rewritten across all 44 commits rather than only in the working tree, because the half
+  that gets deferred is the half that never happens, and this one gets harder the moment the
+  repository is public. `filter-branch --tree-filter` over `--all`, both cases, then the
+  `refs/original` backups dropped, the reflog expired and `gc --prune=now --aggressive`.
+  Verified four ways: no blob under any ref contains it, `log -S` finds nothing for either
+  case, `fsck` is clean with no unreachable objects, and the suite still passes. A sweep for
+  anything else address-shaped found only the placeholder.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,

@@ -25,9 +25,14 @@ inferred and not yet tested. **Unknown** means exactly that.
   in the complete 128-bit UUID list, plus two manufacturer-data fields reading `sinco` and
   `JLAISDK`. The latter names the Bluetooth chip vendor, Jieli, which also explains the two
   vendor services below.
-- Address: `AA:BB:CC:DD:EE:FF`. The top bits mark it as a random address, but it is a static
-  one: the same across the whole day, dozens of connections, MidiSuite sessions, three
-  power cycles and a factory reset. It can be the config entry's unique id.
+- Address: written as `AA:BB:CC:DD:EE:FF` throughout this repository, including in the
+  capture fixtures. The real one is redacted, for the reason the next sentence gives: the
+  top bits marked it as a random address, but it behaved as a **static** one — identical
+  across the whole day, dozens of connections, MidiSuite sessions, three power cycles and a
+  factory reset. That is the finding, and it is why the address can be the config entry's
+  unique id. It is also exactly what makes a BLE address a permanent name for one device in
+  somebody's house, so the value itself is not something to publish. Nothing here depends
+  on it; substitute your own when reading a capture back.
 - Connects without pairing or bonding. Nothing was ever prompted.
 - **MTU 512**, so even a long SysEx fits in one packet.
 - The initial read of the MIDI characteristic returns 0 bytes, as RP-052 section 5 requires.
