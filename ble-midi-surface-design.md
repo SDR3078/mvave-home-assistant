@@ -51,7 +51,7 @@ Navigation lives on the transport buttons, which have their own LEDs (left 25, r
 |---|---|---|
 | left | `back` | there is somewhere to go back to |
 | stop | `home` | you are not already on the root page |
-| right, play, record | free, per page | the page assigns them |
+| right, play, record | ~~free, per page~~ — **never built.** `Page.buttons` exists and the renderer honours it, and nothing outside the engine's own tests ever sets it, so these three are dark and inert on every real install | the page would assign them |
 
 This was originally a reserved pad in the bottom-right corner. Moving it off the grid buys back a sixteenth of the surface and removes a colour collision: any colour the back pad could take was either a room's identity colour or white, and white is what "off" means.
 
@@ -275,7 +275,7 @@ Global knob assignment (fixed, muscle memory lives here). The encoders are two a
 
 Rewritten 2026-09-12. The list is a **ranking** — brightness first because it is what people want from a lamp nine times in ten — and it is handed out **down the reading order of the block**, not up the device's numbering. Assigning it up the wiring put the most wanted property on the least obvious encoder, and nobody could see that until the map below was on the grid and the owner said the shape looked wrong. The assignment is derived from the geometry in code, so the two cannot drift apart.
 
-If the focus lacks a property, that knob is inert. Per-page `knobs` config overrides the target for specific knobs (e.g. volume always hits the room's media player regardless of focus) — this is the one place per-page config beats the global rule.
+If the focus lacks a property, that knob is inert. ~~Per-page `knobs` config overrides the target for specific knobs (e.g. volume always hits the room's media player regardless of focus)~~ — **never built**, in the same way and for the same reason as the buttons above: `Page.knobs` exists, `knob_map` reads it first, and `registry.build_profile` never writes it. The page form asks for a name, a colour, a source and sixteen pads.
 
 ### 6.0 The knob map
 
@@ -362,7 +362,7 @@ page: living
     right: {navigate: tv}
 ```
 
-**Colour is a choice of five, not a colour picker.** The original used `ColorRGBSelector`, which would offer sixteen million colours the device cannot show and let a user pick two that look identical on the grid. A `SelectSelector` over the five measured colours cannot produce an unreadable surface. Warn at config time when a colour is used by more than one page, since past five, position rather than colour is doing the identifying.
+**Colour is a choice of five, not a colour picker.** The original used `ColorRGBSelector`, which would offer sixteen million colours the device cannot show and let a user pick two that look identical on the grid. A `SelectSelector` over the five measured colours cannot produce an unreadable surface. ~~Warn at config time when a colour is used by more than one page~~ — **never built.** The form works out a spare colour to suggest, and then says nothing if you pick a taken one. Past five pages, position rather than colour is doing the identifying and a person should be told so.
 
 There is no `back_pad`: back and home are the transport buttons and are not configurable. `right`, `play` and `record` are, per page.
 

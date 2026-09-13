@@ -182,6 +182,7 @@ meaning. So position may be named by position, and a target may never be.
 | `select.<device>` | the page showing now, **settable**. Push the surface to a room from an automation, or read where somebody is standing |
 | `sensor.<device>_focus` | which entity the knobs are on |
 | `binary_sensor.<device>_connected` | the link |
+| `sensor.<device>_battery` | what the pad says its charge is, asked every half hour because it declares notifications and never sends one. Deliberately not diagnostic, so it shows on the device card |
 | `button.<device>_home`, `_back` | the two gestures a page may never rebind |
 | `event.<device>_pad_1…16` | one per pad: `press_start`, `press_end`, `long_press_start`, `long_press_end` |
 | `event.<device>_left`, `_right`, `_play`, `_stop`, `_record` | same, for the transport buttons |
@@ -252,7 +253,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 440 tests
+pytest tests       # 455 tests
 ruff check . && ruff format --check . && mypy
 ```
 

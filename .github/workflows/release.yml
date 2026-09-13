@@ -5,8 +5,16 @@
 name: Release
 
 on:
+  # On the tag as well as the release, and the tag is the one that matters: a workflow
+  # triggered by `release: published` runs after HACS has already been told, so it can
+  # only raise an alarm. Pushing the tag comes first, so this fails there instead.
+  push:
+    tags: ["v*"]
   release:
     types: [published]
+
+permissions:
+  contents: read
 
 jobs:
   version:

@@ -7,6 +7,12 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here writes anything. Declared rather than left to the repository default,
+# because every third-party action in this repository is handed a token, and the cheapest
+# way to make that not matter is for the token to be able to do nothing.
+permissions:
+  contents: read
+
 env:
   # Follows pytest-homeassistant-custom-component, which pins itself to one Home
   # Assistant release and to the Python that release requires. 0.13.317 onwards is
@@ -45,7 +51,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-      - run: pip install pytest
+      - run: pip install -r requirements-pure.txt
       - name: Refuse to run if Home Assistant is installed
         # The point of this job is the absence. If it ever creeps in as a dependency the
         # tests would still pass and would stop meaning anything.

@@ -12,6 +12,14 @@ on:
     # Assistant's own release, and a manifest that was valid in March can stop being so.
     - cron: "0 4 * * 1"
 
+# Both actions below are given a token by default. Neither needs to write anything, and
+# this is what makes them running from a branch acceptable rather than alarming: pinning
+# them to a commit would freeze the very rules they exist to track — see the note above —
+# and `hacs/action` could not be pinned anyway, since its action.yml runs
+# `docker://ghcr.io/hacs/action:main` whatever ref you ask for.
+permissions:
+  contents: read
+
 jobs:
   hassfest:
     name: hassfest

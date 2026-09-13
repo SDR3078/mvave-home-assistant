@@ -1,0 +1,11 @@
+# What the pure test job installs, and all it may install.
+#
+# Separate from requirements-dev.txt because that one brings Home Assistant, and the whole
+# point of that job is its absence: it asserts `homeassistant` is not importable before it
+# runs a test. So the pin lives here instead of being an unpinned `pip install pytest`,
+# which let the two jobs run different pytest versions and quietly disagree.
+#
+# Keep this equal to what pytest-homeassistant-custom-component pins, so the pure suite and
+# the Home Assistant suite are run by the same pytest:
+#   python -c "from importlib.metadata import requires; print([r for r in requires('pytest-homeassistant-custom-component') if r.startswith('pytest=')])"
+pytest==9.0.3

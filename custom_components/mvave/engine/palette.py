@@ -87,6 +87,14 @@ DOMAIN_COLOURS: Final[Mapping[str, int]] = {
     # nothing left to spend. Green because green already means an opening and its
     # position, and a readout is overwhelmingly about exactly that: a door, a window,
     # whether anybody is in.
+    #
+    # It does collide, and the defence above is only half the argument. `cover` is green
+    # too and a cover is *controllable*, so in a room holding a blind and a door sensor the
+    # colour cannot say which of the two green pads will move something — only pressing
+    # them can, one acting and the other shuddering. Left as it is because the pair is
+    # coherent (both are "an opening, and whether it is open") and because the distinction
+    # it would cost a colour to draw is already carried free by the shudder. A house that
+    # minds can move either group on the colour screen, which is what that screen is for.
     "binary_sensor": GREEN,
     "device_tracker": GREEN,
     "person": GREEN,
