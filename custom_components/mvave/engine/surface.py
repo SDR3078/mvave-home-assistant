@@ -31,6 +31,7 @@ from .frames import (
 )
 from .model import (
     INERT_ACTIONS,
+    STATELESS_DOMAINS,
     Activate,
     Back,
     EntityState,
@@ -193,6 +194,10 @@ class Outcome:
 
     calls: tuple[Call, ...] = ()
     emits: tuple[Emit, ...] = ()
+    #: Stateless entities that just started, and whose pads are now holding a colour to
+    #: say so. The engine has no clock, so it cannot decide when to let go; the caller
+    #: reads this and sets the countdown.
+    acknowledged: tuple[str, ...] = ()
     #: Frames to play in order, one per ``frames.STEP_SECONDS``. Empty means the grid just
     #: redraws, which is what an ordinary toggle does.
     animation: tuple[Frame, ...] = ()
@@ -242,6 +247,9 @@ class Surface:
         self.stack: list[str] = [profile.root_id]
         self.focus: str | None = None
         self.pending: set[str] = set()
+        #: Stateless pads holding their acknowledgement colour. Released on a countdown
+        #: the runner owns, because nothing in here knows what a second is.
+        self.acknowledged: set[str] = set()
         #: The value bar currently covering the page, if one is. The coordinator takes
         #: it away again once the knob has been still long enough; the engine has no
         #: clock and so cannot decide when that is.
@@ -331,6 +339,7 @@ class Surface:
         return ViewState(
             focus=self.focus,
             pending=frozenset(self.pending),
+            acknowledged=frozenset(self.acknowledged),
             can_go_back=self.depth > 0,
             can_go_home=self.depth > 0,
         )
@@ -683,6 +692,14 @@ class Surface:
             if value is not None:
                 self.last_known[state.entity_id, prop.key] = value
 
+    def release(self, entity_id: str) -> None:
+        """Let go of an acknowledgement, once it has been held long enough.
+
+        Called by whatever owns the clock. Held too briefly it is a flash nobody catches;
+        held too long it is a pad lying about what is on.
+        """
+        self.acknowledged.discard(entity_id)
+
     def clear_hud(self) -> Outcome:
         """Take the bar away, once the coordinator says the knob has been still long enough.
 
@@ -725,7 +742,13 @@ class Surface:
         if isinstance(action, Toggle):
             return self._command(action.entity_id, self._toggle_call(action.entity_id))
         if isinstance(action, Activate):
-            return self._command(action.entity_id, self._activate_call(action.entity_id))
+            outcome = self._command(action.entity_id, self._activate_call(action.entity_id))
+            if action.entity_id.split(".", 1)[0] not in STATELESS_DOMAINS:
+                # A script is not stateless: it reports running and then idle, so it
+                # already blinks and then settles like a lamp, and needs nothing from here.
+                return outcome
+            self.acknowledged.add(action.entity_id)
+            return replace(outcome, acknowledged=(action.entity_id,))
         if isinstance(action, Focus):
             # The same gesture releases it. Without that there is no way back to an
             # ordinary page once you have pointed the knobs at something, and a surface

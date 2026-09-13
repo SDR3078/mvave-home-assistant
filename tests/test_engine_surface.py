@@ -910,6 +910,79 @@ def test_a_page_with_nowhere_to_grow_from_gets_a_plain_wipe() -> None:
     assert first.count(GREEN) == 1
 
 
+def scene_page() -> Surface:
+    """A page with a scene beside a lamp, which is the arrangement that matters."""
+    registry = FakeRegistry(
+        areas={"living": ("light.lamp", "scene.evening")},
+        states={"light.lamp": "on", "scene.evening": "unknown"},
+    )
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    return view
+
+
+def test_pressing_a_scene_holds_its_pad_rather_than_leaving_it_silent() -> None:
+    # A scene has no on and no off, so pressing one used to change nothing anywhere: the
+    # one pad on this surface that could be pressed with no result of any kind. Raised at
+    # the grid — "i actually want a feedback mechanism after i touched the button".
+    view = scene_page()
+    assert view.rendering().frame[1] == PURPLE  # the scene, at rest
+
+    outcome = view.handle(Press(1))
+    assert outcome.calls[0].service == "turn_on"
+    assert outcome.acknowledged == ("scene.evening",)
+    assert view.rendering().frame[1] == ORANGE  # holding, to say it ran
+
+
+def test_an_acknowledgement_is_a_latch_and_never_a_flash() -> None:
+    # The distinction the whole design turns on. A flash is a *pair* of opposing changes;
+    # this is one transition in and one out, separated by however long the caller holds it,
+    # so it never enters the photosensitivity arithmetic at all. It also adds no rhythm: a
+    # third moving thing would have to be told apart from the two that already move.
+    view = scene_page()
+    view.handle(Press(1))
+    assert view.rendering().rhythms == {}
+
+    view.release("scene.evening")
+    assert view.rendering().frame[1] == PURPLE
+
+
+def test_an_acknowledgement_never_shows_white() -> None:
+    # Not decoration. Purple is the default for stateless domains *because* those pads
+    # never go white, purple against white being the one pair the hardware notes record as
+    # too close to tell apart. An acknowledgement that flashed white would land the whole
+    # signal on the weakest pair the palette can produce.
+    view = scene_page()
+    view.handle(Press(1))
+    assert view.rendering().frame[1] != WHITE
+
+
+def test_the_rest_of_the_grid_keeps_reporting_while_a_pad_is_held() -> None:
+    # Which is why this is a latch on one pad and not an animation over the grid. A scene
+    # that switches lamps on should be watchable doing it; freezing sixteen pads for a
+    # second and a half would hide the very thing the scene just did.
+    view = scene_page()
+    view.handle(Press(1))
+    assert view.rendering().frame[0] == ORANGE  # the lamp, on
+
+    view.registry.states["light.lamp"] = "off"  # type: ignore[attr-defined]
+    assert view.rendering().frame[0] == WHITE  # it moved, mid-acknowledgement
+    assert view.rendering().frame[1] == ORANGE  # and the scene is still holding
+
+
+def test_a_script_is_not_acknowledged_because_it_already_says_so_itself() -> None:
+    # A script is not stateless: it reports running and then idle, so it already blinks and
+    # then settles like a lamp. Acknowledging it too would say the same thing twice, in two
+    # different vocabularies, on the same pad.
+    registry = FakeRegistry(areas={"living": ("script.bedtime",)}, states={"script.bedtime": "off"})
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    outcome = view.handle(Press(0))
+    assert outcome.calls[0].domain == "script"
+    assert outcome.acknowledged == ()
+    assert view.acknowledged == set()
+
+
 def test_a_pad_that_would_do_nothing_shudders_rather_than_looking_broken() -> None:
     # A lit pad that does nothing when pressed is indistinguishable from a broken one.
     # This was found by pressing a thermostat, which the design had deliberately given no

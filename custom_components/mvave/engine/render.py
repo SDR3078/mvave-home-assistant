@@ -44,6 +44,15 @@ class ViewState:
     focus: str | None = None
     #: Entities commanded but not yet confirmed. The one meaning blinking is allowed.
     pending: frozenset[str] = frozenset()
+    #: Stateless entities that were just started, and are saying so by holding a colour.
+    #:
+    #: A latch rather than a blink, and that is the whole design of it. A scene has no
+    #: state to disagree with, so the blink that means "commanded, not yet confirmed" has
+    #: no condition under which it could stop. Holding one colour for a moment and then
+    #: releasing it is two transitions a second apart instead of a flash, and it never
+    #: shows white — which matters here more than anywhere, because purple is the
+    #: stateless default precisely because those pads never go white.
+    acknowledged: frozenset[str] = frozenset()
     can_go_back: bool = False
     can_go_home: bool = False
 
@@ -122,6 +131,14 @@ def render(
     """One page, as it should look right now."""
     view = view or ViewState()
     frame: Frame = tuple(colour_of(slot, registry) for slot in slots)
+    if view.acknowledged:
+        # Overlaid on the settled frame rather than animated over it, so the other fifteen
+        # pads keep reporting while it is held. A scene that switches three lamps on should
+        # be watchable doing it; freezing the grid would hide the very thing it did.
+        frame = tuple(
+            ACTION if slot is not None and slot.entity_id in view.acknowledged else colour
+            for slot, colour in zip(slots, frame, strict=True)
+        )
 
     rhythms: dict[int, Motion] = {}
     for index, slot in enumerate(slots):

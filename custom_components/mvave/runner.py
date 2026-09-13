@@ -79,6 +79,15 @@ KNOB_SETTLE_SECONDS = 0.25
 #: swings forever is worse than one that admits the command went nowhere.
 CONFIRM_SECONDS = 6.0
 
+#: How long a stateless pad holds its acknowledgement colour after being pressed.
+#:
+#: Long enough to be seen as a state rather than caught as a flash, short enough that the
+#: pad is not still claiming to be acting when it has finished. Two transitions this far
+#: apart are not a flash at all — a flash is a *pair* of opposing changes, and these are
+#: over a second apart — which is what keeps an acknowledgement out of the photosensitivity
+#: arithmetic entirely rather than merely inside it.
+ACKNOWLEDGE_SECONDS = 1.5
+
 #: Note-on, channel 1. The device ignores the channel on the LED path entirely, measured
 #: on all sixteen (``docs/HARDWARE-BLE.md`` section 9.1).
 NOTE_ON = 0x90
@@ -658,6 +667,10 @@ class SurfaceRunner:
             entity_id = call.data.get("entity_id")
             if isinstance(entity_id, str) and entity_id in self.surface.pending:
                 self._restart(f"confirm:{entity_id}", CONFIRM_SECONDS, self._give_up(entity_id))
+        for entity_id in outcome.acknowledged:
+            # Restarted rather than skipped if one is already running: pressing a scene
+            # again is another acknowledgement, and it should read as one.
+            self._restart(f"ack:{entity_id}", ACKNOWLEDGE_SECONDS, self._release(entity_id))
         self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
         # Not while a finger is still down on a pad: see `_up`.
         if self.surface.showing and not self._fired:
@@ -872,6 +885,18 @@ class SurfaceRunner:
         if self.surface is not None:
             self.surface.clear_hud()
             self._redraw()
+
+    def _release(self, entity_id: str) -> Any:
+        """Let a stateless pad stop saying it just ran."""
+
+        @callback
+        def _held_long_enough(_now: Any) -> None:
+            self._timers.pop(f"ack:{entity_id}", None)
+            if self.surface is not None:
+                self.surface.release(entity_id)
+                self._redraw()
+
+        return _held_long_enough
 
     def _give_up(self, entity_id: str) -> Any:
         """Stop waiting for an entity that is never going to answer."""
