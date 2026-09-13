@@ -99,6 +99,20 @@ def colour_of(slot: Slot | None, registry: RegistryView) -> int:
     return own_colour(slot) if state.is_active else STATE_OFF
 
 
+def acknowledgement(colour: int) -> int:
+    """What a stateless pad holds for a moment to say it just ran.
+
+    The action colour, unless the pad is already showing it — a scene somebody painted
+    orange, which the colour screen allows and should — in which case white, because a
+    stateless pad never shows white for any other reason, so there it can only mean this.
+
+    Hard-coded to the action colour until 2026-09-13, so an orange scene acknowledged
+    itself by changing to the colour it already was: a pad that could be pressed with no
+    result of any kind, which is the exact thing this latch was added to abolish.
+    """
+    return STATE_OFF if colour == ACTION else ACTION
+
+
 def counterpart(colour: int, slot: Slot | None = None) -> int:
     """The colour a moving pad alternates with.
 
@@ -136,7 +150,9 @@ def render(
         # pads keep reporting while it is held. A scene that switches three lamps on should
         # be watchable doing it; freezing the grid would hide the very thing it did.
         frame = tuple(
-            ACTION if slot is not None and slot.entity_id in view.acknowledged else colour
+            acknowledgement(colour)
+            if slot is not None and slot.entity_id in view.acknowledged
+            else colour
             for slot, colour in zip(slots, frame, strict=True)
         )
 

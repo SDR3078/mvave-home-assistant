@@ -455,6 +455,14 @@ class Surface:
             # died is a diagnostic question, not a finger question, and ``get_pages``
             # answers that one in words.
             return Outcome(animation=refuse(self.rendering().frame, event.pad), reaction=True)
+        # The press has been accepted, so whatever was covering the page gives way to it.
+        # A value bar covers all sixteen pads and the knob map covers eight, and neither was
+        # cleared by a press: the toggle happened underneath a grid still showing the bar,
+        # the pad that was pressed showed nothing, and because the bar's own expiry is
+        # rearmed on every input, tapping pads kept it up indefinitely. A hold puts its own
+        # bar back immediately afterwards, through `peek`.
+        self.hud = None
+        self.legend = False
         outcome = self._perform(action, origin=event.pad, trigger=trigger)
         # Fired even when the pad does nothing the engine understands, because "pad 5 was
         # held" is exactly the thing somebody wants to hang an automation on.
@@ -621,6 +629,10 @@ class Surface:
                         "entity_id": target,
                         "property": prop.key,
                         "value": round(value, 4),
+                        # Always a finger: nothing can turn an encoder but a hand on it.
+                        # Carried anyway, so every one of the eight event types has the
+                        # field and an automation never has to special-case its absence.
+                        "trigger": str(Trigger.PAD),
                     },
                 ),
             ),
@@ -791,15 +803,27 @@ class Surface:
                 self.focus = None
                 return self._also(
                     self.clear_hud(),
-                    Emit(EventType.FOCUS_CLEARED, {"entity_id": action.entity_id}),
+                    Emit(
+                        EventType.FOCUS_CLEARED,
+                        {"entity_id": action.entity_id, "trigger": str(trigger)},
+                    ),
                 )
             self.focus = action.entity_id
             self.peek(action.entity_id)
-            return Outcome(emits=(Emit(EventType.FOCUS_SET, {"entity_id": action.entity_id}),))
+            return Outcome(
+                emits=(
+                    Emit(
+                        EventType.FOCUS_SET,
+                        {"entity_id": action.entity_id, "trigger": str(trigger)},
+                    ),
+                )
+            )
         if isinstance(action, Service):
             return Outcome(calls=(Call(action.domain, action.service, dict(action.data)),))
         if isinstance(action, EventOnly):
-            return Outcome(emits=(Emit(EventType.TAGGED, {"tag": action.tag}),))
+            return Outcome(
+                emits=(Emit(EventType.TAGGED, {"tag": action.tag, "trigger": str(trigger)}),)
+            )
         return NOTHING_HAPPENED
 
     def _toggle_call(self, entity_id: str) -> Call:
@@ -1001,6 +1025,12 @@ class Surface:
             )
             return Outcome(emits=announced, animation=frames, buttons=ButtonTiming.END)
 
+        if leaving is not None and not animate:
+            # Nothing happened, so it must not look like it did. `animate` was unreachable
+            # until 2026-09-13 — this branch returned before it was ever read — so a page
+            # that timed out played the same 1.575 s collapse as a deliberate press, which
+            # both documents promise it does not.
+            return Outcome(emits=announced)
         if leaving is not None:
             page = self.profile.page(leaving)
             colour = page.colour if page else self.page.colour

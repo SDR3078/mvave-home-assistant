@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
-from engine.frames import CURTAIN_HOLD, PAD_COUNT, knob_pad, knobs_in_reading_order
+from engine.frames import knob_pad, knobs_in_reading_order
 from engine.model import (
     Activate,
     EntityState,
@@ -294,15 +294,13 @@ def test_the_idle_timeout_goes_home_without_making_a_fuss() -> None:
     view.handle(Press(0))
     outcome = view.handle(Idle())
     assert view.page.id == "home"
-    # The same way out a button would have taken: the room is on the index, so the curtain
-    # winds back into its pad. No button flash, which is the part that matters — nothing
-    # happened, so nothing may look like it did.
-    #
-    # Worth knowing: `_idle` asks for `animate=False`, and that flag is unreachable while
-    # it also names the page being left. The quiet version the brief describes is not what
-    # runs. Left alone deliberately — it has been on the hardware for two days without
-    # complaint, and changing it is a separate question from the curtain's timing.
-    assert len(outcome.animation) == PAD_COUNT * 2 + CURTAIN_HOLD
+    # No animation at all, which is what both documents promise and what `_idle` has always
+    # asked for: nothing happened, so nothing may look like it did. The flag saying so was
+    # unreachable until 2026-09-13 — the branch that draws a curtain returned before it was
+    # ever read — so a page that timed out played the identical 1.575 s collapse as a
+    # deliberate press, and the one thing separating "you left" from "somebody left" was
+    # gone.
+    assert outcome.animation == ()
     assert outcome.buttons is ButtonTiming.START
 
 
@@ -355,7 +353,9 @@ def test_an_event_only_pad_fires_an_event_and_calls_nothing() -> None:
     )
     outcome = Surface(profile, FakeRegistry({}, {})).handle(Press(0))
     assert outcome.calls == ()
-    assert Emit(EventType.TAGGED, {"tag": "coffee"}) in outcome.emits
+    # Carrying the trigger like every other event, so an automation acting on a tag can
+    # still tell its own effect from a finger.
+    assert Emit(EventType.TAGGED, {"tag": "coffee", "trigger": "pad"}) in outcome.emits
 
 
 def test_pressing_an_empty_pad_does_nothing_at_all() -> None:
@@ -1420,3 +1420,42 @@ def test_a_knob_turned_on_the_index_still_says_nothing() -> None:
     view = surface()
     assert view.page.source.kind is SourceKind.PAGES
     assert view.handle(Turn(BRIGHTNESS, 1)) == Outcome()
+
+
+def test_every_event_says_what_caused_it() -> None:
+    # The README promises a `trigger` on all of them "so an automation can never mistake
+    # its own effect for a person". Four carried none: focus_set, focus_cleared, tagged and
+    # knob_turned — so an automation triggering on focus_set and calling mvave.focus
+    # re-triggered itself, which is the exact loop the promise is about.
+    registry = FakeRegistry(areas={"living": ("light.lamp",)}, states={"light.lamp": "on"})
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+
+    set_focus = view.focus_on("light.lamp")
+    assert set_focus.emits[0].data["trigger"] == "service"
+    cleared = view.focus_on("light.lamp")  # the same gesture lets it go
+    assert cleared.emits[-1].data["trigger"] == "service"
+
+    view.handle(Press(0, held=True))  # a finger, on the same entity
+    assert view.handle(Turn(BRIGHTNESS, 1)).emits[0].data["trigger"] == "pad"
+
+
+def test_a_press_takes_the_grid_back_from_the_bar() -> None:
+    # Both documents say a pad press cancels the value bar. It did not: the toggle happened
+    # underneath a grid still covered by the bar, the pressed pad showed nothing, and the
+    # bar's expiry was rearmed by that very press — so tapping pads kept it up for ever.
+    registry = FakeRegistry(
+        areas={"living": ("light.lamp", "switch.fan")},
+        states={"light.lamp": "on", "switch.fan": "on"},
+    )
+    registry.attributes = {"light.lamp": {"brightness": 128}}
+    view = Surface(PROFILE, registry)
+    view.handle(Press(0))
+    view.handle(Press(0, held=True))
+    view.handle(Turn(BRIGHTNESS, 2))
+    assert view.showing  # the bar is up
+
+    view.handle(Press(1))  # tap the switch beside it
+    assert not view.showing
+    # And the page is back, rather than sixteen pads of bar.
+    assert view.rendering().frame == view._page_rendering().frame

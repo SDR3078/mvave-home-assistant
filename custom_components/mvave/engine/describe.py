@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 from .model import (
+    UNKNOWN_AT_REST,
     Activate,
     Back,
     EventOnly,
@@ -108,12 +109,19 @@ def describe_slot(index: int, slot: Slot | None, registry: RegistryView) -> dict
         # The registry's own name for it, which is what somebody reading this recognises.
         # An entity id is a handle; "Ceiling lights" is what is written on the wall.
         described["name"] = state.attributes.get("friendly_name") or entity_id
-    if slot.is_stateless:
-        described["shows"] = ACTION
-    elif state is None or state.is_opaque:
+    domain = entity_id.split(".", 1)[0]
+    opaque = state is None or state.is_opaque
+    if opaque and domain not in UNKNOWN_AT_REST:
         # The same thing the pad itself says under a finger, and the reason this is worth
         # asking for: on the grid an unreachable pad and a pad that is off look identical.
+        #
+        # Asked before statelessness, not after. A script is *drawn* stateless and can still
+        # be unreachable, so branching on how the pad is drawn made this report "action" for
+        # a pad that refuses — while `Surface._press` says in as many words that this
+        # service is what explains a refusal in words.
         described["shows"] = UNREACHABLE
+    elif slot.is_stateless or state is None:
+        described["shows"] = ACTION
     else:
         described["shows"] = ON if state.is_active else OFF
     return described
