@@ -1001,6 +1001,24 @@ def test_a_pad_that_would_do_nothing_shudders_rather_than_looking_broken() -> No
     assert view.focus == "light.a"
 
 
+def test_a_refusal_says_it_is_a_reaction_so_it_cannot_restart_itself() -> None:
+    # Three blinks in 540 ms is 5.6 Hz, legal only because three is the most a thing may
+    # flash in one second. Restarting one partway through puts more than three there — and
+    # pressing a dead pad twice is exactly what somebody does when the first press looked
+    # like it did nothing. The engine cannot enforce that, having no clock, so it says which
+    # animations are reactions and the runner declines to restart one with another.
+    registry = FakeRegistry(
+        areas={"living": ("light.gone",)}, states={"light.gone": "unavailable"}
+    )
+    view = Surface(PROFILE, registry)
+    going_in = view.handle(Press(0))
+    # A page change is not a reaction: pressing a second room mid-curtain means it.
+    assert going_in.animation and going_in.reaction is False
+
+    refusal = view.handle(Press(0))
+    assert refusal.animation and refusal.reaction is True
+
+
 def test_a_readout_pad_shows_its_state_and_shudders_when_pressed() -> None:
     # A pad is allowed to tell you something nothing can change. It keeps the whole
     # language — its colour when the door is open, white when it is shut — and answers a

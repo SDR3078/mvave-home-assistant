@@ -224,6 +224,10 @@ class SurfaceRunner:
         self._wanted: Frame | None = None
         self._wanted_buttons: dict[str, bool] | None = None
         self._playing: asyncio.Task[None] | None = None
+        #: Whether what is playing is a reaction rather than a page change. Only reactions
+        #: are protected from being restarted by another reaction; a page change is always
+        #: interruptible, because somebody pressing a second room means it.
+        self._reacting = False
         self._watching: CALLBACK_TYPE | None = None
         self._started = time.monotonic()
         self._unsubscribe: list[CALLBACK_TYPE] = []
@@ -654,6 +658,7 @@ class SurfaceRunner:
         if self._playing is not None:
             self._playing.cancel()
             self._playing = None
+            self._reacting = False
 
     def _handle(self, event: InputEvent) -> Outcome:
         """Ask the engine, and set the countdowns its answer implies."""
@@ -694,11 +699,22 @@ class SurfaceRunner:
 
     @callback
     def _play(self, outcome: Outcome) -> None:
-        """Start a transition, replacing whatever was already running."""
+        """Start a transition, replacing whatever was already running.
+
+        Except that a reaction never replaces a reaction. A refusal is three blinks in
+        540 ms, which is 5.6 Hz and legal only because three is the most a thing may flash
+        in one second; restarting one partway through puts more than three there, and
+        pressing a dead pad twice is exactly what somebody does when the first press
+        appeared to do nothing. Hammering it now holds the one refusal it already has —
+        the same property the acknowledgement latch has, for the same reason.
+        """
         if not outcome.animation:
+            return
+        if outcome.reaction and self._playing is not None and self._reacting:
             return
         self._cancel_animation()
         LOGGER.debug("%s: animating %d frames", self.coordinator.address, len(outcome.animation))
+        self._reacting = outcome.reaction
         self._playing = self._task(self._animate(outcome), "transition")
 
     async def _animate(self, outcome: Outcome) -> None:
@@ -721,6 +737,7 @@ class SurfaceRunner:
             if self._playing is mine:
                 self._started = time.monotonic()
                 self._playing = None
+                self._reacting = False
                 self._redraw()
                 # How long the grid was actually owned by the animation, which is the only
                 # way to tell "it blinked twice" from "one blink took twice as long".

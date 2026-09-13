@@ -198,6 +198,15 @@ class Outcome:
     #: say so. The engine has no clock, so it cannot decide when to let go; the caller
     #: reads this and sets the countdown.
     acknowledged: tuple[str, ...] = ()
+    #: Whether the animation is a *reaction* — something brief, under the finger that asked
+    #: for it — rather than a move from one page to another.
+    #:
+    #: The distinction exists for one reason: a reaction must never restart a reaction. Three
+    #: blinks in 540 ms is already 5.6 Hz, which is only legal because three is the most a
+    #: thing may flash in a second, so pressing a dead pad twice inside a second would put
+    #: more than three there. Saying no a second time also tells nobody anything, since the
+    #: first refusal is still on the grid saying it.
+    reaction: bool = False
     #: Frames to play in order, one per ``frames.STEP_SECONDS``. Empty means the grid just
     #: redraws, which is what an ordinary toggle does.
     animation: tuple[Frame, ...] = ()
@@ -433,7 +442,7 @@ class Surface:
             # and a colour reserved for "unreachable" would cost a fifth of the whole
             # vocabulary. It says so under the finger instead, which is the only moment
             # anybody can act on it.
-            return Outcome(animation=refuse(self.rendering().frame, event.pad))
+            return Outcome(animation=refuse(self.rendering().frame, event.pad), reaction=True)
         action = slot.hold if event.held else slot.tap
         if isinstance(action, INERT_ACTIONS):
             # A lit pad that does nothing when pressed is indistinguishable from a broken
@@ -444,7 +453,7 @@ class Surface:
             # pad cannot act because it is a door sensor or because the lamp behind it
             # died is a diagnostic question, not a finger question, and ``get_pages``
             # answers that one in words.
-            return Outcome(animation=refuse(self.rendering().frame, event.pad))
+            return Outcome(animation=refuse(self.rendering().frame, event.pad), reaction=True)
         outcome = self._perform(action, origin=event.pad, trigger=trigger)
         # Fired even when the pad does nothing the engine understands, because "pad 5 was
         # held" is exactly the thing somebody wants to hang an automation on.
@@ -470,7 +479,7 @@ class Surface:
         if rooms[pad].id == self.stack[-1]:
             # Lit, and pressing it would do nothing, which on this surface is never allowed
             # to be silent: you are already there.
-            return Outcome(animation=refuse(self.rendering().frame, pad))
+            return Outcome(animation=refuse(self.rendering().frame, pad), reaction=True)
         # The shift is cleared inside the move, after it has read what is on the grid, so
         # the curtain grows out of the switcher rather than out of a page nobody can see.
         return self._navigate(rooms[pad].id, origin=pad, trigger=trigger)
