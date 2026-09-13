@@ -18,6 +18,11 @@ config/*
 # Editor and tool state
 .vscode/
 .claude/settings.local.json
+# Review reports are a working note to whoever ran the review, not a record of the
+# project: they name findings by line number, so they go stale the moment anything is
+# fixed — which is the same afternoon. Named rather than ignoring .claude/ wholesale, so
+# that a reviewer persona in .claude/agents/ could still be shared if one is ever written.
+.claude/reviews/
 
 # Third-party test data fetched by scripts/fetch_rp052_dataset. Unlicensed, so never vendored.
 tests/fixtures/external/
