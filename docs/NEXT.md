@@ -196,6 +196,22 @@ implementation plan and this file is the running to-do list.
   encoders have no rings and no position, so the surface is the only thing that can hold
   one. Deriving a temperature from the colour was ruled out — Home Assistant declines to
   on purpose, and inventing a number the platform refuses to state is how a knob lies.
+- **Brand assets, from the manufacturer's own logo.** The owner's call, and the right one:
+  Home Assistant's brands repository is explicitly for "the brand or product", so a
+  manufacturer wordmark is the convention rather than something to be squeamish about. Six
+  PNGs in `custom_components/mvave/brand/`, cut from the supplied wordmark — the `M`
+  measured off the alpha channel at 214x221, which is near enough square to make an icon
+  without distorting it.
+
+  Two things worth knowing before anybody touches them. The supplied logo is **white on
+  transparent**, which is the `dark_` variant: brands prefers the default optimised for a
+  *white* background, so `logo.png` and `icon.png` carry near-black ink and the whites are
+  `dark_logo.png` and `dark_icon.png`. And the `custom_integrations` folder in the brands
+  repository is now **legacy** — since 2026.3.0 a custom component carries its own assets,
+  which `homeassistant/components/brands/const.py` serves under exactly these eight
+  filenames with a fallback chain. So there is no pull request to make. `logo@2x.png` is
+  deliberately absent: the source is 221 pixels tall and the hDPI rule wants a shortest
+  side of at least 256, so upscaling would only blur it, and the chain falls back.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
@@ -230,12 +246,7 @@ implementation plan and this file is the running to-do list.
      it; this one was not. Unreachable no longer has a colour at all — it shows white like
      anything that is off and shudders when pressed, which was the owner's idea and buys
      back a fifth of the vocabulary.
-2. **A brand icon**, which is the only real HACS failure left. `validate/brands.py` looks
-   for `custom_components/mvave/brand/icon.png` in the repository tree and returns early
-   if it is there, so this does **not** need the pull request against
-   `home-assistant/brands` first — that is only the fallback it checks second. Home
-   Assistant's brands repository wants 256x256 and 512x512 PNGs with transparency.
-3. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
+2. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
 
 ## Decided against
