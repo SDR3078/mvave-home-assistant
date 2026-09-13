@@ -646,7 +646,12 @@ class SurfaceRunner:
         if event is None:
             return
         outcome = self._handle(event)
-        self._make_way_for(outcome)
+        # A button being let go of is the end of a gesture rather than a new one, so it
+        # alone does not clear the way. Everything else does, including a press that turns
+        # out to do nothing: "any press aborts the running animation" is the rule, and a
+        # dark pad or an unbound transport button is still a press.
+        if not isinstance(event, ButtonRelease):
+            self._make_way_for(outcome)
         self._settle(outcome)
 
     def _make_way_for(self, outcome: Outcome) -> None:
@@ -662,13 +667,6 @@ class SurfaceRunner:
         computed, which made the guard in `_play` unreachable: `_playing` was always None
         by the time it was asked. The whole of that protection was dead code.
         """
-        if outcome == Outcome():
-            # It asked for nothing, so there is nothing for it to show and no reason to
-            # stop what is. Letting go of the back button is the case: it ends the switcher
-            # mode, which is already over, and its only observable effect was killing the
-            # curtain that same gesture had just started — a few frames into 1.575 s, every
-            # time, because a finger comes off *back* not long after tapping the room.
-            return
         if outcome.reaction and self._playing is not None and self._reacting:
             return
         self._cancel_animation()
