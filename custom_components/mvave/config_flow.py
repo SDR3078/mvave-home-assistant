@@ -34,6 +34,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
 )
+from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
     CONF_AREA,
@@ -246,6 +247,7 @@ class MvaveOptionsFlow(OptionsFlow):
         and left scripts where they were.
         """
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         if user_input is not None:
             painted: dict[str, int] = {}
             twice: set[str] = set()
@@ -257,17 +259,21 @@ class MvaveOptionsFlow(OptionsFlow):
             missing = set(PAINTABLE) - set(painted)
             stateful = {d for d in user_input.get("purple", ()) if d not in STATELESS_DOMAINS}
 
+            wrong: set[str] = set()
             if twice:
-                errors["base"] = "colour_twice"
+                errors["base"], wrong = "colour_twice", twice
             elif missing:
-                errors["base"] = "colour_missing"
+                errors["base"], wrong = "colour_missing", missing
             elif stateful:
                 # Purple against white is the one pair measured as too close to tell apart,
                 # so purple is only safe where a pad never shows white. On anything with an
                 # off it would be unreadable exactly when it mattered.
-                errors["base"] = "purple_needs_stateless"
+                errors["base"], wrong = "purple_needs_stateless", stateful
             else:
                 return self.async_create_entry(data={CONF_DOMAIN_COLOURS: painted})
+            # Named, not counted. "Something is in no box" sends somebody hunting through
+            # five boxes and twenty chips for a thing the form already knows the name of.
+            placeholders = {"kinds": await self._named(wrong)}
 
         chosen = {**DOMAIN_COLOURS, **self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})}
         fields: dict[Any, Any] = {
@@ -281,7 +287,29 @@ class MvaveOptionsFlow(OptionsFlow):
             ): _paintable_selector()
             for name, colour in CHOOSABLE.items()
         }
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields), errors=errors)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(fields),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def _named(self, domains: set[str]) -> str:
+        """The kinds of thing, by the names the boxes call them.
+
+        Read back out of this integration's own translations rather than kept in a second
+        list here, because a second list is one that drifts: the chips would say "Blinds,
+        curtains and garage doors" while the error said "cover".
+        """
+        labels = await async_get_translations(
+            self.hass, self.hass.config.language, "selector", {DOMAIN}
+        )
+        return ", ".join(
+            sorted(
+                labels.get(f"component.{DOMAIN}.selector.paintable.options.{domain}", domain)
+                for domain in domains
+            )
+        )
 
 
 class PageSubentryFlow(ConfigSubentryFlow):

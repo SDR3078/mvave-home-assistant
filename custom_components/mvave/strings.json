@@ -266,9 +266,9 @@
       }
     },
     "error": {
-      "colour_twice": "Something is in two boxes at once. Every kind of thing has exactly one colour.",
-      "colour_missing": "Something is in no box at all. Every kind of thing needs a colour, or its pads would have nothing to show.",
-      "purple_needs_stateless": "Purple only takes things with no on and off of their own. Purple and white are the one pair too close to tell apart on this device, so anything that can be switched off would be unreadable exactly when it mattered."
+      "colour_twice": "{kinds} — in two boxes at once. Every kind of thing has exactly one colour, so take it out of the one you did not mean.",
+      "colour_missing": "{kinds} — not in any box. Every kind of thing needs a colour, or its pads would have nothing to show.",
+      "purple_needs_stateless": "{kinds} — cannot be purple, because they can be switched off and so show white when they are. Purple and white are the one pair too close to tell apart on this device, which would make them unreadable exactly when it mattered."
     }
   },
   "selector": {

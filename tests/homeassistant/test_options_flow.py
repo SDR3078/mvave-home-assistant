@@ -166,3 +166,33 @@ async def test_a_refused_form_comes_back_holding_what_was_typed(
 
     again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
     assert boxes(again)["blue"] == answers["blue"]
+
+
+async def test_a_refusal_names_what_is_wrong_rather_than_saying_something_is(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # Reported from the form: "the validation error does not specify which category does not
+    # have a colour assigned yet". Five boxes and twenty chips is too many to search for a
+    # thing the form already knows the name of — and it knows the *label*, not the domain,
+    # because it reads them back out of the same translations the chips are drawn from.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["orange"] = [d for d in answers["orange"] if d not in ("light", "fan")]
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["errors"] == {"base": "colour_missing"}
+    named = again["description_placeholders"]["kinds"]
+    assert named == "Fans, Lights"  # the names on the chips, in a fixed order
+    assert "light" not in named  # never the raw domain
+
+
+async def test_a_refusal_names_the_thing_in_two_boxes_too(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["blue"] = [*answers["blue"], "cover"]
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["errors"] == {"base": "colour_twice"}
+    assert again["description_placeholders"]["kinds"] == "Blinds, curtains and garage doors"
