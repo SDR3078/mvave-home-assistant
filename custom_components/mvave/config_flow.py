@@ -199,6 +199,16 @@ def _pad_selector() -> EntitySelector:
     return EntitySelector(EntitySelectorConfig(domain=sorted(PINNABLE)))
 
 
+#: How each kind of mistake is named when more than one is reported at once. Short, and
+#: in English only: the integration ships one language, and the alternative is a separate
+#: translation key per pair of problems.
+_PROBLEMS: Final = {
+    "colour_twice": "In two boxes",
+    "colour_missing": "In no box",
+    "purple_needs_stateless": "Cannot be purple",
+}
+
+
 def _paintable_selector() -> SelectSelector:
     """Every kind of thing a pad can hold, as chips you can move between the colours."""
     return SelectSelector(
@@ -259,21 +269,37 @@ class MvaveOptionsFlow(OptionsFlow):
             missing = set(PAINTABLE) - set(painted)
             stateful = {d for d in user_input.get("purple", ()) if d not in STATELESS_DOMAINS}
 
-            wrong: set[str] = set()
-            if twice:
-                errors["base"], wrong = "colour_twice", twice
-            elif missing:
-                errors["base"], wrong = "colour_missing", missing
-            elif stateful:
-                # Purple against white is the one pair measured as too close to tell apart,
-                # so purple is only safe where a pad never shows white. On anything with an
-                # off it would be unreadable exactly when it mattered.
-                errors["base"], wrong = "purple_needs_stateless", stateful
-            else:
+            # Purple is refused on anything switchable because purple against white is the
+            # one pair measured as too close to tell apart, so purple is only safe where a
+            # pad never shows white.
+            problems = [
+                (key, kinds)
+                for key, kinds in (
+                    ("colour_twice", twice),
+                    ("colour_missing", missing),
+                    ("purple_needs_stateless", stateful),
+                )
+                if kinds
+            ]
+            if not problems:
                 return self.async_create_entry(data={CONF_DOMAIN_COLOURS: painted})
-            # Named, not counted. "Something is in no box" sends somebody hunting through
-            # five boxes and twenty chips for a thing the form already knows the name of.
-            placeholders = {"kinds": await self._named(wrong)}
+
+            # All of them, not the first. Rearranging two boxes can easily leave one kind
+            # of thing in two and another in none at the same moment, and reporting only
+            # the first sent somebody back round for a problem the form already knew about.
+            #
+            # Named, too: "something is in no box" makes a person hunt through five boxes
+            # and twenty chips for a thing the form can name.
+            if len(problems) == 1:
+                key, kinds = problems[0]
+                errors["base"] = key
+                placeholders = {"kinds": await self._named(kinds)}
+            else:
+                errors["base"] = "colour_several"
+                lines = [
+                    f"- {_PROBLEMS[key]}: {await self._named(kinds)}" for key, kinds in problems
+                ]
+                placeholders = {"kinds": "\n".join(lines)}
 
         chosen = {**DOMAIN_COLOURS, **self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})}
         fields: dict[Any, Any] = {

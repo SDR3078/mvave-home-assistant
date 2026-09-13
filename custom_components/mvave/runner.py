@@ -172,9 +172,10 @@ def page_labels(profile: Profile) -> tuple[tuple[str, str], ...]:
     for page in profile.pages.values():
         label = page.title
         if label in taken:
+            # The id is unique, so one qualifier always settles it. This used to fall into
+            # a `while` whose body recomputed the identical string every pass — a no-op at
+            # best and a hang at worst, never the counter it was written as.
             label = f"{page.title} ({page.id})"
-        while label in taken:
-            label = f"{page.title} ({page.id}) {len(taken)}"
         taken.add(label)
         labels.append((page.id, label))
     return tuple(labels)

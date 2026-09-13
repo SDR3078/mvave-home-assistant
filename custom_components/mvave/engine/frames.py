@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-from .palette import OFF, STATE_OFF
+from .palette import MAP_DEAD, OFF
 
 #: The grid, and a frame's length.
 COLUMNS: Final = 4
@@ -261,7 +261,7 @@ def knob_legend(colours: Sequence[int | None]) -> Frame:
     """
     frame = list(blank())
     for knob, colour in enumerate(colours[: KNOB_COLUMNS * KNOBS_PER_COLUMN], start=1):
-        frame[knob_pad(knob)] = STATE_OFF if colour is None else colour
+        frame[knob_pad(knob)] = MAP_DEAD if colour is None else colour
     return tuple(frame)
 
 

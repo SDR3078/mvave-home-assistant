@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import pytest
-from engine.frames import knob_pad, knobs_in_reading_order
+from engine.frames import expand, knob_pad, knobs_in_reading_order, wipe
 from engine.model import (
     Activate,
     EntityState,
@@ -903,11 +903,17 @@ def test_navigating_from_outside_still_grows_from_the_page_s_own_pad() -> None:
 def test_a_page_with_nowhere_to_grow_from_gets_a_plain_wipe() -> None:
     # From inside the living room the kitchen is not on the grid at all, so there is no
     # pad that could honestly be the origin.
+    #
+    # Asserted against the real wipe rather than against its first frame. A wipe and a
+    # spiral out of pad 0 both light pad 0 first, so the old assertion passed either way:
+    # deleting the rule this test is named after left the whole suite green.
     view = surface()
     view.handle(Press(0))
-    first = view.navigate_to("kitchen").animation[0]
-    assert first[0] == GREEN
-    assert first.count(GREEN) == 1
+    before = view.rendering().frame
+    animation = view.navigate_to("kitchen").animation
+    after = view.rendering().frame
+    assert animation == wipe(GREEN, before, after)
+    assert animation != expand(0, GREEN, before, after)
 
 
 def scene_page() -> Surface:

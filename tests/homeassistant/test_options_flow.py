@@ -210,3 +210,22 @@ def test_no_two_chips_say_the_same_thing() -> None:
     )["selector"]["paintable"]["options"]
     assert sorted(labels) == sorted(PAINTABLE)  # one chip per kind of thing, and no others
     assert len(set(labels.values())) == len(labels)
+
+
+async def test_two_mistakes_at_once_are_both_reported(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # Rearranging two boxes can easily leave one kind of thing in two and another in none at
+    # the same moment. Reporting only the first sent somebody back round for a problem the
+    # form already knew about.
+    result = await open_it(hass, entry)
+    answers = dict(boxes(result))
+    answers["blue"] = [*answers["blue"], "cover"]  # cover is now in green and blue
+    answers["orange"] = [d for d in answers["orange"] if d != "light"]  # and light is nowhere
+
+    again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
+    assert again["errors"] == {"base": "colour_several"}
+    listed = again["description_placeholders"]["kinds"]
+    assert "Blinds, curtains and garage doors" in listed
+    assert "Lights" in listed
+    assert listed.count("\n") == 1  # one line per problem, both of them

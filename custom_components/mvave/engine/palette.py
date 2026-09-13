@@ -182,4 +182,4 @@ def is_emittable(velocity: int) -> bool:
     desynchronise the grid from the frame the engine thinks it drew, and 127 is a second
     off that would look like a bug the first time somebody used it as a brightness.
     """
-    return 0 <= velocity < 96
+    return velocity >= 0 and velocity not in UNUSABLE

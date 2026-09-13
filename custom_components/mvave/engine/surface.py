@@ -389,7 +389,7 @@ class Surface:
         Coloured by the property rather than by the entity, which matters more now that
         what an encoder adjusts depends on what is focused: if the meaning can move, the
         map has to say what it currently *is*, not merely that it is something. Orange is
-        the level and the other three are the colour controls — see ``palette.MAP_COLOURS``.
+        the level and the other three are the colour controls — see ``palette.PROPERTY_COLOURS``.
         """
         live = self.knob_map()
         colours: list[int | None] = []
