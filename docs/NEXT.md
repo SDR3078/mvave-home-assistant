@@ -225,6 +225,15 @@ implementation plan and this file is the running to-do list.
   Verified four ways: no blob under any ref contains it, `log -S` finds nothing for either
   case, `fsck` is clean with no unreachable objects, and the suite still passes. A sweep for
   anything else address-shaped found only the placeholder.
+
+  **GitHub still serves the pre-rewrite objects by direct SHA, and that is fine.** Checked,
+  not assumed: fetching the old commit hash still succeeds, because unreferenced objects
+  survive until GitHub's own gc runs. Deliberately not chased — deleting and recreating the
+  repository to finish it would be out of proportion. The pad advertises as `SMC-PAD` with
+  its service UUID and **connects without pairing or bonding**, so anybody in radio range
+  already has more than the address gives them, and a BLE address is not routable, not in
+  any registry, and means nothing to anyone further away than the next room. The scrub was
+  cheap hygiene, not a fix for a danger. Do not reopen this.
 - **The shift gesture**, which was the last engine item. Hold the back button and the top
   row becomes the rooms, each in its own colour, with the rest of the grid dark so that it
   plainly is not a page; press one to go straight there. Holding back used to go home,
