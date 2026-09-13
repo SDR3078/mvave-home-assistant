@@ -196,3 +196,17 @@ async def test_a_refusal_names_the_thing_in_two_boxes_too(
     again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
     assert again["errors"] == {"base": "colour_twice"}
     assert again["description_placeholders"]["kinds"] == "Blinds, curtains and garage doors"
+
+
+def test_no_two_chips_say_the_same_thing() -> None:
+    # Twenty chips across five boxes, and the only way to move one is to recognise it. Home
+    # Assistant's own Helpers screen calls both `button` and `input_button` "Button", so
+    # taking its words unchanged would have put two identical chips in the purple box.
+    import json
+    from pathlib import Path
+
+    labels = json.loads(
+        (Path(__file__).parents[2] / "custom_components/mvave/strings.json").read_text()
+    )["selector"]["paintable"]["options"]
+    assert sorted(labels) == sorted(PAINTABLE)  # one chip per kind of thing, and no others
+    assert len(set(labels.values())) == len(labels)
