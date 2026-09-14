@@ -36,19 +36,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # DELETE THIS LINE WHEN THE REPOSITORY BECOMES PUBLIC.
-          #
-          # Neither check can pass while it is private, and neither is about this
-          # repository's contents. Both read their file from
-          # raw.githubusercontent.com, which is unauthenticated, so a private
-          # repository answers 404 and HACS reports the file as missing or invalid:
-          # `hacsjson` gets None back from get_hacs_json_raw and calls hacs.json
-          # invalid, and `integration_manifest` finds manifest.json in the tree —
-          # that part is the authenticated API and works — then cannot fetch it and
-          # reports "expected a dictionary. Got None".
-          #
-          # Ignored rather than tolerated, so that a red Validate goes back to
-          # meaning something: the one real failure left is `brands`, which wants a
-          # 256x256 icon at custom_components/mvave/brand/icon.png, or this domain
-          # listed at brands.home-assistant.io. That one is on docs/NEXT.md.
-          ignore: hacsjson integration_manifest
+          # Nothing ignored. Two checks were, while the repository was private —
+          # `hacsjson` and `integration_manifest` both read their file from
+          # raw.githubusercontent.com unauthenticated and got a 404 — and the line
+          # was deleted the day it went public (2026-09-14), so that every red here
+          # is about this repository's contents and nothing else.
