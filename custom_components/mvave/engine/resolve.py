@@ -173,6 +173,7 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
 
     An entity already placed by hand is never placed a second time by the source, so
     pinning the kitchen lamp to the corner does not leave a duplicate of it further down.
+    A fixed page stops after the configuration: it is exactly what somebody saved.
     """
     slots: list[Slot | None] = [None] * PAD_COUNT
     for index, config in page.pads.items():
@@ -181,6 +182,13 @@ def resolve(page: Page, registry: RegistryView, profile: Profile) -> tuple[Slot 
             if slot.colour is None and slot.entity_id is not None:
                 slot = replace(slot, colour=entity_colour(slot.entity_id, profile))
             slots[index] = slot
+
+    if page.fixed:
+        # Somebody edited this page, so it holds exactly what they saved. The source is
+        # still named — an event can say which room it came from — but supplies nothing:
+        # an empty pad stays dark, and an entity cleared off the page does not come back
+        # on the next free one.
+        return tuple(slots)
 
     if page.source.kind is SourceKind.PAGES:
         filling: Iterable[Slot] = _page_slots(page, profile)

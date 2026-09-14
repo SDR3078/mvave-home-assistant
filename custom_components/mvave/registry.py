@@ -23,6 +23,7 @@ from .const import (
     CONF_AREA,
     CONF_COLOUR,
     CONF_DOMAIN_COLOURS,
+    CONF_FIXED,
     CONF_LABEL,
     CONF_PADS,
     DOMAIN,
@@ -226,8 +227,9 @@ def pads_now(hass: HomeAssistant, data: Mapping[str, Any]) -> list[str | None]:
     from a page with nothing on it.
 
     What is filled in is not therefore pinned. The screen compares what comes back against
-    this, and stores only what differs, so looking at a page and pressing submit leaves it
-    following its room exactly as before.
+    this: unchanged, and the page carries on following its room exactly as before; changed
+    in any way, and the page becomes exactly those sixteen fields — which is why a fixed
+    page shows here as its pins alone, with nothing supplied around them.
     """
     page = Page(
         id="preview",
@@ -235,6 +237,7 @@ def pads_now(hass: HomeAssistant, data: Mapping[str, Any]) -> list[str | None]:
         colour=BLUE,
         source=_source_of(data),
         pads=_pads_of(data),
+        fixed=bool(data.get(CONF_FIXED)),
     )
     registry = HomeAssistantRegistry(hass)
     slots = resolve(page, registry, Profile(pages={}, root_id="preview"))
@@ -283,6 +286,7 @@ def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Prof
                 colour=page.data.get(CONF_COLOUR) or IDENTITY[index % len(IDENTITY)],
                 source=_source_of(page.data),
                 pads=_pads_of(page.data),
+                fixed=bool(page.data.get(CONF_FIXED)),
                 parent_id=ROOT_ID,
             )
     else:

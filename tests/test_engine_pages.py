@@ -300,6 +300,27 @@ def test_an_explicit_page_is_only_what_was_configured() -> None:
     assert [index for index, slot in enumerate(slots) if slot] == [3]
 
 
+def test_a_fixed_page_is_only_its_pins_even_though_it_names_a_room() -> None:
+    # A page somebody has edited. The room is still named, so an event can say where the
+    # page came from, but it supplies nothing: an empty pad stays dark, and an entity that
+    # was cleared off the page does not come back on the next free pad — which is exactly
+    # what it did until 2026-09-14, on the first real page the owner made.
+    registry = FakeRegistry(areas={"living": ("light.lamp", "switch.fan", "cover.blind")})
+    fixed = page(
+        source=Source(SourceKind.AREA, "living"),
+        pads={0: PadConfig(tap=Toggle("light.lamp")), 2: PadConfig(tap=Toggle("cover.blind"))},
+        fixed=True,
+    )
+    slots = resolve(fixed, registry, EMPTY)
+    assert [slot.entity_id if slot else None for slot in slots[:4]] == [
+        "light.lamp",
+        None,  # cleared, and stays clear
+        "cover.blind",
+        None,  # the fan is in the room and is not offered
+    ]
+    assert fixed.source.key == "living"  # still says where it came from
+
+
 def test_a_label_page_works_across_rooms() -> None:
     registry = FakeRegistry(labels={"pad:morning": ("light.hall", "scene.wake")})
     slots = resolve(page(source=Source(SourceKind.LABEL, "pad:morning")), registry, EMPTY)

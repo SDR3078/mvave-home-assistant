@@ -145,12 +145,15 @@ page is. **Add page** asks for four things:
 |---|---|
 | **Name** | what it is called on the index |
 | **Colour** | names it on the index, and is the curtain that sweeps in and out |
-| **Fill from a room** | it fills itself from that area, and keeps up as the area changes |
+| **Fill from a room** | it fills itself from that area, and keeps up as the area changes — until you edit its pads |
 | **Fill from a label** | it fills itself from whatever carries that label, across rooms |
 
 Give it neither and the page is yours to fill pad by pad. The next screen does that: sixteen
-optional fields, with the grid drawn above them. A pad you pin is fixed; every pad you leave
-empty still fills itself from the room. So pinning one thing does not mean pinning sixteen.
+optional fields, with the grid drawn above them, already holding whatever the page shows.
+Save them unchanged and the page keeps following its room. Change anything and the page is
+yours: it shows exactly what you saved, an empty field is a dark pad, and nothing fills in
+behind it — a lamp added to the room later appears only when you put it on a pad. A page you
+never edited keeps up with the room; a page you edited holds still.
 
 A page's identity is its own — a ULID, not the room's name — so it survives the area being
 renamed, or deleted, or never having existed.

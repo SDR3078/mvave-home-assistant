@@ -251,6 +251,10 @@ class Page:
     source: Source = field(default_factory=Source)
     parent_id: str | None = None
     pads: Mapping[int, PadConfig] = field(default_factory=dict)
+    #: Exactly the pins and nothing else, even though a source is named. A page somebody
+    #: has edited: nothing on it moves or appears on its own after that. The source stays,
+    #: so an event can still say which room the page came from.
+    fixed: bool = False
     #: Knob number to entity, overriding whatever has focus. The one place a page beats
     #: the global rule, for "volume here always means this speaker".
     knobs: Mapping[int, str] = field(default_factory=dict)

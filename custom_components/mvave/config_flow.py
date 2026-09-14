@@ -40,6 +40,7 @@ from .const import (
     CONF_AREA,
     CONF_COLOUR,
     CONF_DOMAIN_COLOURS,
+    CONF_FIXED,
     CONF_LABEL,
     CONF_PADS,
     DOMAIN,
@@ -362,32 +363,37 @@ class PageSubentryFlow(ConfigSubentryFlow):
         return await self._async_page_form(user_input, existing=None)
 
     async def async_step_pads(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
-        """Pin whatever should sit in a particular place.
+        """Put things on pads, or leave the page to its room.
 
-        Every pad is optional. A pad left empty fills itself from the page's room or label
-        as before, so pinning one thing does not mean pinning sixteen — and on a page with
-        no room at all, these are the whole page.
+        The fields arrive holding what the page shows right now. Save them unchanged and
+        the page carries on following its room or label, pins and all — looking at a page
+        must never quietly freeze it. Change anything and the page is yours: exactly these
+        sixteen fields, an empty one a dark pad, and nothing filling in behind them.
+
+        The second rule is what makes clearing a field mean something. Until 2026-09-14 an
+        emptied field stored nothing, "nothing stored" meant "let the room decide", and the
+        room decided the same thing again — so taking an entity off a room page put it
+        straight back, on the first real page the owner made.
         """
         showing = pads_now(self.hass, self._page)
-        was: Mapping[str, str] = (
-            (self._existing.data.get(CONF_PADS) or {}) if self._existing else {}
-        )
         if user_input is not None:
-            # Only what somebody actually changed. The fields arrive filled with whatever
-            # the page already shows, most of which a room supplied, so storing all of it
-            # would pin all of it — and a page that had merely been looked at would quietly
-            # stop following its room, which nobody would notice until a lamp added to that
-            # room failed to appear on it.
-            # Stored by position, one based, exactly as before: the printed number is what
-            # the field is *called*, not what the configuration is keyed by. Keeping the key
-            # off the label is what lets the label change without migrating anybody's pages.
-            pads = {
-                str(index + 1): chosen
+            chosen = [
+                user_input.get(_pad_field(PAD_NUMBER_BY_READING_ORDER[index])) or None
                 for index in range(PAD_COUNT)
-                if (chosen := user_input.get(_pad_field(PAD_NUMBER_BY_READING_ORDER[index])))
-                and (chosen != showing[index] or str(index + 1) in was)
-            }
-            data = {**self._page, CONF_PADS: pads}
+            ]
+            if chosen == showing and not self._page.get(CONF_FIXED):
+                # Untouched. Whatever pins it already had stay pins, and it keeps following.
+                data = {**self._page, CONF_PADS: self._page.get(CONF_PADS) or {}}
+            else:
+                # Stored by position, one based: the printed number is what the field is
+                # *called*, not what the configuration is keyed by, which is what let the
+                # labels change without migrating anybody's pages. Empty fields are simply
+                # absent — with nothing filling in, absent is dark.
+                data = {
+                    **self._page,
+                    CONF_FIXED: True,
+                    CONF_PADS: {str(index + 1): e for index, e in enumerate(chosen) if e},
+                }
             if self._existing is None:
                 return self.async_create_entry(title=self._title, data=data)
             return self.async_update_and_abort(
@@ -439,6 +445,10 @@ class PageSubentryFlow(ConfigSubentryFlow):
                     # was missing from the screen that exists to edit them — and the "keep
                     # only what changed" comparison was against a page nobody was looking at.
                     CONF_PADS: (existing.data.get(CONF_PADS) or {}) if existing else {},
+                    # And whether those pins are the whole page. Dropped here, a fixed page
+                    # re-saved unchanged would come back following its room, and everything
+                    # somebody had cleared off it would return.
+                    CONF_FIXED: bool(existing.data.get(CONF_FIXED)) if existing else False,
                 }
                 self._title = user_input[CONF_NAME]
                 return await self.async_step_pads()

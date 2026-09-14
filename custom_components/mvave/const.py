@@ -49,6 +49,12 @@ CONF_LABEL = "label"
 #: migrating anybody's pages. The engine counts from zero, and that translation happens
 #: once, here at the edge.
 CONF_PADS = "pads"
+#: Whether the page holds exactly its pins and nothing else. Set the moment somebody saves
+#: a change on the pads screen: a page you have edited is yours, an empty field is a dark
+#: pad, and nothing fills in behind it afterwards. Absent on a page nobody has edited, which
+#: keeps following its room — and absent on every page made before 2026-09-14, so those
+#: keep following too, pins and all, exactly as they did.
+CONF_FIXED = "fixed"
 
 #: Which areas become pages, in the order they will appear on the index. Superseded by
 #: page subentries; kept so the one-time migration can still read what was there.

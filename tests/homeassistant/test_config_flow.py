@@ -27,11 +27,13 @@ from custom_components.mvave.const import (
     CONF_ADDRESS,
     CONF_AREA,
     CONF_COLOUR,
+    CONF_FIXED,
     CONF_LABEL,
     CONF_PADS,
     DOMAIN,
     SUBENTRY_PAGE,
 )
+from custom_components.mvave.registry import pads_now
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -147,17 +149,84 @@ async def test_saving_a_room_page_untouched_pins_nothing(
     result = await hass.config_entries.subentries.async_configure(form["flow_id"], suggested(form))
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_PADS] == {}
+    assert not result["data"].get(CONF_FIXED)  # and it still follows the room
 
 
-async def test_changing_one_pad_pins_that_one_and_leaves_the_rest_following(
+async def test_changing_one_pad_makes_the_page_yours(
     hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
 ) -> None:
+    # Any change fixes the page: exactly these sixteen fields are stored, the ones the room
+    # supplied included, and the page stops following the room. "I edited it, so it holds
+    # still" — on a grid used by muscle memory, nothing may move on its own.
     form = await add_page(hass, entry, area=bedroom)
-    answers = {**suggested(form), "pad_14": "light.bed_light"}
+    answers = {**suggested(form), "pad_13": "cover.hall_window", "pad_14": "light.bed_light"}
     result = await hass.config_entries.subentries.async_configure(form["flow_id"], answers)
-    # Stored by position rather than by the printed number — PAD14 is the second pad in
+    assert result["data"][CONF_FIXED] is True
+    # Stored by position rather than by the printed number — PAD13 is the first pad in
     # reading order — so the label on the field could change without migrating anything.
-    assert result["data"][CONF_PADS] == {"2": "light.bed_light"}
+    assert result["data"][CONF_PADS] == {
+        "1": "cover.hall_window",
+        "2": "light.bed_light",
+        "3": "climate.ecobee",
+        "4": "fan.ceiling_fan",
+    }
+
+
+async def test_clearing_a_field_leaves_that_pad_dark_and_the_entity_gone(
+    hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
+) -> None:
+    # The first real page the owner made, 2026-09-14: a room page with a few things taken
+    # off it. An emptied field used to store nothing, "nothing stored" meant "let the room
+    # decide", and the room decided the same thing again — every deleted entity came
+    # straight back. Now the field is the page: empty means dark, and the cover is gone.
+    form = await add_page(hass, entry, area=bedroom)
+    answers = {k: v for k, v in suggested(form).items() if v != "cover.hall_window"}
+    result = await hass.config_entries.subentries.async_configure(form["flow_id"], answers)
+    assert result["data"][CONF_PADS] == {
+        "1": "light.bed_light",
+        "3": "climate.ecobee",
+        "4": "fan.ceiling_fan",
+    }
+    shown = pads_now(hass, next(iter(entry.subentries.values())).data)
+    assert shown[:4] == ["light.bed_light", None, "climate.ecobee", "fan.ceiling_fan"]
+    assert "cover.hall_window" not in shown  # not on the next free pad either
+
+
+async def test_a_page_you_edited_holds_still_and_one_you_did_not_keeps_up(
+    hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
+) -> None:
+    # Two pages from the same room, one saved untouched and one with a change, and then a
+    # switch is added to the room. The untouched page picks it up; the edited page does
+    # not, and will not until somebody puts it on a pad.
+    untouched = await add_page(hass, entry, area=bedroom)
+    await hass.config_entries.subentries.async_configure(untouched["flow_id"], suggested(untouched))
+    edited = await add_page(hass, entry, name="Study", area=bedroom)
+    await hass.config_entries.subentries.async_configure(
+        edited["flow_id"],
+        {**suggested(edited), "pad_13": "cover.hall_window", "pad_14": "light.bed_light"},
+    )
+
+    registry = er.async_get(hass)
+    made = registry.async_get_or_create("switch", "demo", "plug", suggested_object_id="plug")
+    registry.async_update_entity(made.entity_id, area_id=bedroom)
+    hass.states.async_set(made.entity_id, "on")
+
+    first, second = (page.data for page in entry.subentries.values())
+    assert "switch.plug" in pads_now(hass, first)
+    assert "switch.plug" not in pads_now(hass, second)
+
+
+async def test_a_page_pinned_before_fixed_existed_still_follows_its_room(
+    hass: HomeAssistant, bedroom: str
+) -> None:
+    # Configuration written before 2026-09-14 has pins and no `fixed` flag. It must keep
+    # following its room exactly as it did, or every existing page with one pin on it would
+    # come up as that pin and fifteen dark pads after an update.
+    data = {CONF_COLOUR: "blue", CONF_AREA: bedroom, CONF_PADS: {"4": "light.bed_light"}}
+    shown = pads_now(hass, data)
+    assert shown[3] == "light.bed_light"
+    assert "cover.hall_window" in shown
+    assert "climate.ecobee" in shown
 
 
 async def test_a_page_cannot_fill_itself_from_two_places(
@@ -207,9 +276,10 @@ async def test_editing_a_page_shows_the_pins_it_already_has(
 
     filled = suggested(await reconfigure(hass, entry))
     assert filled["pad_14"] == "light.bed_light"  # the pin, not what the room would put here
-    # And the room's own contents fill in around it, never placed twice.
-    assert filled["pad_13"] == "cover.hall_window"
-    assert "light.bed_light" not in [filled[key] for key in filled if key != "pad_14"]
+    # And nothing around it. Sending one field where the room had offered four was an
+    # edit, so the page is exactly that field: the room supplies nothing to a fixed page,
+    # and the screen that edits it has to show that truthfully or it cannot be edited.
+    assert [key for key in filled if key.startswith("pad_")] == ["pad_14"]
 
 
 async def test_editing_a_page_and_changing_nothing_keeps_its_pins(
