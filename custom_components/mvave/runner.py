@@ -97,6 +97,12 @@ CONFIRM_SECONDS = 6.0
 #: a latch rather than a one-shot animation.
 ACKNOWLEDGE_SECONDS = 0.8
 
+#: How long after a reaction *starts* before another may. Three blinks in 540 ms is the
+#: whole of the budget — at most three flashes in any one second — so a second refusal may
+#: not begin until a second has passed since the first began. The one already shown is
+#: held instead: the pad refused, and it is still refusing.
+REACTION_COOLDOWN_SECONDS = 1.0
+
 
 def as_printed(data: Mapping[str, Any]) -> dict[str, Any]:
     """An engine payload with any pad index replaced by the number printed on that pad.
@@ -249,6 +255,8 @@ class SurfaceRunner:
         #: are protected from being restarted by another reaction; a page change is always
         #: interruptible, because somebody pressing a second room means it.
         self._reacting = False
+        #: When the last reaction began, for the cooldown. Monotonic seconds.
+        self._reaction_started: float | None = None
         self._watching: CALLBACK_TYPE | None = None
         self._started = time.monotonic()
         self._unsubscribe: list[CALLBACK_TYPE] = []
@@ -553,6 +561,13 @@ class SurfaceRunner:
 
     @callback
     def _down(self, key: str) -> None:
+        # A finger down is activity. Left alone, a press that began at 29.95 s of a 30 s
+        # timeout had the page move under it before the release landed the tap — on a
+        # different lamp. The clock starts again when the finger lifts, through the
+        # dispatch in `_up`; while it is down there is no clock at all.
+        cancel = self._timers.pop("idle", None)
+        if cancel is not None:
+            cancel()
         self._holds[key] = self._task(self._hold(key), f"hold {key}")
 
     async def _hold(self, key: str) -> None:
@@ -692,7 +707,7 @@ class SurfaceRunner:
         computed, which made the guard in `_play` unreachable: `_playing` was always None
         by the time it was asked. The whole of that protection was dead code.
         """
-        if outcome.reaction and self._playing is not None and self._reacting:
+        if self._holds_reaction(outcome):
             return
         self._cancel_animation()
 
@@ -707,6 +722,21 @@ class SurfaceRunner:
         self._perform(outcome)
         self._play(outcome)
         self._redraw()
+
+    def _holds_reaction(self, outcome: Outcome) -> bool:
+        """Whether an arriving reaction must leave the one already shown alone.
+
+        While one is playing, and for a second after one started. The second half was
+        missing until 2026-09-15: the guard cleared the instant a refusal finished, so
+        pressing a dead pad twice inside a second put six flashes into a window that may
+        hold three — the exact case `frames.py` says has no margin at all.
+        """
+        if not outcome.reaction:
+            return False
+        if self._playing is not None and self._reacting:
+            return True
+        started = self._reaction_started
+        return started is not None and time.monotonic() - started < REACTION_COOLDOWN_SECONDS
 
     @callback
     def _cancel_animation(self) -> None:
@@ -768,11 +798,13 @@ class SurfaceRunner:
         """
         if not outcome.animation:
             return
-        if outcome.reaction and self._playing is not None and self._reacting:
+        if self._holds_reaction(outcome):
             return
         # The caller has already made way, via _make_way_for.
         LOGGER.debug("%s: animating %d frames", self.coordinator.address, len(outcome.animation))
         self._reacting = outcome.reaction
+        if outcome.reaction:
+            self._reaction_started = time.monotonic()
         self._playing = self._task(self._animate(outcome), "transition")
 
     async def _animate(self, outcome: Outcome) -> None:
@@ -968,6 +1000,12 @@ class SurfaceRunner:
     @callback
     def _timed_out(self, _now: Any) -> None:
         self._timers.pop("idle", None)
+        if self._holds and self.surface is not None:
+            # Somebody is holding a pad or a button — the switcher hangs off one, and a
+            # hold firing re-arms this clock while the finger is still there. Not idle:
+            # ask again later rather than move the page under a hand.
+            self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+            return
         self._dispatch(Idle())
 
     @callback

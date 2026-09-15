@@ -394,6 +394,50 @@ def test_a_rebuild_keeps_you_where_you_stood_even_when_rest_moved() -> None:
     assert fresh.stack == ["home", "living"]
 
 
+def test_at_rest_the_timeout_lets_go_of_a_forgotten_hold() -> None:
+    # Hold the lamp on the resting page and walk away. Before the room page timed out to
+    # the index, which cleared the focus; resting there, the timeout returned nothing at
+    # all, and the knobs stayed on that lamp — with the breathe — until the next finger.
+    view = resting_in_the_living_room()
+    view.handle(Press(0, held=True))
+    assert view.focus == "light.lamp"
+    outcome = view.handle(Idle())
+    assert view.focus is None
+    assert outcome.animation == ()  # nothing moved, so nothing is drawn
+    cleared = emitted(outcome)["focus_cleared"]
+    assert cleared == {"entity_id": "light.lamp", "trigger": str(Trigger.IDLE)}
+    assert view.stack == ["home", "living"]
+
+
+def test_timing_out_on_the_resting_page_reached_through_other_rooms_is_silent() -> None:
+    # Living -> kitchen -> living, by the switcher. The page you are on *is* the resting
+    # page, so the history simply goes: no curtain over a page that did not change, and no
+    # announcement of leaving and entering it, which an automation would act on.
+    view = resting_in_the_living_room()
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(Press(1))  # kitchen
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(Press(0))  # living again
+    assert view.stack == ["home", "living", "kitchen", "living"]
+    outcome = view.handle(Idle())
+    assert view.stack == ["home", "living"]
+    assert outcome.emits == ()
+    assert outcome.animation == ()
+
+
+def test_the_timeout_waits_while_the_switcher_is_held() -> None:
+    # A finger on the back button is not idleness. Left alone, thirty seconds of holding
+    # moved the page under the hand and the next tap landed on a live control.
+    view = surface()
+    view.handle(Press(0))
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    assert view.shifted is True
+    outcome = view.handle(Idle())
+    assert view.shifted is True
+    assert view.stack == ["home", "living"]
+    assert outcome.animation == () and outcome.emits == ()
+
+
 # ---------------------------------------------------------------- commanding
 
 

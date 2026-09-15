@@ -8,16 +8,22 @@ found at the grid the minute the feature was tried.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Coroutine
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.mvave.engine.frames import PAD_COUNT
 from custom_components.mvave.engine.model import IDLE_TIMEOUT, Page, Profile, Source, SourceKind
 from custom_components.mvave.engine.palette import BLUE, ORANGE
-from custom_components.mvave.engine.surface import Surface
+from custom_components.mvave.engine.surface import Outcome, Surface
 from custom_components.mvave.registry import ROOT_ID, HomeAssistantRegistry
 from custom_components.mvave.runner import SurfaceRunner
+
+EMPTY_FRAME = (0,) * PAD_COUNT
 
 
 def profile(default: str | None = None) -> Profile:
@@ -47,6 +53,11 @@ def runner(hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch) -> SurfaceRunne
     made.coordinator = SimpleNamespace(address="AA:BB:CC:DD:EE:FF")  # type: ignore[assignment]
     made.surface = Surface(profile(), HomeAssistantRegistry(hass))
     made._timers = {}
+    made._holds = {}
+    made._fired = set()
+    made._playing = None
+    made._reacting = False
+    made._reaction_started = None
     made._lit = set()
     made._logged_page = None
     made._shown = None
@@ -76,3 +87,53 @@ async def test_a_rebuild_arms_the_clock_of_the_page_you_are_standing_on(
 async def test_a_rebuild_onto_a_page_with_no_clock_arms_nothing(runner: SurfaceRunner) -> None:
     runner.reconfigure(profile())
     assert "idle" not in runner._timers
+
+
+# ------------------------------------------------------------- fingers and the clock
+
+
+async def test_a_finger_down_stops_the_idle_clock(
+    runner: SurfaceRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A press that began at 29.95 s of a 30 s timeout had the page move under it before
+    # the release landed the tap — on a different lamp. A finger down is activity.
+    def no_task(work: Coroutine[Any, Any, None], what: str) -> Any:
+        work.close()
+        return SimpleNamespace(cancel=lambda: None)
+
+    monkeypatch.setattr(runner, "_task", no_task)
+    runner._restart("idle", 30.0, runner._timed_out)
+    assert "idle" in runner._timers
+    runner._down("pad:1")
+    assert "idle" not in runner._timers
+    assert "pad:1" in runner._holds
+
+
+async def test_the_clock_waits_while_a_finger_is_down(
+    runner: SurfaceRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A hold firing re-arms the clock while the finger is still there — the switcher hangs
+    # off exactly such a hold — so the clock has to check for hands before it moves a page.
+    dispatched: list[object] = []
+    monkeypatch.setattr(runner, "_dispatch", dispatched.append)
+    runner._holds["button:left"] = SimpleNamespace(cancel=lambda: None)  # type: ignore[assignment]
+    runner.surface = Surface(profile(default="living"), HomeAssistantRegistry(runner.hass))
+    runner._timed_out(None)
+    assert dispatched == []  # nothing moved under the hand
+    assert "idle" in runner._timers  # asked again later instead
+    for cancel in runner._timers.values():
+        cancel()
+
+
+async def test_a_second_refusal_inside_a_second_is_held(runner: SurfaceRunner) -> None:
+    # Three blinks in 540 ms is the whole flash budget. The guard used to clear the instant
+    # a refusal finished, so a second press right after put six flashes into one second.
+    refusal = Outcome(animation=(EMPTY_FRAME,), reaction=True)
+    assert runner._holds_reaction(refusal) is False  # nothing shown yet
+    runner._reaction_started = time.monotonic()
+    assert runner._holds_reaction(refusal) is True  # one just started
+    runner._reaction_started = time.monotonic() - 2.0
+    assert runner._holds_reaction(refusal) is False  # long enough ago
+    assert (
+        runner._holds_reaction(Outcome(animation=(EMPTY_FRAME,))) is False
+    )  # a page change never waits

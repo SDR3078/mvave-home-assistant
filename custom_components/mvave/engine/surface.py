@@ -760,9 +760,20 @@ class Surface:
         What still marks it out is the event, which carries `idle` rather than a finger,
         so an automation can tell the difference even though the grid cannot.
         """
-        rest = self.profile.at_rest
-        if self.stack == rest:
+        if self.shifted:
+            # A finger is on the switcher. A held button is not idleness, and the clock
+            # comes round again once it has let go.
             return NOTHING_HAPPENED
+        rest = self.profile.at_rest
+        if self.stack[-1] == rest[-1]:
+            # Already on the resting page, perhaps with history behind it. Nothing visible
+            # changes, so nothing is drawn or announced — but the history goes, and so does
+            # the session. Returning plain nothing here, as this did for a day from
+            # 2026-09-15, meant a lamp somebody held and walked away from kept the knobs and
+            # the breathe until the next finger, and a page reached through other rooms
+            # curtained over itself, announcing a departure and an arrival nobody made.
+            self.stack[:] = rest
+            return self._let_go(Trigger.IDLE)
         # Shrinking into the room's own pad is only honest when the index is where you
         # arrive. Resting on a page instead, no pad there *is* the room being left, so it
         # is the plain sideways wipe in the resting page's colour.
@@ -772,6 +783,23 @@ class Surface:
             trigger=Trigger.IDLE,
             leaving=leaving,
         )
+
+    def _let_go(self, trigger: Trigger) -> Outcome:
+        """Close whatever session is open without going anywhere.
+
+        The knobs let go of what they were pointed at, the bar and the legend come down,
+        and the only thing announced is the focus ending — with the trigger that ended it,
+        so an automation can tell a timeout from a finger.
+        """
+        emits: tuple[Emit, ...] = ()
+        if self.focus is not None:
+            emits = (
+                Emit(EventType.FOCUS_CLEARED, {"entity_id": self.focus, "trigger": str(trigger)}),
+            )
+        self.focus = None
+        self.hud = None
+        self.legend = False
+        return Outcome(emits=emits)
 
     # ---------------------------------------------------------------- actions
 
