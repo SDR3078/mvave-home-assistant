@@ -174,7 +174,9 @@ unreadable exactly when it mattered.
 Above the boxes is **Default page**: where the pad rests. It wakes up there when it connects
 and returns there after thirty seconds alone anywhere else, with the index one press behind
 it — **stop** still goes to the index, and so does **back** from the resting page. Two roads
-home, one of them a step shorter. Leave it on *Home* and nothing changes.
+home, one of them a step shorter. Leave it on *Home* and nothing changes. Choosing it does
+not move the grid: like every save, it leaves you where you were standing, and the next
+timeout is what takes you there. Judged at the grid and kept that way on purpose.
 
 Saving anything rebuilds the surface in place and keeps you on the page you were standing on.
 It does not reconnect, which would cost twenty seconds.
