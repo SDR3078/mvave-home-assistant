@@ -34,9 +34,10 @@ You get a **grid of pages**. One page per room, plus an index listing them.
 - Rooms you switch between build up **behind the back button**: hop through three and back
   retraces them one at a time. That is deliberate, and it is what **stop** is for — one
   press to the index from wherever you are, however far you have wandered.
-- Leave it alone inside a room for thirty seconds and it returns to the index the same way
-  a press of **back** would have, curtain and all. The event it fires says `idle` rather
-  than `button`, so an automation can still tell nobody was standing there.
+- Leave it alone for thirty seconds and it returns to where it rests — the index, or a
+  **default page** if you set one — curtain and all, the same way a press of **back** would
+  have. The event it fires says `idle` rather than `button`, so an automation can still tell
+  nobody was standing there.
 
 Nothing needs configuring for this to work. A fresh install builds a page per room out of
 your area registry and fills each one from what is actually in that room.
@@ -170,6 +171,11 @@ Purple only takes things with no on and off of their own: purple against white i
 pair too close to tell apart on this hardware, so on anything switchable it would be
 unreadable exactly when it mattered.
 
+Above the boxes is **Default page**: where the pad rests. It wakes up there when it connects
+and returns there after thirty seconds alone anywhere else, with the index one press behind
+it — **stop** still goes to the index, and so does **back** from the resting page. Two roads
+home, one of them a step shorter. Leave it on *Home* and nothing changes.
+
 Saving anything rebuilds the surface in place and keeps you on the page you were standing on.
 It does not reconnect, which would cost twenty seconds.
 
@@ -272,7 +278,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 461 tests
+pytest tests       # 474 tests
 ruff check . && ruff format --check . && mypy
 ```
 

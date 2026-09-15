@@ -316,6 +316,84 @@ def test_going_idle_at_home_is_not_an_event() -> None:
     assert surface().handle(Idle()).animation == ()
 
 
+# ------------------------------------------------------------ resting on a page
+
+
+def resting_in_the_living_room() -> Surface:
+    """The same house, told to rest in the living room rather than on the index."""
+    profile = Profile(pages=PROFILE.pages, root_id="home", default_page_id="living")
+    return Surface(profile, surface().registry)
+
+
+def test_a_default_page_is_where_the_surface_wakes_up() -> None:
+    # Connect, and you are in the living room with the index behind you: back is lit and
+    # goes there, and so does stop. Two roads home, one of them a step shorter.
+    view = resting_in_the_living_room()
+    assert view.stack == ["home", "living"]
+    assert view.page.id == "living"
+    assert view.rendering().buttons[BACK_BUTTON] is True
+    assert view.rendering().buttons[HOME_BUTTON] is True
+
+
+def test_the_timeout_returns_to_the_default_page_and_stop_to_the_index() -> None:
+    # The owner's split, at the grid on 2026-09-15: "button behaviour the same, timeout and
+    # connect go to the living room". Wander three rooms deep, go idle, and you are back
+    # in the living room with only the index behind you.
+    view = resting_in_the_living_room()
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(Press(1))  # the kitchen, through the switcher
+    view.handle(ButtonPress(BACK_BUTTON, held=True))
+    view.handle(Press(2))  # then the office
+    assert view.stack == ["home", "living", "kitchen", "office"]
+
+    before = view.rendering().frame
+    outcome = view.handle(Idle())
+    assert view.stack == ["home", "living"]
+    entered = emitted(outcome)["page_entered"]
+    assert entered["page_id"] == "living"
+    assert entered["trigger"] == str(Trigger.IDLE)
+    # A plain wipe in the living room's colour. Going back to the index shrinks into the
+    # room's own pad, but no pad on the living room page is the office, so there is nothing
+    # honest to shrink into.
+    assert outcome.animation == wipe(ORANGE, before, view.rendering().frame)
+
+    view.handle(ButtonPress(HOME_BUTTON))
+    assert view.stack == ["home"]  # stop is the index regardless
+
+
+def test_resting_on_the_default_page_the_timeout_does_nothing() -> None:
+    outcome = resting_in_the_living_room().handle(Idle())
+    assert outcome.animation == ()
+    assert outcome.emits == ()
+
+
+def test_the_index_goes_back_to_rest_too() -> None:
+    # Whether the index *fires* a timeout is the runner's business — the registry gives it
+    # one only when a default page is set. When it does, the surface goes back to rest.
+    view = resting_in_the_living_room()
+    view.handle(ButtonPress(HOME_BUTTON))
+    view.handle(Idle())
+    assert view.stack == ["home", "living"]
+
+
+def test_a_default_page_that_no_longer_exists_means_the_index() -> None:
+    profile = Profile(pages=PROFILE.pages, root_id="home", default_page_id="attic")
+    assert profile.at_rest == ["home"]
+    assert Surface(profile, surface().registry).stack == ["home"]
+
+
+def test_a_rebuild_keeps_you_where_you_stood_even_when_rest_moved() -> None:
+    # Choosing a default page rebuilds the surface. Somebody standing in the kitchen stays
+    # in the kitchen; only the next timeout goes to the new resting page.
+    old = surface()
+    old.handle(Press(1))  # kitchen
+    fresh = resting_in_the_living_room()
+    old.carry_into(fresh)
+    assert fresh.stack == ["home", "kitchen"]
+    fresh.handle(Idle())
+    assert fresh.stack == ["home", "living"]
+
+
 # ---------------------------------------------------------------- commanding
 
 

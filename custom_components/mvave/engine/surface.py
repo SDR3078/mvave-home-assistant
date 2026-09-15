@@ -253,8 +253,9 @@ class Surface:
     def __init__(self, profile: Profile, registry: RegistryView) -> None:
         self.profile = profile
         self.registry = registry
-        #: Where you have been, oldest first. Never empty: the root is always underneath.
-        self.stack: list[str] = [profile.root_id]
+        #: Where you have been, oldest first. Never empty: the root is always underneath,
+        #: with the default page already on it if the profile names one.
+        self.stack: list[str] = profile.at_rest
         self.focus: str | None = None
         self.pending: set[str] = set()
         #: Stateless pads holding their acknowledgement colour. Released on a countdown
@@ -303,7 +304,7 @@ class Surface:
         # As far as it still exists. A page can be deleted by the same edit that caused
         # the rebuild, and standing on it afterwards is not a place.
         kept = [page for page in self.stack if fresh.profile.page(page) is not None]
-        fresh.stack = kept or [fresh.profile.root_id]
+        fresh.stack = kept or fresh.profile.at_rest
         fresh.focus = self.focus
         fresh.pending = set(self.pending)
         fresh.last_known = dict(self.last_known)
@@ -748,7 +749,7 @@ class Surface:
         return NOTHING_HAPPENED
 
     def _idle(self) -> Outcome:
-        """Give up and go home.
+        """Give up and go back to rest: the index, or the default page sitting on it.
 
         The same way out a finger would have taken, which is what it looked like in
         practice: `animate=False` was asked for here and never read, because the branch
@@ -759,11 +760,15 @@ class Surface:
         What still marks it out is the event, which carries `idle` rather than a finger,
         so an automation can tell the difference even though the grid cannot.
         """
-        if self.depth == 0:
+        rest = self.profile.at_rest
+        if self.stack == rest:
             return NOTHING_HAPPENED
-        leaving = self.stack[-1]
+        # Shrinking into the room's own pad is only honest when the index is where you
+        # arrive. Resting on a page instead, no pad there *is* the room being left, so it
+        # is the plain sideways wipe in the resting page's colour.
+        leaving = self.stack[-1] if len(rest) == 1 else None
         return self._go(
-            lambda: self.stack.__setitem__(slice(None), [self.profile.root_id]),
+            lambda: self.stack.__setitem__(slice(None), rest),
             trigger=Trigger.IDLE,
             leaving=leaving,
         )

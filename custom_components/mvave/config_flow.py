@@ -39,6 +39,7 @@ from homeassistant.helpers.translation import async_get_translations
 from .const import (
     CONF_AREA,
     CONF_COLOUR,
+    CONF_DEFAULT_PAGE,
     CONF_DOMAIN_COLOURS,
     CONF_FIXED,
     CONF_LABEL,
@@ -52,7 +53,7 @@ from .engine.frames import PAD_COUNT
 from .engine.model import STATELESS_DOMAINS
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
 from .engine.resolve import PINNABLE
-from .registry import pads_now
+from .registry import ROOT_ID, pads_now
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -287,7 +288,13 @@ class MvaveOptionsFlow(OptionsFlow):
                 if kinds
             ]
             if not problems:
-                return self.async_create_entry(data={CONF_DOMAIN_COLOURS: painted})
+                data: dict[str, Any] = {CONF_DOMAIN_COLOURS: painted}
+                # By the page's own id, and only when it is a page: the index is what an
+                # absent key already means, so choosing it stores nothing.
+                resting = user_input.get(CONF_DEFAULT_PAGE)
+                if resting and resting != ROOT_ID:
+                    data[CONF_DEFAULT_PAGE] = resting
+                return self.async_create_entry(data=data)
 
             # All of them, not the first. Rearranging two boxes can easily leave one kind
             # of thing in two and another in none at the same moment, and reporting only
@@ -306,8 +313,32 @@ class MvaveOptionsFlow(OptionsFlow):
                 ]
                 placeholders = {"kinds": "\n".join(lines)}
 
+        # Where the pad rests: the index, or any page somebody has made, offered by name and
+        # stored by id so renaming the room does not lose it. A page deleted since simply
+        # means the index again, which is also what the dropdown then shows.
+        pages = [
+            {"value": ROOT_ID, "label": "Home"},
+            *(
+                {"value": page.subentry_id, "label": page.title}
+                for page in self.config_entry.subentries.values()
+                if page.subentry_type == SUBENTRY_PAGE
+            ),
+        ]
+        resting = (
+            user_input.get(CONF_DEFAULT_PAGE)
+            if user_input is not None
+            else self.config_entry.options.get(CONF_DEFAULT_PAGE)
+        )
+        if resting not in {page["value"] for page in pages}:
+            resting = ROOT_ID
+
         chosen = {**DOMAIN_COLOURS, **self.config_entry.options.get(CONF_DOMAIN_COLOURS, {})}
         fields: dict[Any, Any] = {
+            vol.Optional(CONF_DEFAULT_PAGE, default=resting): SelectSelector(
+                SelectSelectorConfig(options=pages, mode=SelectSelectorMode.DROPDOWN)
+            ),
+        }
+        fields |= {
             vol.Required(
                 name,
                 description={

@@ -239,6 +239,10 @@ class PadConfig:
     colour: int | None = None
 
 
+#: Seconds a page waits with nobody touching it before the surface goes back to rest.
+IDLE_TIMEOUT: Final = 30.0
+
+
 @dataclass(frozen=True, slots=True)
 class Page:
     """One screen: what it is called, what colour names it, and what is on it."""
@@ -260,8 +264,8 @@ class Page:
     knobs: Mapping[int, str] = field(default_factory=dict)
     #: The three transport buttons that are not back and home.
     buttons: Mapping[str, PadAction] = field(default_factory=dict)
-    #: Seconds of no input before returning to the root. Zero means never.
-    idle_timeout: float = 30.0
+    #: Seconds of no input before returning to rest. Zero means never.
+    idle_timeout: float = IDLE_TIMEOUT
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +279,11 @@ class Profile:
     #: so it can be configured, and resolved once when a page is laid out rather than on
     #: every render.
     colours: Mapping[str, int] = field(default_factory=dict)
+    #: Where the surface rests, if not on the root: the page it wakes up on when it
+    #: connects and the page the idle timeout returns to, sitting on top of the root so
+    #: that back goes to the index from it. The home button is the root regardless; that
+    #: split is the owner's, from the grid. Ignored if it names no page.
+    default_page_id: str | None = None
 
     def page(self, page_id: str) -> Page | None:
         """One page by id, or None if nothing is configured under that name."""
@@ -284,6 +293,18 @@ class Profile:
     def root(self) -> Page | None:
         """The page an empty navigation stack shows."""
         return self.pages.get(self.root_id)
+
+    @property
+    def at_rest(self) -> list[str]:
+        """The navigation stack when nobody has touched anything.
+
+        The root alone, or the default page on top of it. A fresh list each time, because
+        the surface mutates its stack in place and two surfaces must not share one.
+        """
+        default = self.default_page_id
+        if default is not None and default != self.root_id and default in self.pages:
+            return [self.root_id, default]
+        return [self.root_id]
 
 
 @dataclass(frozen=True, slots=True)

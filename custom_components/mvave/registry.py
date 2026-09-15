@@ -22,6 +22,7 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     CONF_AREA,
     CONF_COLOUR,
+    CONF_DEFAULT_PAGE,
     CONF_DOMAIN_COLOURS,
     CONF_FIXED,
     CONF_LABEL,
@@ -31,6 +32,7 @@ from .const import (
 )
 from .engine import IDENTITY, EntityState, PadConfig, Page, Profile, Source, SourceKind
 from .engine.frames import PAD_COUNT
+from .engine.model import IDLE_TIMEOUT
 from .engine.palette import BLUE, DOMAIN_COLOURS
 from .engine.resolve import default_actions, resolve
 
@@ -264,18 +266,27 @@ def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Prof
     """
     registry = HomeAssistantRegistry(hass)
     options: Mapping[str, Any] = entry.options if entry else {}
+    made = list(entry.subentries.values()) if entry else []
+
+    # Where the pad rests, if somebody chose a page for it. By the page's own id, so a page
+    # that has since been deleted simply means the index again rather than an error.
+    default = options.get(CONF_DEFAULT_PAGE)
+    if not any(page.subentry_id == default for page in made if page.subentry_type == SUBENTRY_PAGE):
+        default = None
+
     pages: dict[str, Page] = {
         ROOT_ID: Page(
             id=ROOT_ID,
             title="Home",
             colour=BLUE,
             source=Source(SourceKind.PAGES),
-            # An index is where you end up, not somewhere to time out of.
-            idle_timeout=0,
+            # An index is where you end up, not somewhere to time out of — unless the pad
+            # rests on a page instead, in which case the index is somewhere you visit, and
+            # it goes back to rest like anywhere else.
+            idle_timeout=IDLE_TIMEOUT if default is not None else 0,
         )
     }
 
-    made = list(entry.subentries.values()) if entry else []
     if made:
         for index, page in enumerate(made):
             if page.subentry_type != SUBENTRY_PAGE:
@@ -310,4 +321,5 @@ def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Prof
         pages=pages,
         root_id=ROOT_ID,
         colours={**DOMAIN_COLOURS, **options.get(CONF_DOMAIN_COLOURS, {})},
+        default_page_id=default,
     )

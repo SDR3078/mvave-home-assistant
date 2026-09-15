@@ -252,6 +252,7 @@
         "title": "What each colour means",
         "description": "A pad shows its colour when the thing behind it is **on**, and **white** when it is off. That is the one rule the grid cannot bend, so white is not on offer here.\n\nThe device has five colours and that is all it has, so this asks what each one means rather than asking after each kind of thing one at a time. **Every kind of thing belongs in exactly one box.** To paint your lights green, take them out of orange and put them in green — and you will see what they were sharing orange with.\n\nPurple only takes things with no on and off of their own. Purple against white is the one pair too close to tell apart on this hardware, so on anything that can be switched off it would be unreadable exactly when it mattered.",
         "data": {
+          "default_page": "Default page",
           "blue": "Blue",
           "green": "Green",
           "orange": "Orange",
@@ -259,6 +260,7 @@
           "purple": "Purple"
         },
         "data_description": {
+          "default_page": "Where the pad rests: the page it wakes up on when it connects, and the page it returns to after thirty seconds alone anywhere else. Home is still the index — stop takes you there, and so does back from the resting page. Leave it on Home and nothing changes.",
           "orange": "The usual home for anything with a plain on and off.",
           "green": "Openings, and the things a pad only watches.",
           "purple": "Only things you press once, which never show white."

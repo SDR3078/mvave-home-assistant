@@ -20,8 +20,15 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mvave.config_flow import CHOOSABLE, PAINTABLE
-from custom_components.mvave.const import CONF_ADDRESS, CONF_DOMAIN_COLOURS, DOMAIN
+from custom_components.mvave.const import (
+    CONF_ADDRESS,
+    CONF_DEFAULT_PAGE,
+    CONF_DOMAIN_COLOURS,
+    DOMAIN,
+)
 from custom_components.mvave.engine.palette import DOMAIN_COLOURS, GREEN, ORANGE, WHITE
+from custom_components.mvave.registry import ROOT_ID, build_profile
+from tests.homeassistant.test_config_flow import add_page
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -44,7 +51,13 @@ def boxes(result: dict[str, Any]) -> dict[str, list[str]]:
     return {
         str(key): (getattr(key, "description", None) or {}).get("suggested_value") or []
         for key in result["data_schema"].schema
+        if str(key) in CHOOSABLE  # the boxes; the default-page dropdown sits above them
     }
+
+
+def resting_field(result: dict[str, Any]) -> Any:
+    """The default-page dropdown's schema key, so its default and options can be read."""
+    return next(key for key in result["data_schema"].schema if str(key) == CONF_DEFAULT_PAGE)
 
 
 async def open_it(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, Any]:
@@ -229,3 +242,63 @@ async def test_two_mistakes_at_once_are_both_reported(
     assert "Blinds, curtains and garage doors" in listed
     assert "Lights" in listed
     assert listed.count("\n") == 1  # one line per problem, both of them
+
+
+# ------------------------------------------------------------ where the pad rests
+
+
+async def test_the_pad_can_be_told_where_to_rest(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # A page somebody made, offered by name and stored by its id, so renaming the room
+    # later does not lose it. Only connect and the timeout follow it: the stop button is
+    # the index regardless, which is the owner's split from the grid on 2026-09-15.
+    await add_page(hass, entry, pads={})
+    kitchen = next(iter(entry.subentries))
+
+    result = await open_it(hass, entry)
+    field = resting_field(result)
+    offered = result["data_schema"].schema[field].config["options"]
+    assert [option["label"] for option in offered] == ["Home", "Kitchen"]
+    assert field.default() == ROOT_ID  # nothing chosen yet
+
+    saved = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**boxes(result), CONF_DEFAULT_PAGE: kitchen}
+    )
+    assert saved["type"] is FlowResultType.CREATE_ENTRY
+    assert saved["data"][CONF_DEFAULT_PAGE] == kitchen
+
+    profile = build_profile(hass, entry)
+    assert profile.default_page_id == kitchen
+    assert profile.at_rest == [ROOT_ID, kitchen]
+    # The index is somewhere you visit now rather than where you end up, so it goes back
+    # to rest like any other page instead of never timing out.
+    assert profile.root is not None and profile.root.idle_timeout > 0
+
+    # And the screen shows the choice next time.
+    assert resting_field(await open_it(hass, entry)).default() == kitchen
+
+
+async def test_choosing_home_stores_nothing_which_is_what_it_always_meant(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    result = await open_it(hass, entry)
+    saved = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**boxes(result), CONF_DEFAULT_PAGE: ROOT_ID}
+    )
+    assert CONF_DEFAULT_PAGE not in saved["data"]
+    profile = build_profile(hass, entry)
+    assert profile.at_rest == [ROOT_ID]
+    assert profile.root is not None and profile.root.idle_timeout == 0
+
+
+async def test_a_deleted_default_page_means_the_index_again(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # Stored by id, and the page is gone. Not an error: the pad rests on the index, and the
+    # dropdown says Home rather than offering a page that is not there.
+    hass.config_entries.async_update_entry(entry, options={CONF_DEFAULT_PAGE: "01GONE"})
+    profile = build_profile(hass, entry)
+    assert profile.default_page_id is None
+    assert profile.at_rest == [ROOT_ID]
+    assert resting_field(await open_it(hass, entry)).default() == ROOT_ID

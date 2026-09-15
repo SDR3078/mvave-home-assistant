@@ -63,3 +63,8 @@ CONF_PAGES = "pages"
 CONF_PAGE_COLOURS = "page_colours"
 #: What a kind of thing looks like when it is on, keyed by domain.
 CONF_DOMAIN_COLOURS = "domain_colours"
+#: The page the pad rests on: where it wakes up when it connects, and where the idle
+#: timeout returns to. A page subentry's id, or absent for the index. Only connect and
+#: the timeout follow it — the stop button is the index regardless, so from the resting
+#: page there are two ways home, stop and back, one of them a step shorter.
+CONF_DEFAULT_PAGE = "default_page"
