@@ -502,6 +502,11 @@ class SurfaceRunner:
             "%s: reconfigured, %d pages", self.coordinator.address, len(self.surface.profile.pages)
         )
         self._redraw()
+        # The page you are standing on may have a different clock now. Choosing a default
+        # page gives the index a timeout it never had, and before 2026-09-15 nothing armed
+        # it: the pad sat on the index until the next press, and only then started going
+        # back to rest. Found at the grid the moment the feature was tried.
+        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
 
     # -------------------------------------------------------------- outside
 
