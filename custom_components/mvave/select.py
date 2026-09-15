@@ -87,10 +87,6 @@ class MvavePageSelect(MvaveSurfaceEntity, SelectEntity):
         page_id = view.page_for(option)
         if page_id is None:
             return
-        if page_id == view.root_page_id:
-            # Not a navigation. Pushing the root onto the stack would leave "back" going
-            # forwards into the room somebody just left, which is the sort of thing that
-            # makes a surface feel haunted.
-            self.runner.drive(lambda surface: surface.go_home())
-            return
+        # The root included: the engine turns that into going home rather than a push,
+        # for every caller, so this no longer needs to know.
         self.runner.drive(lambda surface: surface.navigate_to(page_id))

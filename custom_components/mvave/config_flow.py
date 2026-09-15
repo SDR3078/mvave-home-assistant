@@ -388,6 +388,11 @@ class PageSubentryFlow(ConfigSubentryFlow):
         self._page: dict[str, Any] = {}
         self._title = ""
         self._existing: ConfigSubentry | None = None
+        #: What the pad fields were filled from, kept from the moment the form was drawn.
+        #: The submission is compared against *this*, not against the room as it stands
+        #: when the form comes back: a bulb pairing while the form was open used to make an
+        #: untouched save look like an edit, which silently fixed the page.
+        self._showing: list[str | None] | None = None
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Add a page."""
@@ -406,7 +411,11 @@ class PageSubentryFlow(ConfigSubentryFlow):
         room decided the same thing again — so taking an entity off a room page put it
         straight back, on the first real page the owner made.
         """
-        showing = pads_now(self.hass, self._page)
+        if user_input is not None and self._showing is not None:
+            showing = self._showing
+        else:
+            showing = pads_now(self.hass, self._page)
+            self._showing = showing
         if user_input is not None:
             chosen = [
                 user_input.get(_pad_field(PAD_NUMBER_BY_READING_ORDER[index])) or None
@@ -479,7 +488,18 @@ class PageSubentryFlow(ConfigSubentryFlow):
                     # And whether those pins are the whole page. Dropped here, a fixed page
                     # re-saved unchanged would come back following its room, and everything
                     # somebody had cleared off it would return.
-                    CONF_FIXED: bool(existing.data.get(CONF_FIXED)) if existing else False,
+                    # ...unless the room or label changed: giving an edited page a
+                    # different room is asking for that room. Its pins stay, and the room
+                    # fills in around them again. Until 2026-09-15 the flag was carried
+                    # whatever the source did, so the screen promised a room would fill
+                    # the page and nothing ever did, with delete-and-re-add the only way out.
+                    CONF_FIXED: (
+                        bool(existing.data.get(CONF_FIXED))
+                        and area == existing.data.get(CONF_AREA)
+                        and label == existing.data.get(CONF_LABEL)
+                        if existing
+                        else False
+                    ),
                 }
                 self._title = user_input[CONF_NAME]
                 return await self.async_step_pads()

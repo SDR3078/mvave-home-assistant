@@ -328,7 +328,7 @@
         },
         "reconfigure": {
           "title": "Change this page",
-          "description": "A page is one screen of sixteen pads. Give it a room and it fills itself from what is in that room; give it a label and it fills itself from whatever carries that label, across rooms; give it neither and it is yours to fill pad by pad.\n\nThe colour names it on the first screen, and it is the curtain that sweeps across when you go in and out.",
+          "description": "A page is one screen of sixteen pads. Give it a room and it fills itself from what is in that room; give it a label and it fills itself from whatever carries that label, across rooms; give it neither and it is yours to fill pad by pad. A page you have edited keeps its pins; give it a different room or label and that fills in around them again.\n\nThe colour names it on the first screen, and it is the curtain that sweeps across when you go in and out.",
           "data": {
             "name": "Name",
             "colour": "Colour",

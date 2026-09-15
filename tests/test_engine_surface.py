@@ -1004,6 +1004,24 @@ def test_a_page_event_carries_enough_to_act_on_without_asking_anything_else() ->
     assert entered["area_id"] == "living"
 
 
+def test_navigating_to_the_root_is_going_home_not_a_push() -> None:
+    # `home` is a real page id — `get_pages` lists it — so an automation reaching the index
+    # through `mvave.navigate` is ordinary. It used to push the root onto the history:
+    # back lit on the index and going *forwards* into the room just left, wrong depths on
+    # the bus, and with no default page no timeout to ever unwind it.
+    view = surface()
+    view.handle(Press(1))  # kitchen
+    outcome = view.navigate_to("home")
+    assert view.stack == ["home"]
+    assert view.rendering().buttons[BACK_BUTTON] is False
+    assert emitted(outcome)["page_entered"]["depth"] == 0
+    # And with a default page the same call still means the index, not the resting page.
+    resting = resting_in_the_living_room()
+    resting.navigate_to("kitchen")
+    resting.navigate_to("home")
+    assert resting.stack == ["home"]
+
+
 def test_what_moved_you_is_part_of_the_event() -> None:
     # A presence sensor pre-selecting a room and a finger pressing a pad are not the same
     # thing, and an automation that cannot tell them apart will loop.

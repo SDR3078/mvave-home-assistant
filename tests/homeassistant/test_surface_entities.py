@@ -164,12 +164,14 @@ async def test_choosing_a_room_navigates_to_it() -> None:
     assert runner.asked == ["navigate:kitchen"]
 
 
-async def test_choosing_the_index_goes_home_rather_than_deeper() -> None:
+async def test_choosing_the_index_is_an_ordinary_navigation_here() -> None:
     # Pushing the root onto the stack would leave "back" going forwards into the room
-    # somebody just left.
+    # somebody just left. This entity used to guard that on its own while `mvave.navigate`
+    # did not; since 2026-09-15 the engine turns a navigation to the root into going home
+    # for every caller (tests/test_engine_surface.py), so the entity just asks.
     runner = StubRunner(IN_THE_KITCHEN)
     await MvavePageSelect(runner).async_select_option("Home")
-    assert runner.asked == ["home"]
+    assert runner.asked == ["navigate:home"]
 
 
 async def test_choosing_something_that_is_not_a_page_does_nothing() -> None:

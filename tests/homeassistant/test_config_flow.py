@@ -216,6 +216,59 @@ async def test_a_page_you_edited_holds_still_and_one_you_did_not_keeps_up(
     assert "switch.plug" not in pads_now(hass, second)
 
 
+async def test_a_bulb_pairing_while_the_form_is_open_does_not_make_a_look_into_an_edit(
+    hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
+) -> None:
+    # The submission is compared against what the fields were filled from, not against the
+    # room as it stands when the form comes back. Otherwise an integration finishing setup
+    # while somebody had the screen open turned an untouched save into an edit, and the
+    # page silently stopped following its room — the exact thing the screen must never do.
+    form = await add_page(hass, entry, area=bedroom)
+    filled = suggested(form)
+    registry = er.async_get(hass)
+    made = registry.async_get_or_create("switch", "demo", "late", suggested_object_id="late")
+    registry.async_update_entity(made.entity_id, area_id=bedroom)
+    hass.states.async_set(made.entity_id, "on")
+
+    result = await hass.config_entries.subentries.async_configure(form["flow_id"], filled)
+    assert not result["data"].get(CONF_FIXED)
+    assert "switch.late" in pads_now(hass, result["data"])  # still following, so it appears
+
+
+async def test_giving_an_edited_page_a_different_room_asks_for_that_room(
+    hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
+) -> None:
+    # The "Change this page" screen says a room fills the page. A page that had once been
+    # edited stayed fixed whatever room it was given, with delete-and-re-add the only way
+    # out, and nothing saying so. Re-pointing is asking for the room: pins stay, the room
+    # fills in around them.
+    form = await add_page(hass, entry, area=bedroom)
+    answers = {k: v for k, v in suggested(form).items() if v != "cover.hall_window"}
+    await hass.config_entries.subentries.async_configure(form["flow_id"], answers)
+    page = next(iter(entry.subentries.values()))
+    assert page.data[CONF_FIXED] is True
+
+    study = ar.async_get(hass).async_get_or_create("Study")
+    registry = er.async_get(hass)
+    lamp = registry.async_get_or_create("light", "demo", "desk", suggested_object_id="desk")
+    registry.async_update_entity(lamp.entity_id, area_id=study.id)
+    hass.states.async_set(lamp.entity_id, "on")
+
+    started = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_PAGE),
+        context={"source": "reconfigure", "subentry_id": page.subentry_id},
+    )
+    second = await hass.config_entries.subentries.async_configure(
+        started["flow_id"], {**suggested(started), CONF_AREA: study.id}
+    )
+    assert second["step_id"] == "pads"
+    shown = suggested(second)
+    assert shown["pad_13"] == "light.bed_light"  # the pins are still there
+    assert "light.desk" in shown.values()  # and the new room fills in around them
+    await hass.config_entries.subentries.async_configure(second["flow_id"], shown)
+    assert not next(iter(entry.subentries.values())).data.get(CONF_FIXED)
+
+
 async def test_a_page_pinned_before_fixed_existed_still_follows_its_room(
     hass: HomeAssistant, bedroom: str
 ) -> None:

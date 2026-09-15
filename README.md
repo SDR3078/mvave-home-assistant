@@ -154,7 +154,8 @@ optional fields, with the grid drawn above them, already holding whatever the pa
 Save them unchanged and the page keeps following its room. Change anything and the page is
 yours: it shows exactly what you saved, an empty field is a dark pad, and nothing fills in
 behind it — a lamp added to the room later appears only when you put it on a pad. A page you
-never edited keeps up with the room; a page you edited holds still.
+never edited keeps up with the room; a page you edited holds still — until you give it a
+different room, which is asking for that room: it fills in around your pins again.
 
 A page's identity is its own — a ULID, not the room's name — so it survives the area being
 renamed, or deleted, or never having existed.

@@ -904,8 +904,11 @@ class SurfaceRunner:
         if page == self._logged_page or self.surface is None:
             return
         self._logged_page = page
+        # By the number printed on the pad, like every other number a person reads here:
+        # this is the line somebody compares against the grid.
         laid_out = [
-            f"{index}:{slot.entity_id or type(slot.tap).__name__.lower()}={frame[index]}"
+            f"{PAD_NUMBER_BY_READING_ORDER[index]}:"
+            f"{slot.entity_id or type(slot.tap).__name__.lower()}={frame[index]}"
             for index, slot in enumerate(self.surface.slots())
             if slot is not None
         ]

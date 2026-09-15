@@ -961,6 +961,12 @@ class Surface:
     # ------------------------------------------------------------- navigating
 
     def _navigate(self, page_id: str, origin: int | None, trigger: Trigger) -> Outcome:
+        if page_id == self.profile.root_id:
+            # Not a navigation. Pushing the root onto the stack would leave "back" lit on
+            # the index and going *forwards* into the room somebody just left, which is
+            # the sort of thing that makes a surface feel haunted. The select entity used
+            # to guard this on its own while `mvave.navigate` did not; the rule is here now.
+            return self._home(trigger)
         if self.profile.page(page_id) is None or page_id == self.stack[-1]:
             return NOTHING_HAPPENED
         if origin is None:
