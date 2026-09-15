@@ -105,8 +105,12 @@ def test_the_form_draws_the_pads_where_they_actually_sit() -> None:
     # top-left pad has 13 written on it.
     rows = _NUMBERED.splitlines()
     assert len(rows) == 4
-    assert rows[0].split() == ["13", "14", "15", "16"]
-    assert rows[3].split() == ["1", "2", "3", "4"]
+    assert [row.split() for row in rows] == [
+        ["13", "14", "15", "16"],
+        ["9", "10", "11", "12"],
+        ["5", "6", "7", "8"],
+        ["1", "2", "3", "4"],
+    ]
     # Aligned either side of ten, which is the only reason to draw it rather than list it.
     assert all(len(row) == len(rows[0]) for row in rows)
 

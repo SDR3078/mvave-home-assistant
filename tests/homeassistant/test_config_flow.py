@@ -33,7 +33,9 @@ from custom_components.mvave.const import (
     DOMAIN,
     SUBENTRY_PAGE,
 )
-from custom_components.mvave.registry import pads_now
+from custom_components.mvave.engine.model import Page
+from custom_components.mvave.engine.resolve import resolve
+from custom_components.mvave.registry import HomeAssistantRegistry, build_profile, pads_now
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -214,6 +216,21 @@ async def test_a_page_you_edited_holds_still_and_one_you_did_not_keeps_up(
     first, second = (page.data for page in entry.subentries.values())
     assert "switch.plug" in pads_now(hass, first)
     assert "switch.plug" not in pads_now(hass, second)
+
+    # And through the path the device actually uses. The engine and the form preview were
+    # both tested; the one line carrying the stored flag into the profile the runner drives
+    # was not, and a review mutation that removed it left all 476 tests green.
+    profile = build_profile(hass, entry)
+    registry = HomeAssistantRegistry(hass)
+    untouched, edited = (profile.pages[page.subentry_id] for page in entry.subentries.values())
+    assert untouched.fixed is False
+    assert edited.fixed is True
+
+    def on_grid(page: Page) -> set[str | None]:
+        return {slot.entity_id for slot in resolve(page, registry, profile) if slot}
+
+    assert "switch.plug" in on_grid(untouched)
+    assert "switch.plug" not in on_grid(edited)
 
 
 async def test_a_bulb_pairing_while_the_form_is_open_does_not_make_a_look_into_an_edit(

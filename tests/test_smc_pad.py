@@ -64,8 +64,15 @@ def test_pad_numbers_are_the_devices_own() -> None:
     assert rgb_packet_for_pad(1, 0, 0, 0) == rgb_packet(0, 0, 0, 0)  # PAD1, bottom-left
     assert rgb_packet_for_pad(16, 0, 0, 0) == rgb_packet(15, 0, 0, 0)  # PAD16, top-right
     assert sorted(PAD_NUMBER_BY_READING_ORDER) == list(range(1, 17))
-    assert PAD_NUMBER_BY_READING_ORDER[0] == 13  # top-left is PAD13
-    assert PAD_NUMBER_BY_READING_ORDER[-1] == 4  # bottom-right is PAD4
+    # The whole table, from its derivation rather than from itself: the device numbers its
+    # pads from the bottom left, four to a row, rows upward (HARDWARE.md 5.3), and a person
+    # reads from the top left. Only the two ends were pinned until 2026-09-15, and a review
+    # mutation that swapped the two middle rows left every test green — every conversion
+    # site trusts this one tuple.
+    assert (
+        tuple(number for row_start in (13, 9, 5, 1) for number in range(row_start, row_start + 4))
+        == PAD_NUMBER_BY_READING_ORDER
+    )
 
 
 def test_led_packet_targets_the_ninth_byte() -> None:
