@@ -262,6 +262,9 @@ class SurfaceRunner:
         self._unsubscribe: list[CALLBACK_TYPE] = []
         #: Entities that show where the surface is. Told only when the answer changes.
         self._watchers: list[CALLBACK_TYPE] = []
+        #: The surface as it stood when the link dropped, carried into the next one so a
+        #: reconnect puts you back where you were rather than at rest.
+        self._parked: Surface | None = None
         self._announced = SurfaceView()
         #: Held across every write. Both caches below are read, awaited over and then
         #: written, so two writers in flight at once would each diff against what the
@@ -371,6 +374,7 @@ class SurfaceRunner:
         # What every loop in here waits on. Anything that slipped through a cancellation
         # stops on its next turn rather than running on past the config entry.
         self.surface = None
+        self._parked = None
         if self._watching is not None:
             self._watching()
             self._watching = None
@@ -389,6 +393,12 @@ class SurfaceRunner:
         """Build or discard the surface as the link comes and goes."""
         arming = self.coordinator.arming
         if not self.coordinator.connected or arming is None:
+            # Kept for the reconnect. A link that drops for ten seconds — three times
+            # today — used to bring the surface back at rest with no event for the move,
+            # so anything mirroring the page from the bus was wrong until the next press.
+            # The same carry a rebuild does: you come back where you stood.
+            if self.surface is not None:
+                self._parked = self.surface
             self.surface = None
             self._shown = None
             self._lit.clear()
@@ -405,6 +415,9 @@ class SurfaceRunner:
             self.surface = Surface(
                 build_profile(self.hass, self.entry), HomeAssistantRegistry(self.hass)
             )
+            if self._parked is not None:
+                self._parked.carry_into(self.surface)
+                self._parked = None
             LOGGER.info(
                 "%s: surface ready with %d pages",
                 self.coordinator.address,
@@ -415,6 +428,9 @@ class SurfaceRunner:
         self._shown = None
         self._lit.clear()
         self._redraw()
+        # And the clock of wherever you are, which a fresh surface at rest never needed but
+        # a carried one — back in the kitchen after a ten-second drop — does.
+        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
 
     def _learn(self, layout: DeviceLayout) -> None:
         """Take the note and controller numbers from the device rather than guessing.
@@ -597,6 +613,11 @@ class SurfaceRunner:
             # under your own hand is the surface deciding you have finished looking.
             if self.surface is not None and self.surface.showing and not self._fired:
                 self._restart("hud", HUD_SECONDS, self._drop_hud)
+            return
+        if task is None:
+            # A release whose press this runner never saw: the finger went down while the
+            # grid was still dark during arming, and came up after "surface ready". Not a
+            # tap on whatever now sits there — with a default page, a lamp.
             return
         self._dispatch(_event_for(key, held=False))
 

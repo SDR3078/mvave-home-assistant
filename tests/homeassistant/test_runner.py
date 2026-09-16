@@ -21,7 +21,7 @@ from custom_components.mvave.engine.model import IDLE_TIMEOUT, Page, Profile, So
 from custom_components.mvave.engine.palette import BLUE, ORANGE
 from custom_components.mvave.engine.surface import Outcome, Surface
 from custom_components.mvave.registry import ROOT_ID, HomeAssistantRegistry
-from custom_components.mvave.runner import SurfaceRunner
+from custom_components.mvave.runner import SurfaceRunner, SurfaceView
 
 EMPTY_FRAME = (0,) * PAD_COUNT
 
@@ -137,3 +137,56 @@ async def test_a_second_refusal_inside_a_second_is_held(runner: SurfaceRunner) -
     assert (
         runner._holds_reaction(Outcome(animation=(EMPTY_FRAME,))) is False
     )  # a page change never waits
+
+
+# ------------------------------------------------------------------ the link
+
+
+async def test_a_release_whose_press_was_never_seen_is_nothing(
+    runner: SurfaceRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A finger down while the grid was dark during arming, up after "surface ready": the
+    # press was dropped, and the release used to become a tap on whatever now sat there.
+    dispatched: list[object] = []
+    monkeypatch.setattr(runner, "_dispatch", dispatched.append)
+    runner._up("pad:1")
+    assert dispatched == []
+    # A release that follows a press this runner saw is still a tap.
+    runner._holds["pad:1"] = SimpleNamespace(cancel=lambda: None)  # type: ignore[assignment]
+    runner._up("pad:1")
+    assert len(dispatched) == 1
+
+
+async def test_a_reconnect_puts_you_back_where_you_stood_and_starts_the_clock(
+    runner: SurfaceRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The link dropped for ten seconds three times in one afternoon. The surface used to
+    # come back at rest with no event for the move, so anything mirroring the page from
+    # the bus was wrong until the next press. Now it is the same carry a rebuild does.
+    import custom_components.mvave.runner as runner_module
+    from custom_components.mvave.devices.smc_pad import SMC_PAD_FACTORY_LAYOUT
+
+    house = profile()
+    monkeypatch.setattr(runner_module, "build_profile", lambda hass, entry: house)
+    runner.entry = None  # type: ignore[assignment]
+    runner._watchers = []
+    runner._announced = SurfaceView()
+    runner.coordinator = SimpleNamespace(  # type: ignore[assignment]
+        address="AA:BB:CC:DD:EE:FF", connected=True, arming=SimpleNamespace(layout=None)
+    )
+    assert runner.surface is not None
+    runner.surface.navigate_to("living")
+    assert runner.surface.stack == [ROOT_ID, "living"]
+
+    runner.coordinator.connected = False
+    runner._on_connection()  # the drop
+    assert runner.surface is None
+
+    runner.coordinator.connected = True
+    runner.coordinator.arming = SimpleNamespace(layout=SMC_PAD_FACTORY_LAYOUT)
+    runner._on_connection()  # and back
+    assert runner.surface is not None
+    assert runner.surface.stack == [ROOT_ID, "living"]  # where you stood, not at rest
+    assert "idle" in runner._timers  # and the room's clock is running
+    for cancel in runner._timers.values():
+        cancel()

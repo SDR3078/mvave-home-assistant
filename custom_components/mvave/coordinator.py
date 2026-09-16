@@ -85,6 +85,12 @@ def _describe(event: MidiEvent) -> str:
     return f"{event.type} {channel} {event.data1},{event.data2}"
 
 
+#: How many times a link whose arming failed is dropped and remade before it is kept
+#: as it is. A device with no readable map is still a good source of MIDI, and being
+#: reconnected for ever would make it a worse one.
+ARM_ATTEMPTS = 3
+
+
 class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
     """Hold a connection to one BLE MIDI device and publish what it sends."""
 
@@ -111,6 +117,8 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
         self._midi_listeners: list[MidiListener] = []
         #: What the last connect found and did, or None if it never got that far.
         self.arming: ArmResult | None = None
+        #: Consecutive failed arms on this link, for the retry-by-reconnect above.
+        self._arm_failures = 0
         #: What the device says about itself, once somebody has connected and asked. None
         #: until then, which is most of the first minute after a restart.
         self.manufacturer: str | None = None
@@ -342,7 +350,33 @@ class MvaveCoordinator(ActiveBluetoothDataUpdateCoordinator[None]):
             async with session:
                 self.arming = await async_arm(session)
         except Exception as err:
-            LOGGER.warning("%s: could not read or arm the device: %r", self.address, err)
+            # Not fatal, but not final either. Keeping the link and never trying again —
+            # which is what this did until 2026-09-16 — left the pad connected, its
+            # entities available and the grid dark until the link happened to drop, which
+            # is designed to be days. Dropping it ourselves puts the ordinary reconnect
+            # path to work, which arms again; a device that can never be armed gets a
+            # bounded number of those, then the link is kept as it always was.
+            self._arm_failures += 1
+            if self._arm_failures <= ARM_ATTEMPTS:
+                LOGGER.warning(
+                    "%s: could not read or arm the device (attempt %d of %d), "
+                    "reconnecting to try again: %r",
+                    self.address,
+                    self._arm_failures,
+                    ARM_ATTEMPTS,
+                    err,
+                )
+                await client.disconnect()
+                return
+            LOGGER.warning(
+                "%s: could not read or arm the device after %d attempts, keeping the "
+                "link unarmed: %r",
+                self.address,
+                self._arm_failures,
+                err,
+            )
+            return
+        self._arm_failures = 0
 
     def _on_disconnect(self, client: BleakClient) -> None:
         """Handle the link dropping. Called from outside the event loop."""

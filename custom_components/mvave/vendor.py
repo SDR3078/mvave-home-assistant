@@ -122,9 +122,15 @@ class VendorSession:
                 )
                 continue
             if not reply.checksum_ok:
-                raise VendorError(f"bad checksum reading 0x{address:04X}")
+                # One corrupted chunk out of twenty-eight used to fail the whole arming,
+                # and with the link kept, nothing ever tried again. A bad reply is asked
+                # for again exactly like a missing one.
+                LOGGER.debug(
+                    "%s: bad checksum for 0x%04X (attempt %d)", self._address, address, attempt
+                )
+                continue
             return reply.data
-        raise VendorError(f"no reply reading 0x{address:04X} after {REPLY_ATTEMPTS} attempts")
+        raise VendorError(f"no good reply reading 0x{address:04X} after {REPLY_ATTEMPTS} attempts")
 
     async def _await_reply(self, address: int) -> VendorReply:
         """Wait for the read reply that echoes this address, discarding anything else."""
