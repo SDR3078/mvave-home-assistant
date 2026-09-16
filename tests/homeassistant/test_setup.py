@@ -18,7 +18,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.mvave.const import CONF_ADDRESS, DOMAIN
+from custom_components.mvave.const import CONF_ADDRESS, CONF_DEFAULT_PAGE, DOMAIN
 from custom_components.mvave.coordinator import MvaveCoordinator
 from custom_components.mvave.runner import SurfaceRunner
 
@@ -71,7 +71,7 @@ async def test_saving_options_rebuilds_in_place_and_does_not_reload(
     boxes = {
         str(key): (getattr(key, "description", None) or {}).get("suggested_value") or []
         for key in result["data_schema"].schema
-        if str(key) != "default_page"
+        if str(key) != CONF_DEFAULT_PAGE
     }
     saved = await hass.config_entries.options.async_configure(result["flow_id"], boxes)
     await hass.async_block_till_done()

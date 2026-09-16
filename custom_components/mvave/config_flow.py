@@ -391,7 +391,8 @@ class MvaveOptionsFlow(OptionsFlow):
         for domain in sorted(domains, key=kind):
             text = kind(domain)
             if boxes is not None and len(boxes.get(domain, ())) > 1:
-                text += f" ({' and '.join(colour(name) for name in boxes[domain])})"
+                names = [colour(name) for name in boxes[domain]]
+                text += f" ({', '.join(names[:-1])} and {names[-1]})"
             named.append(text)
         return ", ".join(named)
 

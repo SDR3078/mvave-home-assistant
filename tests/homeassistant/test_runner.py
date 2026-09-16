@@ -178,9 +178,15 @@ async def test_a_reconnect_puts_you_back_where_you_stood_and_starts_the_clock(
     runner.surface.navigate_to("living")
     assert runner.surface.stack == [ROOT_ID, "living"]
 
+    runner._playing = SimpleNamespace(cancel=lambda: None)  # type: ignore[assignment]
+    runner._reacting = True
+    runner._reaction_started = time.monotonic()
     runner.coordinator.connected = False
     runner._on_connection()  # the drop
     assert runner.surface is None
+    # Whatever was playing was playing to a dark grid, and the guard forgets it too.
+    assert runner._playing is None and runner._reacting is False
+    assert runner._reaction_started is None
 
     runner.coordinator.connected = True
     runner.coordinator.arming = SimpleNamespace(layout=SMC_PAD_FACTORY_LAYOUT)
@@ -188,5 +194,12 @@ async def test_a_reconnect_puts_you_back_where_you_stood_and_starts_the_clock(
     assert runner.surface is not None
     assert runner.surface.stack == [ROOT_ID, "living"]  # where you stood, not at rest
     assert "idle" in runner._timers  # and the room's clock is running
+    running = runner._timers["idle"]
+
+    # A coordinator callback that builds nothing — a battery reading, every half hour —
+    # must not restart that clock: armed at the bottom of `_on_connection`, it was reset
+    # on every callback and, on a chattier device, would never have fired at all.
+    runner._on_connection()
+    assert runner._timers["idle"] is running
     for cancel in runner._timers.values():
         cancel()

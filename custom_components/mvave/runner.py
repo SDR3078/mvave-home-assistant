@@ -402,6 +402,10 @@ class SurfaceRunner:
             self.surface = None
             self._shown = None
             self._lit.clear()
+            # Whatever was playing was playing to a dark grid. The reaction guard must not
+            # remember it either, or the first refusal after the link returns is held back.
+            self._cancel_animation()
+            self._reaction_started = None
             # A finger down when the link dropped never sends its release, so without this
             # its hold fires into nothing, the key stays marked as fired, and the next tap
             # of that pad is swallowed as though it were that release.
@@ -423,14 +427,17 @@ class SurfaceRunner:
                 self.coordinator.address,
                 len(self.surface.profile.pages),
             )
+            # And the clock of wherever you are, which a fresh surface at rest never
+            # needed but a carried one — back in the kitchen after a ten-second drop —
+            # does. Here, where a surface was built, and not at the bottom of this method:
+            # that runs on every coordinator callback, a battery reading included, and
+            # would restart the clock each time.
+            self._arm_idle()
         # The grid was dark or showing something else while disconnected, so nothing about
         # what is on it can be assumed.
         self._shown = None
         self._lit.clear()
         self._redraw()
-        # And the clock of wherever you are, which a fresh surface at rest never needed but
-        # a carried one — back in the kitchen after a ten-second drop — does.
-        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
 
     def _learn(self, layout: DeviceLayout) -> None:
         """Take the note and controller numbers from the device rather than guessing.
@@ -530,7 +537,7 @@ class SurfaceRunner:
         # page gives the index a timeout it never had, and before 2026-09-15 nothing armed
         # it: the pad sat on the index until the next press, and only then started going
         # back to rest. Found at the grid the moment the feature was tried.
-        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+        self._arm_idle()
 
     # -------------------------------------------------------------- outside
 
@@ -792,7 +799,7 @@ class SurfaceRunner:
             # Restarted rather than skipped if one is already running: pressing a scene
             # again is another acknowledgement, and it should read as one.
             self._restart(f"ack:{entity_id}", ACKNOWLEDGE_SECONDS, self._release(entity_id))
-        self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+        self._arm_idle()
         # Not while a finger is still down on a pad: see `_up`.
         if self.surface.showing and not self._fired:
             self._restart("hud", HUD_SECONDS, self._drop_hud)
@@ -1021,6 +1028,11 @@ class SurfaceRunner:
         if delay > 0:
             self._timers[name] = async_call_later(self.hass, delay, action)
 
+    def _arm_idle(self) -> None:
+        """Start the clock of the page you are standing on, from the top."""
+        if self.surface is not None:
+            self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+
     @callback
     def _timed_out(self, _now: Any) -> None:
         self._timers.pop("idle", None)
@@ -1028,7 +1040,7 @@ class SurfaceRunner:
             # Somebody is holding a pad or a button — the switcher hangs off one, and a
             # hold firing re-arms this clock while the finger is still there. Not idle:
             # ask again later rather than move the page under a hand.
-            self._restart("idle", self.surface.page.idle_timeout, self._timed_out)
+            self._arm_idle()
             return
         self._dispatch(Idle())
 
