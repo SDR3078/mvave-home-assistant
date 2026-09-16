@@ -9,7 +9,7 @@ No cloud, no polling, no MIDI software in between. Home Assistant connects to th
 Bluetooth, reads the device's own configuration out of its memory, and drives the LEDs
 directly.
 
-> **Status: 0.1.0, the first release.** Everything below is running on real hardware, and
+> **Status: 0.2.0.** Everything below is running on real hardware, and
 > everything it claims was judged on the physical grid rather than reasoned about. See
 > [`docs/NEXT.md`](docs/NEXT.md) for what is left.
 

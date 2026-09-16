@@ -15,5 +15,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SDR3078/mvave-home-assistant/issues",
   "loggers": ["bleak", "bleak_retry_connector"],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
