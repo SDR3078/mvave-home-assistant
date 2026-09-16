@@ -196,9 +196,27 @@ async def _async_home(call: ServiceCall) -> None:
         runner.drive(lambda surface: surface.go_home())
 
 
+def _whole_pad_number(value: Any) -> int:
+    """A pad number as printed, and nothing that merely rounds to one.
+
+    `Coerce(int)` truncated: a template producing 3.7 pressed pad 3, the neighbour of the
+    one asked for, and `True` pressed pad 1. A number that is not exactly a whole one is
+    refused before the handler sees it.
+    """
+    if isinstance(value, bool):
+        raise vol.Invalid("a pad number is required")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as err:
+        raise vol.Invalid("a pad number is required") from err
+    if not number.is_integer():
+        raise vol.Invalid(f"{value} is not a whole pad number")
+    return int(number)
+
+
 PRESS_SLOT_SCHEMA = TARGET_SCHEMA.extend(
     {
-        vol.Required(ATTR_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1, max=PAD_COUNT)),
+        vol.Required(ATTR_SLOT): vol.All(_whole_pad_number, vol.Range(min=1, max=PAD_COUNT)),
         vol.Optional(ATTR_ACTION, default=TAP): vol.In([TAP, HOLD]),
     }
 )

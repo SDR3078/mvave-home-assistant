@@ -53,7 +53,7 @@ from .engine.frames import PAD_COUNT
 from .engine.model import STATELESS_DOMAINS
 from .engine.palette import BLUE, DOMAIN_COLOURS, GREEN, IDENTITY, ORANGE, PURPLE, RED
 from .engine.resolve import PINNABLE
-from .registry import ROOT_ID, pads_now
+from .registry import ROOT_ID, ROOT_TITLE, pads_now
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -266,12 +266,14 @@ class MvaveOptionsFlow(OptionsFlow):
         placeholders: dict[str, str] = {}
         if user_input is not None:
             painted: dict[str, int] = {}
-            twice: set[str] = set()
+            boxes: dict[str, list[str]] = {}
             for name, colour in CHOOSABLE.items():
                 for domain in user_input.get(name, ()):
-                    if domain in painted:
-                        twice.add(domain)
+                    boxes.setdefault(domain, []).append(name)
                     painted[domain] = colour
+            # Which boxes, not only which kind of thing: "Fans — in two boxes at once" sent
+            # somebody through five boxes and twenty chips to find the second one.
+            twice = {domain for domain, names in boxes.items() if len(names) > 1}
             missing = set(PAINTABLE) - set(painted)
             stateful = {d for d in user_input.get("purple", ()) if d not in STATELESS_DOMAINS}
 
@@ -305,23 +307,34 @@ class MvaveOptionsFlow(OptionsFlow):
             if len(problems) == 1:
                 key, kinds = problems[0]
                 errors["base"] = key
-                placeholders = {"kinds": await self._named(kinds)}
+                placeholders = {"kinds": await self._named(kinds, boxes)}
             else:
                 errors["base"] = "colour_several"
                 lines = [
-                    f"- {_PROBLEMS[key]}: {await self._named(kinds)}" for key, kinds in problems
+                    f"- {_PROBLEMS[key]}: {await self._named(kinds, boxes)}"
+                    for key, kinds in problems
                 ]
                 placeholders = {"kinds": "\n".join(lines)}
 
         # Where the pad rests: the index, or any page somebody has made, offered by name and
         # stored by id so renaming the room does not lose it. A page deleted since simply
         # means the index again, which is also what the dropdown then shows.
+        made = [
+            p for p in self.config_entry.subentries.values() if p.subentry_type == SUBENTRY_PAGE
+        ]
+        titles = [page.title for page in made]
         pages = [
-            {"value": ROOT_ID, "label": "Home"},
+            {"value": ROOT_ID, "label": ROOT_TITLE},
             *(
-                {"value": page.subentry_id, "label": page.title}
-                for page in self.config_entry.subentries.values()
-                if page.subentry_type == SUBENTRY_PAGE
+                {
+                    "value": page.subentry_id,
+                    # Two pages called Kitchen — one from the room, one from a label — are
+                    # told apart by id, the way the page selector already does.
+                    "label": page.title
+                    if titles.count(page.title) == 1
+                    else f"{page.title} ({page.subentry_id})",
+                }
+                for page in made
             ),
         ]
         resting = (
@@ -356,8 +369,9 @@ class MvaveOptionsFlow(OptionsFlow):
             description_placeholders=placeholders,
         )
 
-    async def _named(self, domains: set[str]) -> str:
-        """The kinds of thing, by the names the boxes call them.
+    async def _named(self, domains: set[str], boxes: Mapping[str, list[str]] | None = None) -> str:
+        """The kinds of thing, by the names the boxes call them — and, for anything in
+        more than one box, which boxes.
 
         Read back out of this integration's own translations rather than kept in a second
         list here, because a second list is one that drifts: the chips would say "Blinds,
@@ -366,12 +380,20 @@ class MvaveOptionsFlow(OptionsFlow):
         labels = await async_get_translations(
             self.hass, self.hass.config.language, "selector", {DOMAIN}
         )
-        return ", ".join(
-            sorted(
-                labels.get(f"component.{DOMAIN}.selector.paintable.options.{domain}", domain)
-                for domain in domains
-            )
-        )
+
+        def kind(domain: str) -> str:
+            return labels.get(f"component.{DOMAIN}.selector.paintable.options.{domain}", domain)
+
+        def colour(name: str) -> str:
+            return labels.get(f"component.{DOMAIN}.selector.colour.options.{name}", name)
+
+        named: list[str] = []
+        for domain in sorted(domains, key=kind):
+            text = kind(domain)
+            if boxes is not None and len(boxes.get(domain, ())) > 1:
+                text += f" ({' and '.join(colour(name) for name in boxes[domain])})"
+            named.append(text)
+        return ", ".join(named)
 
 
 class PageSubentryFlow(ConfigSubentryFlow):
@@ -525,8 +547,14 @@ class PageSubentryFlow(ConfigSubentryFlow):
                 CONF_LABEL, description={"suggested_value": was.get(CONF_LABEL)}
             ): LabelSelector(),
         }
+        schema = vol.Schema(fields)
+        if user_input is not None:
+            # A refused form comes back holding what was typed, not what was stored: the one
+            # field the error asks somebody to clear used to be cleared for them, along with
+            # the name and the colour they had just chosen.
+            schema = self.add_suggested_values_to_schema(schema, user_input)
         return self.async_show_form(
             step_id="reconfigure" if existing else "user",
-            data_schema=vol.Schema(fields),
+            data_schema=schema,
             errors=errors,
         )

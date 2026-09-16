@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
+import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.mvave import services as services_module
@@ -21,6 +22,7 @@ from custom_components.mvave.engine.model import EntityState, Page, Profile, Sou
 from custom_components.mvave.engine.palette import BLUE, GREEN, ORANGE
 from custom_components.mvave.engine.surface import Surface, Trigger
 from custom_components.mvave.services import (
+    PRESS_SLOT_SCHEMA,
     _async_get_pages,
     _async_press_slot,
     _surfaces,
@@ -154,6 +156,16 @@ async def test_a_held_pad_does_what_holding_it_does(runner: StubRunner) -> None:
     await _async_press_slot(FakeCall(slot=13, action="hold"))  # hold the lamp
     assert runner.surface is not None
     assert runner.surface.focus == "light.counter"
+
+
+def test_press_slot_takes_only_whole_pad_numbers_from_one_to_sixteen() -> None:
+    # The schema is the contract — services.yaml says 1 to 16 — and nothing exercised it.
+    # `Coerce(int)` also truncated, so a template producing 3.7 pressed the neighbour.
+    for bad in (0, 17, 3.7, "3.7", True, "abc", None):
+        with pytest.raises(vol.Invalid):
+            PRESS_SLOT_SCHEMA({"device_id": DEVICE_ID, "slot": bad})
+    assert PRESS_SLOT_SCHEMA({"device_id": DEVICE_ID, "slot": "13"})["slot"] == 13
+    assert PRESS_SLOT_SCHEMA({"device_id": DEVICE_ID, "slot": 16.0})["slot"] == 16
 
 
 async def test_a_service_press_is_never_mistaken_for_a_finger(runner: StubRunner) -> None:

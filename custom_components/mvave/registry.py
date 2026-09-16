@@ -56,6 +56,10 @@ REGISTRY_EVENTS = (
 
 #: The page an empty navigation stack shows.
 ROOT_ID = "home"
+#: What it is called, everywhere it is named — the index page, the page selector, the
+#: Default page dropdown. In English only, like `_PROBLEMS` in the config flow: the
+#: integration ships one language, and one word in one place is not worth a second key.
+ROOT_TITLE = "Home"
 
 #: Areas whose entities are all configuration or diagnostics have nothing worth a pad, and
 #: an index full of empty rooms is worse than a short one.
@@ -277,7 +281,7 @@ def build_profile(hass: HomeAssistant, entry: ConfigEntry | None = None) -> Prof
     pages: dict[str, Page] = {
         ROOT_ID: Page(
             id=ROOT_ID,
-            title="Home",
+            title=ROOT_TITLE,
             colour=BLUE,
             source=Source(SourceKind.PAGES),
             # An index is where you end up, not somewhere to time out of — unless the pad

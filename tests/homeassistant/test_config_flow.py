@@ -286,6 +286,27 @@ async def test_giving_an_edited_page_a_different_room_asks_for_that_room(
     assert not next(iter(entry.subentries.values())).data.get(CONF_FIXED)
 
 
+async def test_a_refused_page_form_comes_back_holding_what_was_typed(
+    hass: HomeAssistant, entry: MockConfigEntry, bedroom: str
+) -> None:
+    # Room and label together is refused. The form used to come back rebuilt from stored
+    # values — an empty name, the spare colour, both sources blank — so the one field the
+    # error asked somebody to clear was cleared for them, along with everything else.
+    started = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_PAGE), context={"source": "user"}
+    )
+    again = await hass.config_entries.subentries.async_configure(
+        started["flow_id"],
+        {"name": "Reading nook", CONF_COLOUR: "red", CONF_AREA: bedroom, CONF_LABEL: "cosy"},
+    )
+    assert again["errors"] == {"base": "one_source"}
+    kept = suggested(again)
+    assert kept["name"] == "Reading nook"
+    assert kept[CONF_COLOUR] == "red"
+    assert kept[CONF_AREA] == bedroom
+    assert kept[CONF_LABEL] == "cosy"
+
+
 async def test_a_page_pinned_before_fixed_existed_still_follows_its_room(
     hass: HomeAssistant, bedroom: str
 ) -> None:

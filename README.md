@@ -283,7 +283,7 @@ of them was judged by eye on the physical grid rather than reasoned about.
 ```bash
 scripts/setup      # devcontainer dependencies
 scripts/develop    # Home Assistant with this integration loaded
-pytest tests       # 476 tests
+pytest tests       # 497 tests
 ruff check . && ruff format --check . && mypy
 ```
 

@@ -208,7 +208,11 @@ async def test_a_refusal_names_the_thing_in_two_boxes_too(
 
     again = await hass.config_entries.options.async_configure(result["flow_id"], answers)
     assert again["errors"] == {"base": "colour_twice"}
-    assert again["description_placeholders"]["kinds"] == "Blinds, curtains and garage doors"
+    # And which boxes: the message says "take it out of the one you did not mean", which
+    # presumes you can see both. Five boxes and twenty chips is too many to search.
+    assert again["description_placeholders"]["kinds"] == (
+        "Blinds, curtains and garage doors (Blue and Green)"
+    )
 
 
 def test_no_two_chips_say_the_same_thing() -> None:
@@ -277,6 +281,23 @@ async def test_the_pad_can_be_told_where_to_rest(
 
     # And the screen shows the choice next time.
     assert resting_field(await open_it(hass, entry)).default() == kitchen
+
+
+async def test_two_pages_with_the_same_name_are_told_apart(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    # One Kitchen page from the room and another from a label: a dropdown reading
+    # Home / Kitchen / Kitchen stores the right id but cannot show you which you chose.
+    await add_page(hass, entry, pads={})
+    await add_page(hass, entry, pads={})
+    first, second = entry.subentries
+    result = await open_it(hass, entry)
+    offered = result["data_schema"].schema[resting_field(result)].config["options"]
+    assert [option["label"] for option in offered] == [
+        "Home",
+        f"Kitchen ({first})",
+        f"Kitchen ({second})",
+    ]
 
 
 async def test_choosing_home_stores_nothing_which_is_what_it_always_meant(
