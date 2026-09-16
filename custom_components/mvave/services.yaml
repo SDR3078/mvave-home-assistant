@@ -8,7 +8,7 @@ navigate:
             - integration: mvave
     page:
       required: true
-      example: living_room
+      example: 01HXK3V7Q9R2ZK6N4W8Y1DE0PA
       selector:
         text:
 
@@ -84,6 +84,6 @@ get_pages:
             - integration: mvave
     page:
       required: false
-      example: living_room
+      example: 01HXK3V7Q9R2ZK6N4W8Y1DE0PA
       selector:
         text:

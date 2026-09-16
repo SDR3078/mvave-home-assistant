@@ -102,7 +102,7 @@ A page with no user config and `source: area` is fully usable out of the box. **
 - **Idle timeout**: per page, default 30 s, `0` on pages that should persist (media). On expiry, return to home with the slow fade (§5).
 - Navigation is drivable externally — see services in §4.
 
-`home` is an ordinary page. Its default content is auto-generated `navigate` pads, one per configured area, each in that area's identity color; row 4 left for global scenes / all-off. The user may override it like any other page.
+`home` is an ordinary page. Its default content is auto-generated `navigate` pads, one per configured area, each in that area's identity color; row 4 was to be left for global scenes / all-off and the page overridable like any other — **never built**: the index fills all sixteen pads with pages and cannot be edited.
 
 ---
 
@@ -110,7 +110,7 @@ A page with no user config and `source: area` is fully usable out of the box. **
 
 ### 4.1 Bus events
 
-Fire `ble_midi_event` on every transition. One event type per transition, never batched:
+Fire `mvave_event` on every transition. One event type per transition, never batched:
 
 ```yaml
 type: page_entered | page_exited | focus_set | focus_cleared
@@ -118,13 +118,24 @@ type: page_entered | page_exited | focus_set | focus_cleared
 device_id, address          # device_id is required by HA's own guidance on
                             # integration events, and is what lets the automation
                             # editor offer these against the device you are looking at
+trigger: pad | button | service | idle
+# page_entered, page_exited
 page_id, page_title, page_source, area_id, parent_page_id, depth
-entity_id                 # focus target or toggled entity
-pad, note, velocity       # pad events only
-knob, delta, value        # knob events only
-trigger: pad | service | idle | automation
-previous: {page_id, area_id, entity_id}
+previous                    # page_entered only: the id of the page you came from
+# pad_pressed, pad_held
+pad                         # the number printed on the pad, the one press_slot takes
+entity_id                   # what was on it; null for a navigation pad
+# focus_set, focus_cleared
+entity_id
+# knob_turned
+knob, steps, entity_id, property, value
+# tagged
+tag
 ```
+
+Rewritten 2026-09-16 from `Surface._go`, `_press` and `_turn`. The original named
+`ble_midi_event`, `note`/`velocity`, `delta`, a `trigger: automation` and a `previous`
+object, none of which was ever emitted.
 
 `page_source` is included so external displays know whether they're rendering an area, a label, or something else.
 
@@ -199,7 +210,7 @@ That separation is what makes five colours enough. Identity colours live on the 
 | Page: entity off | **white**, always, never configurable | The whole readability of a page rests on this. "Is anything on in here" becomes "is that pad white", which is one glance and one rule. It is also why purple is only ever a default for something stateless: purple against white is the one pair reported as too close, and a lamp coloured purple would be unreadable exactly when it mattered |
 | Page: nothing assigned | **dark** | pressing it does nothing, and it must not look like an entity that is off. This is why "off" cannot also be dark |
 | Page: entity nobody can reach | **white**, like one that is off, and it **shudders when pressed**: three quick blinks to dark and back, 540 ms, starting dark and ending lit | A colour reserved for this would cost a fifth of the entire vocabulary, permanently, for a condition that is rare and usually temporary, and it would still only tell somebody something they can act on at the moment they try. A refusal under the finger says it exactly then and says nothing the rest of the time. It cannot add to the density problem either: only the pad being pressed can refuse, and it is over before anybody looks away |
-| Page: a scene or button just pressed | **holds the action colour, orange, for 0.8 s**, then lets go | A stateless pad has no on and no off, so pressing one changed nothing anywhere and was the only press on this surface with no result of any kind. It is a **latch, not a flash**: one transition in and one out, 0.8 s apart, so it never enters the flash arithmetic rather than merely passing it, and it adds no rhythm that would have to be told apart from the two that already move. It never shows white, which matters here more than anywhere — purple is the stateless default *because* those pads never go white, that being the one pair reported as too close. Drawn over the settled frame rather than animated, so the other fifteen pads keep reporting while it is held: a scene that switches three lamps on should be watchable doing it. Duration judged at the grid over three rounds, 1.5 s then 1.0 s then 0.8 s |
+| Page: a scene or button just pressed | **holds the action colour, orange, for 0.8 s** — white, if the pad has been painted orange itself — then lets go | A stateless pad has no on and no off, so pressing one changed nothing anywhere and was the only press on this surface with no result of any kind. It is a **latch, not a flash**: one transition in and one out, 0.8 s apart, so it never enters the flash arithmetic rather than merely passing it, and it adds no rhythm that would have to be told apart from the two that already move. It shows white only when the pad itself has been painted orange, which the colour screen allows (judged at the grid on 2026-09-13 and kept); otherwise never — purple is the stateless default *because* those pads never go white, that being the one pair reported as too close. Drawn over the settled frame rather than animated, so the other fifteen pads keep reporting while it is held: a scene that switches three lamps on should be watchable doing it. Duration judged at the grid over three rounds, 1.5 s then 1.0 s then 0.8 s |
 | Focused pad, the knob target | **breathing between on and off**: 1.4 s period, its own colour for about two thirds of it | slow and lopsided, so it cannot be mistaken for the alarm below. Confirmed legible in a full page without pulling the eye |
 | Waiting, commanded but not confirmed | **swinging between on and off**, 2.5 Hz — 0.4 s, half lit | reads as "something is wrong or pending", which is exactly the meaning. It is the same rhythm the whole industry uses and Home Assistant's own interface pulses at 1 Hz for `locking` |
 | `back` available | **left button lit** | see §1 |
@@ -245,7 +256,7 @@ Entering a page from its own pad on the index means that pad already carries the
 | `back` | right to left, then the spiral in reverse into that page's index pad |
 | `home` | as `back`, but shrinking into the index's own root position |
 | navigate by service, automation or presence | **the same as a press**, growing from the pad the destination occupies on the screen being left. That is not an invented origin: it is where the page lives, and the pad a finger would have used. What caused the move is carried by the event's `trigger` instead, which is where an automation needs it and where the grid cannot say it. A page that is not on the screen at all has nowhere honest to grow from and gets a plain sideways wipe |
-| idle timeout to home | a sideways wipe only, no spiral, and no button flash. Nothing happened, so it should not look like it did |
+| idle timeout | the same as **back**: right to left, then the spiral into the departed page's pad on the index. Resting on a default page instead, a plain wipe in that page's colour — no pad there is the room being left. Only the event's `idle` says nobody was there. (This row promised a quiet exit that was never built; built for a day on 2026-09-13 it was judged worse at the grid and dropped.) |
 | focus change | no grid animation, only the focused pad starting to breathe |
 
 **Why a spiral one way and columns the other.** The spiral says where the finger was. Columns say here is a page, and left to right is how a grid is read.
@@ -268,10 +279,12 @@ Global knob assignment (fixed, muscle memory lives here). The encoders are two a
 
 | | |
 |---|---|
-| **7** brightness | **8** color temp |
+| **7** the main value | **8** colour temp |
 | **5** hue | **6** saturation |
-| **3** volume | **4** cover position |
-| **1** climate setpoint | **2** free / per-page |
+| **3** — | **4** — |
+| **1** — | **2** — |
+
+A lamp is the only thing with more than one control. Everything else — volume, a cover's position, a setpoint — is one value, and it lands on 7 alone; 3, 4, 1 and 2 are dead on everything. (The table once assigned volume to 3, position to 4 and the setpoint to 1; corrected 2026-09-16 to what `properties.packed` does.)
 
 Rewritten 2026-09-12. The list is a **ranking** — brightness first because it is what people want from a lamp nine times in ten — and it is handed out **down the reading order of the block**, not up the device's numbering. Assigning it up the wiring put the most wanted property on the least obvious encoder, and nobody could see that until the map below was on the grid and the owner said the shape looked wrong. The assignment is derived from the geometry in code, so the two cannot drift apart.
 
@@ -279,7 +292,7 @@ If the focus lacks a property, that knob is inert. ~~Per-page `knobs` config ove
 
 ### 6.0 The knob map
 
-**Turning an encoder that does nothing draws the eight encoders on the grid**, in the arrangement above: live ones in the colour of whatever is focused, dead ones white, the rest of the grid dark. It holds as long as a value bar does and snaps back the same way.
+**Turning an encoder that does nothing draws the eight encoders on the grid** — anywhere but the index, where nothing can be focused — in the arrangement above: live ones in the colour of whatever is focused, dead ones white, the rest of the grid dark. It holds as long as a value bar does and snaps back the same way.
 
 This is the answer to "which knobs are live", which was open from the first day and which the hardware cannot answer for itself: eight identical encoders, no rings, no markings. The fixed assignment means it only has to be learned once, which is a fine answer on the thousandth day and no answer at all on the first — and on a fan, where only the free encoder does anything, seven of the eight are dead with no way to tell.
 

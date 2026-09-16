@@ -69,7 +69,8 @@ class MvavePageSelect(MvaveSurfaceEntity, SelectEntity):
         """What the label does not say.
 
         The id is the one an automation should use with ``mvave.navigate``: labels are for
-        people and change when a room is renamed, while the id is the area's own.
+        people and change when a room is renamed, while the id is the page's own — a
+        subentry id, not the area's, once anybody has made a page.
         """
         view = self.view
         return {

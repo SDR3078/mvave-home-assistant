@@ -34,10 +34,10 @@ You get a **grid of pages**. One page per room, plus an index listing them.
 - Rooms you switch between build up **behind the back button**: hop through three and back
   retraces them one at a time. That is deliberate, and it is what **stop** is for — one
   press to the index from wherever you are, however far you have wandered.
-- Leave it alone for thirty seconds and it returns to where it rests — the index, or a
-  **default page** if you set one — curtain and all, the same way a press of **back** would
-  have. The event it fires says `idle` rather than `button`, so an automation can still tell
-  nobody was standing there.
+- Leave it alone for thirty seconds and it returns to where it rests. To the index, that is
+  the same collapse a press of **back** gives; to a **default page**, a plain wipe in that
+  page's colour. The event it fires says `idle` rather than `button`, so an automation can
+  still tell nobody was standing there.
 
 Nothing needs configuring for this to work. A fresh install builds a page per room out of
 your area registry and fills each one from what is actually in that room.
@@ -54,7 +54,7 @@ This is the whole language, and it is short because the hardware is unforgiving 
 | **Dark** | nothing is assigned here. Pressing it does nothing |
 | **Breathing slowly** | the knobs are pointed at this one |
 | **Blinking fast** | commanded, not yet confirmed. It stops as soon as the entity reports back |
-| **Holding orange for a moment** | a scene or button you just pressed, saying so. It has no on and off of its own, so this is the only thing it can tell you |
+| **Holding orange for a moment** — white, if the pad is painted orange itself | a scene or button you just pressed, saying so. It has no on and off of its own, so this is the only thing it can tell you |
 | **Three quick blinks under your finger** | it refused: either nobody can reach that entity, or this pad cannot be acted on |
 
 "Is anything still on in the kitchen?" becomes "is any pad not white", which is one glance.
@@ -96,7 +96,8 @@ A lamp is the only thing in a house with more than one control, so on everything
 a blind, a fan, a speaker, a thermostat — encoder 7 is the only live one. One thing to
 learn instead of eight.
 
-**Turn an encoder that does nothing and the grid draws that map**, each live one in the
+**Turn an encoder that does nothing and the grid draws that map** — anywhere but the
+index, where nothing can be focused — each live one in the
 colour of what it adjusts and the dead ones in white:
 
 **orange** the level · **blue** colour temp · **green** hue · **red** saturation
@@ -237,7 +238,8 @@ colour: orange
 Including the one thing the grid physically cannot say: an unreachable pad and a pad that
 is off are both white.
 
-Both `tap` and `hold` report what would actually happen rather than what was configured. A
+`hold` reports what would actually happen; `tap` is what the pad is set to do, and
+`shows: unreachable` is the warning that a tap will refuse. A
 thermostat set to a *range* rather than a single temperature is a perfectly reachable
 climate entity with nothing an encoder can hold, so it comes back `hold: nothing` — and
 holding it on the grid refuses, which is the same answer.

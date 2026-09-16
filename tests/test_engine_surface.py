@@ -1141,7 +1141,7 @@ def test_an_acknowledgement_is_a_latch_and_never_a_flash() -> None:
     assert view.rendering().frame[1] == PURPLE
 
 
-def test_an_acknowledgement_never_shows_white() -> None:
+def test_an_acknowledgement_never_shows_white_on_a_purple_pad() -> None:
     # Not decoration. Purple is the default for stateless domains *because* those pads
     # never go white, purple against white being the one pair the hardware notes record as
     # too close to tell apart. An acknowledgement that flashed white would land the whole
@@ -1149,6 +1149,25 @@ def test_an_acknowledgement_never_shows_white() -> None:
     view = scene_page()
     view.handle(Press(1))
     assert view.rendering().frame[1] != WHITE
+
+
+def test_a_scene_painted_orange_acknowledges_in_white() -> None:
+    # The one exception, and it is deliberate: the colour screen allows scenes in orange,
+    # the action colour, and an orange pad acknowledging in orange was a press with no
+    # visible result at all. White is the one colour a stateless pad never otherwise shows,
+    # so there it can only mean this. Judged at the grid on 2026-09-13 — "yes its white" —
+    # and three documents that said "never" were corrected on 2026-09-16.
+    purple = scene_page()
+    view = Surface(
+        Profile(
+            pages=purple.profile.pages, root_id=purple.profile.root_id, colours={"scene": ORANGE}
+        ),
+        purple.registry,
+    )
+    view.handle(Press(0))  # into the living room, beside the lamp
+    assert view.rendering().frame[1] == ORANGE  # resting in its painted colour
+    view.handle(Press(1))
+    assert view.rendering().frame[1] == WHITE
 
 
 def test_the_rest_of_the_grid_keeps_reporting_while_a_pad_is_held() -> None:

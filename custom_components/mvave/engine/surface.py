@@ -31,7 +31,6 @@ from .frames import (
 )
 from .model import (
     INERT_ACTIONS,
-    STATELESS_DOMAINS,
     UNKNOWN_AT_REST,
     Activate,
     Back,
@@ -755,7 +754,8 @@ class Surface:
         practice: `animate=False` was asked for here and never read, because the branch
         that draws a curtain returned first. Made real on 2026-09-13 and judged at the
         grid the same afternoon — the owner wanted the curtain back, so the flag is gone
-        rather than honoured, and both documents have been corrected to say so.
+        rather than honoured. The README was corrected that day; the design brief at the
+        repository root was only found, and corrected, on 2026-09-16.
 
         What still marks it out is the event, which carries `idle` rather than a finger,
         so an automation can tell the difference even though the grid cannot.
@@ -817,10 +817,10 @@ class Surface:
             return self._command(action.entity_id, self._toggle_call(action.entity_id))
         if isinstance(action, Activate):
             outcome = self._command(action.entity_id, self._activate_call(action.entity_id))
-            if action.entity_id.split(".", 1)[0] not in STATELESS_DOMAINS:
-                # A script is not stateless: it reports running and then idle, so it
-                # already blinks and then settles like a lamp, and needs nothing from here.
-                return outcome
+            # Every activatable domain is drawn stateless — scripts included, since
+            # 2026-09-13 — so every one of them latches. A branch here used to exempt
+            # "a script, which blinks and settles like a lamp"; it was unreachable, and
+            # described the behaviour that had been replaced.
             self.acknowledged.add(action.entity_id)
             return replace(outcome, acknowledged=(action.entity_id,))
         if isinstance(action, Focus):

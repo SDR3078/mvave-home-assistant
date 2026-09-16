@@ -171,7 +171,7 @@
         },
         "page": {
           "name": "Page",
-          "description": "The page to show. For a room page this is the area's id."
+          "description": "The page to show, by its id: what `select.<device>` reports as `page_id` and what `mvave.get_pages` returns. It is the area's id only while no page has been made."
         }
       }
     },
@@ -241,7 +241,7 @@
         },
         "page": {
           "name": "Page",
-          "description": "Just this one page. Leave it empty for all of them. For a room page this is the area's id."
+          "description": "Just this one page, by its id — as `select.<device>` reports it or `mvave.get_pages` returns it. Leave it empty for all of them."
         }
       }
     }
@@ -363,8 +363,7 @@
         "one_source": "A page fills itself from one place. Choose a room or a label, not both."
       },
       "abort": {
-        "reconfigure_successful": "Page saved.",
-        "entry_not_loaded": "The surface is not running, so its pages cannot be changed yet."
+        "reconfigure_successful": "Page saved."
       }
     }
   }

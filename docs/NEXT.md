@@ -1,6 +1,6 @@
 # Next steps
 
-Updated 2026-09-11. The device is understood; `docs/PLAN.md` is the corrected
+Updated 2026-09-16. The device is understood; `docs/PLAN.md` is the corrected
 implementation plan and this file is the running to-do list.
 
 ## Done
@@ -272,7 +272,8 @@ implementation plan and this file is the running to-do list.
   So a **latch, not a flash**: hold the action colour, let go. One transition in and one
   out, which is not a flash at all — a flash is a *pair* of opposing changes — so it never
   enters that arithmetic rather than merely passing it. No new rhythm, nothing new to tell
-  apart from breathing and blinking, and it never shows white. Drawn over the settled frame
+  apart from breathing and blinking, and it shows white only when the pad has been painted
+  orange itself (judged at the grid on 2026-09-13). Drawn over the settled frame
   rather than animated, so the other fifteen pads keep reporting while it is held.
 
   **0.8 s, judged at the grid over three rounds**: 1.5 s read as correct but overstayed,
@@ -280,8 +281,9 @@ implementation plan and this file is the running to-do list.
   it, so hammering a scene pad holds one unbroken colour instead of strobing — a property
   of it being a latch, and the reason it is safe to press as fast as anybody likes.
 
-  Scripts are deliberately untouched: a script is not stateless, it reports running and
-  then idle, so it already blinks and settles like a lamp.
+  Scripts are drawn stateless since 2026-09-13, like scenes and buttons, and latch the
+  same way: a running script would otherwise blink like a lamp and settle to purple,
+  which reads as a fault.
 - **The config flow is tested through the flow, not around it.** There were no flow tests
   at all, and two defects reached the device on 2026-09-13 with the suite green because of
   it: a deprecated device lookup that had a second call site nobody grepped for, and a pads
@@ -380,11 +382,24 @@ implementation plan and this file is the running to-do list.
   an animation on one step to walk through it, can schedule a command to land on a chosen
   frame, and can log how long each frame was actually on screen. That last one settled an
   argument: an animation that felt uneven measured 189, 411, 190, 206, 206, 395 ms.
+- **Every pad number a person sees is the one printed on the hardware** (2026-09-14): the
+  event entities, the page screen's fields and the square above them, `mvave.press_slot`,
+  `mvave.get_pages`, the logbook and the `mvave_event` payload. Stored configuration stays
+  keyed by reading-order position, which is what let the labels move without a migration.
+- **A page you have edited is yours** (`CONF_FIXED`, 2026-09-14). Saved unchanged, a page
+  keeps following its room; changed in any way, it shows exactly the sixteen fields saved,
+  an empty one a dark pad. Give it a different room and it follows that room again.
+- **A default page** (`CONF_DEFAULT_PAGE`, 2026-09-15): where the pad wakes up on connect
+  and returns to on the idle timeout, with the index one press behind it. Stop is still the
+  index. Choosing it does not move the grid until the next timeout, judged and kept.
 
 ## Build
 
 1. **Extract the transport into a PyPI package** later: Home Assistant's review checklist
    wants protocol code in a library, and no BLE-MIDI framing library exists for CPython.
+2. **A screen for per-page knob and button overrides.** `Page` has carried `knobs` and
+   `buttons` since the engine was written and nothing writes them — the README says "there
+   is no way to set it yet", and this is where that is tracked.
 
 ## Decided against
 
